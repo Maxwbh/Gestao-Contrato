@@ -196,23 +196,28 @@
 
 <div class="row">
     <div class="col-12">
-        <!-- Cabecalho compacto: título + status + toolbar de ações -->
+        <!-- Cabecalho: título grande + badge à direita (estilo preferido)
+             com a toolbar de ações logo abaixo -->
         <div class="card mb-3">
-            <div class="card-body py-3">
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                    <div class="d-flex align-items-center gap-2 flex-wrap">
-                        <h4 class="mb-0">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h3 class="mb-1">
                             <i class="fas fa-file-contract text-primary"></i>
                             Contrato {{ contrato.numero_contrato }}
-                        </h4>
-                        <span class="badge {% if contrato.status == 'ATIVO' %}bg-success{% elif contrato.status == 'QUITADO' %}bg-primary{% elif contrato.status == 'CANCELADO' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                        </h3>
+                        <p class="text-muted mb-0">
+                            {{ contrato.comprador.nome }} | {{ contrato.imovel.identificacao }}
+                        </p>
+                    </div>
+                    <div>
+                        <span class="badge fs-5 {% if contrato.status == 'ATIVO' %}bg-success{% elif contrato.status == 'QUITADO' %}bg-primary{% elif contrato.status == 'CANCELADO' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
                             {{ contrato.get_status_display }}
                         </span>
-                        <span class="text-muted small">{{ contrato.comprador.nome }} · {{ contrato.imovel.identificacao }}</span>
                     </div>
                 </div>
                 <!-- Toolbar de ações (antes vivia no rodapé de ~5.000px) -->
-                <div class="d-flex flex-wrap gap-2 align-items-center border-top pt-2">
+                <div class="d-flex flex-wrap gap-2 align-items-center border-top pt-3 mt-3">
                     <a href="{{ voltar_url }}" class="btn btn-sm btn-secondary">
                         <i class="fas fa-arrow-left"></i> Voltar
                     </a>
@@ -649,180 +654,6 @@
                     </div>
                 </div>
 
-                <!-- Historico de Reajustes -->
-                <div class="card mb-3">
-                    <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-chart-line"></i> Reajustes</span>
-                        <button type="button" class="btn btn-sm btn-light" onclick="abrirModalReajuste({{ contrato.pk }})">
-                            <i class="fas fa-plus"></i> Aplicar Reajuste
-                        </button>
-                    </div>
-                    <div class="card-body p-0">
-                        {% if reajustes %}
-                        <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
-                            <table class="table table-sm table-hover mb-0" style="font-size:0.78rem;">
-                                <thead class="table-light sticky-top">
-                                    <tr>
-                                        <th class="text-center">Ciclo</th>
-                                        <th>Índice</th>
-                                        <th class="text-center">Ref.</th>
-                                        <th class="text-end">% Bruto</th>
-                                        <th class="text-end text-success">% Aplicado</th>
-                                        <th>Parcelas</th>
-                                        <th>Data</th>
-                                        <th>Por</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for reajuste in reajustes %}
-                                    <tr>
-                                        <td class="text-center">
-                                            <span class="badge bg-secondary">{{ reajuste.ciclo }}</span>
-                                        </td>
-                                        <td>
-                                            <span class="badge {% if reajuste.aplicado_manual %}bg-warning text-dark{% else %}bg-info text-dark{% endif %}">
-                                                {{ reajuste.indice_tipo }}
-                                            </span>
-                                        </td>
-                                        <td class="text-center font-monospace small text-muted">
-                                            {% if reajuste.periodo_referencia_inicio %}
-                                                {{ reajuste.periodo_referencia_inicio|date:"m/Y" }}–{{ reajuste.periodo_referencia_fim|date:"m/Y" }}
-                                            {% else %}—{% endif %}
-                                        </td>
-                                        <td class="text-end text-muted">
-                                            {% if reajuste.percentual_bruto %}{{ reajuste.percentual_bruto|floatformat:2 }}%{% else %}—{% endif %}
-                                        </td>
-                                        <td class="text-end fw-bold">
-                                            {% if reajuste.percentual >= 0 %}
-                                            <span class="text-success">+{{ reajuste.percentual|floatformat:2 }}%</span>
-                                            {% else %}
-                                            <span class="text-danger">{{ reajuste.percentual|floatformat:2 }}%</span>
-                                            {% endif %}
-                                            {% if reajuste.desconto_percentual %}
-                                            <br><small class="text-danger fw-normal">−{{ reajuste.desconto_percentual|floatformat:2 }} p.p.</small>
-                                            {% endif %}
-                                            {% if reajuste.desconto_valor %}
-                                            <br><small class="text-danger fw-normal">− {{ reajuste.desconto_valor|moeda }}</small>
-                                            {% endif %}
-                                            {% if reajuste.teto_aplicado and reajuste.percentual_bruto and reajuste.percentual < reajuste.percentual_bruto %}
-                                            <br><small class="text-warning fw-normal" title="Teto de {{ reajuste.teto_aplicado }}% aplicado"><i class="fas fa-arrow-down"></i> teto</small>
-                                            {% endif %}
-                                            {% if reajuste.piso_aplicado and reajuste.percentual_bruto and reajuste.percentual > reajuste.percentual_bruto %}
-                                            <br><small class="text-info fw-normal" title="Piso de {{ reajuste.piso_aplicado }}% aplicado"><i class="fas fa-arrow-up"></i> piso</small>
-                                            {% endif %}
-                                        </td>
-                                        <td class="font-monospace small">{{ reajuste.parcela_inicial }}–{{ reajuste.parcela_final }}</td>
-                                        <td class="small">{{ reajuste.data_reajuste|date:"d/m/Y" }}</td>
-                                        <td class="small text-muted">
-                                            {% if reajuste.usuario %}{{ reajuste.usuario.get_short_name|default:reajuste.usuario.username }}{% else %}—{% endif %}
-                                        </td>
-                                        <td>
-                                            <button type="button" class="btn btn-sm btn-outline-danger"
-                                                    onclick="excluirReajuste('{{ reajuste.pk|hashid }}', '{{ reajuste.ciclo }}', '{{ reajuste.percentual|floatformat:2 }}')"
-                                                    title="Desfazer reajuste e reverter parcelas">
-                                                <i class="fas fa-undo"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                        {% else %}
-                        <div class="p-3 text-center text-muted">
-                            <i class="fas fa-info-circle"></i> Nenhum reajuste aplicado
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <!-- Q-04: Tabela de Juros Escalantes -->
-                <div class="card mb-3" style="border-left:4px solid #0dcaf0;">
-                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-percentage"></i> Juros Escalantes</span>
-                        <button type="button" class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#formAddJuros">
-                            <i class="fas fa-plus"></i> Adicionar Faixa
-                        </button>
-                    </div>
-                    <!-- Formulário inline (colapsável) -->
-                    <div id="formAddJuros" class="collapse border-bottom">
-                        <div class="card-body bg-light">
-                            <div class="row g-2 align-items-end">
-                                <div class="col">
-                                    <label class="form-label form-label-sm mb-1">Ciclo Início</label>
-                                    <input type="number" id="juros_ciclo_inicio" class="form-control form-control-sm" min="1" placeholder="1">
-                                </div>
-                                <div class="col">
-                                    <label class="form-label form-label-sm mb-1">Ciclo Fim</label>
-                                    <input type="number" id="juros_ciclo_fim" class="form-control form-control-sm" min="1" placeholder="∞">
-                                </div>
-                                <div class="col">
-                                    <label class="form-label form-label-sm mb-1">Juros % a.m.</label>
-                                    <input type="number" id="juros_mensal" class="form-control form-control-sm" step="0.0001" min="0" placeholder="0.5">
-                                </div>
-                                <div class="col-12 col-sm-auto">
-                                    <label class="form-label form-label-sm mb-1">Observações</label>
-                                    <input type="text" id="juros_observacoes" class="form-control form-control-sm" maxlength="200" placeholder="Opcional">
-                                </div>
-                                <div class="col-auto">
-                                    <button type="button" class="btn btn-sm btn-primary" onclick="salvarFaixaJuros()">
-                                        <i class="fas fa-save"></i> Salvar
-                                    </button>
-                                </div>
-                            </div>
-                            <div id="juros_erro" class="text-danger small mt-1 d-none"></div>
-                        </div>
-                    </div>
-                    <div class="card-body p-0">
-                        <div id="tabela-juros-container">
-                            {% if tabela_juros %}
-                            <table class="table table-sm table-hover mb-0" style="font-size:0.80rem;">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th class="text-center">Ciclo Início</th>
-                                        <th class="text-center">Ciclo Fim</th>
-                                        <th class="text-end">Juros % a.m.</th>
-                                        <th>Observações</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tabela-juros-body">
-                                    {% for faixa in tabela_juros %}
-                                    <tr id="juros-row-{{ faixa.pk }}">
-                                        <td class="text-center">{{ faixa.ciclo_inicio }}</td>
-                                        <td class="text-center">{% if faixa.ciclo_fim %}{{ faixa.ciclo_fim }}{% else %}&infin;{% endif %}</td>
-                                        <td class="text-end">{{ faixa.juros_mensal|floatformat:4 }}%</td>
-                                        <td class="text-muted small">{{ faixa.observacoes|default:"—" }}</td>
-                                        <td class="text-center">
-                                            <button type="button" class="btn btn-xs btn-outline-danger"
-                                                    onclick="excluirFaixaJuros('{{ faixa.pk|hashid }}')"
-                                                    title="Remover faixa">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                            {% else %}
-                            <div class="p-3 text-center text-muted" id="juros-vazio">
-                                <i class="fas fa-info-circle"></i> Nenhuma faixa de juros configurada (usa juros padrão do contrato)
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            <!-- F3-03: Resumo Financeiro por Mês (Chart.js) -->
-            <div class="card mb-3" id="card-resumo-financeiro">
-                <div class="card-header py-2 d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-chart-bar me-2 text-info"></i><strong>Resumo Financeiro</strong></span>
-                    <small class="text-muted">últimos 12 meses</small>
-                </div>
-                <div class="card-body p-2">
-                    <canvas id="chartResumoFinanceiro" height="160"></canvas>
-                </div>
-            </div>
             </div>
 
             <!-- Coluna Direita: Parcelas -->
@@ -1062,6 +893,190 @@
                 {% endif %}
             </div>
         </div>
+
+        <!-- Reajustes + Juros Escalantes lado a lado (largura total) — antes
+             ficavam espremidos na coluna esquerda, deixando a direita vazia -->
+        <div class="row mt-1">
+            <div class="col-lg-7">
+                <!-- Historico de Reajustes -->
+                <div class="card mb-3">
+                    <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-chart-line"></i> Reajustes</span>
+                        <button type="button" class="btn btn-sm btn-light" onclick="abrirModalReajuste({{ contrato.pk }})">
+                            <i class="fas fa-plus"></i> Aplicar Reajuste
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if reajustes %}
+                        <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
+                            <table class="table table-sm table-hover mb-0" style="font-size:0.78rem;">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th class="text-center">Ciclo</th>
+                                        <th>Índice</th>
+                                        <th class="text-center">Ref.</th>
+                                        <th class="text-end">% Bruto</th>
+                                        <th class="text-end text-success">% Aplicado</th>
+                                        <th>Parcelas</th>
+                                        <th>Data</th>
+                                        <th>Por</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for reajuste in reajustes %}
+                                    <tr>
+                                        <td class="text-center">
+                                            <span class="badge bg-secondary">{{ reajuste.ciclo }}</span>
+                                        </td>
+                                        <td>
+                                            <span class="badge {% if reajuste.aplicado_manual %}bg-warning text-dark{% else %}bg-info text-dark{% endif %}">
+                                                {{ reajuste.indice_tipo }}
+                                            </span>
+                                        </td>
+                                        <td class="text-center font-monospace small text-muted">
+                                            {% if reajuste.periodo_referencia_inicio %}
+                                                {{ reajuste.periodo_referencia_inicio|date:"m/Y" }}–{{ reajuste.periodo_referencia_fim|date:"m/Y" }}
+                                            {% else %}—{% endif %}
+                                        </td>
+                                        <td class="text-end text-muted">
+                                            {% if reajuste.percentual_bruto %}{{ reajuste.percentual_bruto|floatformat:2 }}%{% else %}—{% endif %}
+                                        </td>
+                                        <td class="text-end fw-bold">
+                                            {% if reajuste.percentual >= 0 %}
+                                            <span class="text-success">+{{ reajuste.percentual|floatformat:2 }}%</span>
+                                            {% else %}
+                                            <span class="text-danger">{{ reajuste.percentual|floatformat:2 }}%</span>
+                                            {% endif %}
+                                            {% if reajuste.desconto_percentual %}
+                                            <br><small class="text-danger fw-normal">−{{ reajuste.desconto_percentual|floatformat:2 }} p.p.</small>
+                                            {% endif %}
+                                            {% if reajuste.desconto_valor %}
+                                            <br><small class="text-danger fw-normal">− {{ reajuste.desconto_valor|moeda }}</small>
+                                            {% endif %}
+                                            {% if reajuste.teto_aplicado and reajuste.percentual_bruto and reajuste.percentual < reajuste.percentual_bruto %}
+                                            <br><small class="text-warning fw-normal" title="Teto de {{ reajuste.teto_aplicado }}% aplicado"><i class="fas fa-arrow-down"></i> teto</small>
+                                            {% endif %}
+                                            {% if reajuste.piso_aplicado and reajuste.percentual_bruto and reajuste.percentual > reajuste.percentual_bruto %}
+                                            <br><small class="text-info fw-normal" title="Piso de {{ reajuste.piso_aplicado }}% aplicado"><i class="fas fa-arrow-up"></i> piso</small>
+                                            {% endif %}
+                                        </td>
+                                        <td class="font-monospace small">{{ reajuste.parcela_inicial }}–{{ reajuste.parcela_final }}</td>
+                                        <td class="small">{{ reajuste.data_reajuste|date:"d/m/Y" }}</td>
+                                        <td class="small text-muted">
+                                            {% if reajuste.usuario %}{{ reajuste.usuario.get_short_name|default:reajuste.usuario.username }}{% else %}—{% endif %}
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                                    onclick="excluirReajuste('{{ reajuste.pk|hashid }}', '{{ reajuste.ciclo }}', '{{ reajuste.percentual|floatformat:2 }}')"
+                                                    title="Desfazer reajuste e reverter parcelas">
+                                                <i class="fas fa-undo"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="p-3 text-center text-muted">
+                            <i class="fas fa-info-circle"></i> Nenhum reajuste aplicado
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <!-- Q-04: Tabela de Juros Escalantes -->
+                <div class="card mb-3" style="border-left:4px solid #0dcaf0;">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-percentage"></i> Juros Escalantes</span>
+                        <button type="button" class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#formAddJuros">
+                            <i class="fas fa-plus"></i> Adicionar Faixa
+                        </button>
+                    </div>
+                    <!-- Formulário inline (colapsável) -->
+                    <div id="formAddJuros" class="collapse border-bottom">
+                        <div class="card-body bg-light">
+                            <div class="row g-2 align-items-end">
+                                <div class="col">
+                                    <label class="form-label form-label-sm mb-1">Ciclo Início</label>
+                                    <input type="number" id="juros_ciclo_inicio" class="form-control form-control-sm" min="1" placeholder="1">
+                                </div>
+                                <div class="col">
+                                    <label class="form-label form-label-sm mb-1">Ciclo Fim</label>
+                                    <input type="number" id="juros_ciclo_fim" class="form-control form-control-sm" min="1" placeholder="∞">
+                                </div>
+                                <div class="col">
+                                    <label class="form-label form-label-sm mb-1">Juros % a.m.</label>
+                                    <input type="number" id="juros_mensal" class="form-control form-control-sm" step="0.0001" min="0" placeholder="0.5">
+                                </div>
+                                <div class="col-12 col-sm-auto">
+                                    <label class="form-label form-label-sm mb-1">Observações</label>
+                                    <input type="text" id="juros_observacoes" class="form-control form-control-sm" maxlength="200" placeholder="Opcional">
+                                </div>
+                                <div class="col-auto">
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="salvarFaixaJuros()">
+                                        <i class="fas fa-save"></i> Salvar
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="juros_erro" class="text-danger small mt-1 d-none"></div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="tabela-juros-container">
+                            {% if tabela_juros %}
+                            <table class="table table-sm table-hover mb-0" style="font-size:0.80rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-center">Ciclo Início</th>
+                                        <th class="text-center">Ciclo Fim</th>
+                                        <th class="text-end">Juros % a.m.</th>
+                                        <th>Observações</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-juros-body">
+                                    {% for faixa in tabela_juros %}
+                                    <tr id="juros-row-{{ faixa.pk }}">
+                                        <td class="text-center">{{ faixa.ciclo_inicio }}</td>
+                                        <td class="text-center">{% if faixa.ciclo_fim %}{{ faixa.ciclo_fim }}{% else %}&infin;{% endif %}</td>
+                                        <td class="text-end">{{ faixa.juros_mensal|floatformat:4 }}%</td>
+                                        <td class="text-muted small">{{ faixa.observacoes|default:"—" }}</td>
+                                        <td class="text-center">
+                                            <button type="button" class="btn btn-xs btn-outline-danger"
+                                                    onclick="excluirFaixaJuros('{{ faixa.pk|hashid }}')"
+                                                    title="Remover faixa">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% else %}
+                            <div class="p-3 text-center text-muted" id="juros-vazio">
+                                <i class="fas fa-info-circle"></i> Nenhuma faixa de juros configurada (usa juros padrão do contrato)
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resumo Financeiro em largura total -->
+            <!-- F3-03: Resumo Financeiro por Mês (Chart.js) -->
+            <div class="card mb-3" id="card-resumo-financeiro">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-chart-bar me-2 text-info"></i><strong>Resumo Financeiro</strong></span>
+                    <small class="text-muted">últimos 12 meses</small>
+                </div>
+                <div class="card-body p-2">
+                    <canvas id="chartResumoFinanceiro" height="160"></canvas>
+                </div>
+            </div>
 
         <!-- 3.2 Aba Boletos Gerados -->
         {% with boletos=parcelas|dictsort:"numero_parcela" %}
