@@ -235,7 +235,7 @@ const painelRowData = [
     tipo: "{{ notif.tipo|escapejs }}",
     destinatario: "{{ notif.destinatario|escapejs }}",
     assunto: "{{ notif.assunto|default:''|escapejs }}",
-    mensagem: "{{ notif.mensagem|default:''|escapejs|truncatechars:200 }}",
+    mensagem: "{{ notif.mensagem|default:''|truncatechars:200|escapejs }}",
     mensagem_full: "{{ notif.mensagem|default:''|escapejs }}",
     parcela_pk: {% if notif.parcela %}{{ notif.parcela.pk }}{% else %}null{% endif %},
     parcela_str: "{% if notif.parcela %}{{ notif.parcela|escapejs }}{% endif %}",
