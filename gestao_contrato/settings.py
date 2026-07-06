@@ -324,7 +324,7 @@ SPECTACULAR_SETTINGS = {
         '- **Portal Comprador**: contratos, boletos e segunda via\n'
         '- **Tasks**: cron jobs para reajustes, notificações e relatórios\n'
     ),
-    'VERSION': '3.1.0',
+    'VERSION': ((BASE_DIR / 'VERSION').read_text().strip() if (BASE_DIR / 'VERSION').exists() else '3.2'),
     'SERVE_INCLUDE_SCHEMA': False,
     'CONTACT': {
         'name': 'Maxwell da Silva Oliveira',

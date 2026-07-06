@@ -11,10 +11,108 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # ── Lint + Testes em um único runner ─────────────────────────────────────
-  ci:
-    name: Lint + Testes
+  # ── Detecta módulos afetados pelo diff ───────────────────────────────────
+  # Roda só os testes dos módulos que mudaram. Mudança em código compartilhado
+  # (settings, requirements, core/mixins|models, base.html, workflows) força a
+  # suíte inteira. Só docs/README/static => nenhum teste.
+  changes:
+    name: Detectar módulos alterados
     runs-on: ubuntu-latest
+    outputs:
+      modules: ${{ steps.detect.outputs.modules }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: detect
+        run: |
+          ALL='["core","contratos","financeiro","notificacoes","portal_comprador","accounts"]'
+
+          # ── base do diff ──
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            HEAD="${{ github.sha }}"
+            BEFORE="${{ github.event.before }}"
+            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+               || ! git cat-file -e "$BEFORE" 2>/dev/null; then
+              BASE=$(git merge-base HEAD origin/V3.1 2>/dev/null \
+                     || git merge-base HEAD origin/master 2>/dev/null || echo "")
+            else
+              BASE="$BEFORE"
+            fi
+          fi
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
+            echo "Base indeterminada — rodando a suíte inteira por segurança."
+            echo "modules=$ALL" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+
+          FILES="$(git diff --name-only "$BASE" "$HEAD")"
+          echo "Arquivos alterados:"; echo "$FILES"
+          if [ -z "$FILES" ]; then echo "modules=[]" >> "$GITHUB_OUTPUT"; exit 0; fi
+
+          # ── código COMPARTILHADO => suíte inteira ──
+          if echo "$FILES" | grep -qE \
+              -e '^gestao_contrato/' \
+              -e '^requirements\.txt$' -e '^pyproject\.toml$' -e '^pytest\.ini$' \
+              -e '^conftest\.py$' -e '^tests/conftest\.py$' -e '^manage\.py$' \
+              -e '^core/(mixins|models|middleware|context_processors|hashids_utils|parametros)\.py$' \
+              -e '^core/migrations/' \
+              -e '^templates/base\.html$' -e '^templates/core/base\.html$' \
+              -e '^\.github/workflows/'; then
+            echo "Mudança compartilhada detectada — suíte inteira."
+            echo "modules=$ALL" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+
+          # ── classifica cada arquivo ──
+          # doc/infra => ignora | módulo => testa módulo | código não mapeado => full
+          # (nunca pula CÓDIGO: só pula quando TODA a mudança é doc/infra)
+          NONCODE='\.md$|^docs/|^LICENSE$|^VERSION$|\.(png|jpe?g|gif|svg|ico|webp|pdf|woff2?|ttf|eot)$|^\.(gitignore|dockerignore|editorconfig|gitattributes)$|^\.env\.example$|^\.githooks/|^\.github/|^static/|^staticfiles/|^media/|^render\.yaml$|^Dockerfile|^docker-compose\.yml$|^docker-entrypoint\.sh$|^build\.sh$'
+          mods=""
+          run_full=0
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            case "$f" in
+              financeiro/*|templates/financeiro/*|tests/unit/financeiro/*) mods="$mods financeiro";;
+              contratos/*|templates/contratos/*|tests/unit/contratos/*)    mods="$mods contratos";;
+              notificacoes/*|templates/notificacoes/*|tests/unit/notificacoes/*) mods="$mods notificacoes";;
+              portal_comprador/*|templates/portal_comprador/*|tests/unit/portal_comprador/*|tests/unit/portal/*) mods="$mods portal_comprador";;
+              accounts/*|templates/registration/*|templates/accounts/*|tests/unit/accounts/*) mods="$mods accounts";;
+              core/*|templates/core/*|tests/unit/core/*)                   mods="$mods core";;
+              tests/unit/views/*)                                          mods="$mods financeiro contratos";;
+              *)
+                if echo "$f" | grep -qE "$NONCODE"; then
+                  echo "ignorado (doc/infra): $f"
+                else
+                  echo "código não mapeado -> suíte inteira: $f"; run_full=1
+                fi ;;
+            esac
+          done <<< "$FILES"
+
+          if [ "$run_full" -eq 1 ]; then
+            echo "modules=$ALL" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ -z "$mods" ]; then
+            echo "Somente documentação/infra — nenhum teste executado."
+            echo "modules=[]" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          JSON=$(echo $mods | tr ' ' '\n' | sort -u | grep -v '^$' \
+            | awk 'BEGIN{printf"["} {printf "%s\"%s\"",(NR>1?",":""),$0} END{print "]"}')
+          echo "Módulos a testar: $JSON"
+          echo "modules=$JSON" >> "$GITHUB_OUTPUT"
+
+  # ── Testes por módulo (matrix só dos afetados) ───────────────────────────
+  test:
+    name: Testes (${{ matrix.module }})
+    needs: changes
+    if: ${{ needs.changes.outputs.modules != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJson(needs.changes.outputs.modules) }}
     env:
       SECRET_KEY: ci-test-secret-key-not-for-production-use
       DEBUG: "True"
@@ -25,7 +123,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Instalar uv
         uses: astral-sh/setup-uv@v3
@@ -36,9 +134,19 @@ jobs:
       - name: Instalar dependências
         run: uv pip install --system -r requirements.txt
 
-      - name: Testes unitários (paralelo)
+      - name: Testes do módulo ${{ matrix.module }}
         run: |
-          python -m pytest tests/unit/ \
+          case "${{ matrix.module }}" in
+            financeiro)       P="tests/unit/financeiro tests/unit/views";;
+            contratos)        P="tests/unit/contratos tests/unit/views";;
+            portal_comprador) P="tests/unit/portal_comprador tests/unit/portal";;
+            core)             P="tests/unit/core";;
+            notificacoes)     P="tests/unit/notificacoes";;
+            accounts)         P="tests/unit/accounts";;
+            *)                P="tests/unit";;
+          esac
+          echo "Rodando: $P"
+          python -m pytest $P \
             -n auto --tb=short -q --no-header -p no:cacheprovider
 
   # ── Bloqueia referências a IA ─────────────────────────────────────────────

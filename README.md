@@ -4,11 +4,11 @@
 
 **Sistema Django para gestão de contratos de venda de imóveis** — parcelas, reajustes automáticos, cobrança bancária (CNAB + cobrança registrada), notificações multicanal, portal do comprador e relatórios/BI.
 
-![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
-![Django](https://img.shields.io/badge/Django-4.2-092E20?logo=django&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
+![Django](https://img.shields.io/badge/Django-6.0-092E20?logo=django&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12+-4169E1?logo=postgresql&logoColor=white)
 ![Testes](https://img.shields.io/badge/testes-1683%20passando-2ea44f)
-![Versão](https://img.shields.io/badge/vers%C3%A3o-3.1-0058be)
+![Versão](https://img.shields.io/badge/vers%C3%A3o-3.2-0058be)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-Proprietary-lightgrey)
 
 </div>
@@ -18,6 +18,7 @@
 ## 📑 Índice
 
 - [Sobre o Sistema](#-sobre-o-sistema)
+- [Novidades da Versão 3.2](#-novidades-da-versão-32)
 - [Novidades da Versão 3.1](#-novidades-da-versão-31)
 - [Funcionalidades](#-funcionalidades)
 - [Ciclo Mensal de Cobrança](#-ciclo-mensal-de-cobrança)
@@ -45,6 +46,17 @@ Plataforma multi-tenant para **contabilidades** que administram múltiplos lotea
 | **Contrato** | Parcelas, reajustes, intermediárias, boletos e notificações |
 
 O isolamento por tenant (`get_imobiliarias_usuario()`) garante que cada usuário só enxergue os dados das imobiliárias a que tem acesso.
+
+---
+
+## ✨ Novidades da Versão 3.2
+
+> Modernização da plataforma e do pipeline de CI:
+
+- **⬆️ Python 3.12 + Django 6.0** — atualização do runtime (de Python 3.11 / Django 4.2 LTS, em fim de vida) e do driver de banco **psycopg 3** (de psycopg2).
+- **🔒 Dependências de segurança** — gunicorn 23 (corrige request smuggling), Pillow 11, requests 2.34; celery 5.6, redis 8, django-celery-beat 2.9, crispy-forms 2.6, drf-spectacular 0.30, reportlab 5.
+- **⚡ CI por módulo alterado** — o pipeline analisa o diff e roda só os testes dos módulos afetados, em runners paralelos; mudança apenas em documentação/infra não executa testes. PR típico cai de ~5 min para ~30 s–2 min.
+- **🏷️ Versão automática robusta** — o número `MAJOR.MINOR.PATCH` (com commit/data) é gravado em build-time (`.build_info`), garantindo exibição correta em produção mesmo sem `git` no runtime.
 
 ---
 
@@ -316,7 +328,7 @@ python manage.py createsuperuser
 
 <div align="center">
 
-**Versão 3.1** · 1683 testes · Última atualização: 2026-07-03
+**Versão 3.2** · 1683 testes · Última atualização: 2026-07-06
 
 Cobrança Registrada C6/Sicoob (Boleto-API) · Hub Cobrança do Mês · Conciliação & Saúde · Índices com número-índice/acumulados
 
