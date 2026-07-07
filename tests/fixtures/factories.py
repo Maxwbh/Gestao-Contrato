@@ -93,7 +93,7 @@ class ContabilidadeFactory(DjangoModelFactory):
     razao_social = factory.LazyAttribute(lambda obj: f'{obj.nome} LTDA')
     cnpj = factory.Sequence(lambda n: f'23456781{n:06d}11')
     endereco = factory.Faker('address', locale='pt_BR')
-    telefone = factory.Faker('phone_number', locale='pt_BR')
+    telefone = factory.LazyFunction(lambda: fake.phone_number()[:20])
     email = factory.LazyAttribute(
         lambda obj: f"{obj.nome.lower().replace(' ', '')}@contabilidade.com.br"
     )
@@ -119,7 +119,7 @@ class ImobiliariaFactory(DjangoModelFactory):
     cidade = factory.Faker('city', locale='pt_BR')
     estado = 'MG'
 
-    telefone = factory.Faker('phone_number', locale='pt_BR')
+    telefone = factory.LazyFunction(lambda: fake.phone_number()[:20])
     email = factory.LazyAttribute(
         lambda obj: f"{obj.nome.lower().replace(' ', '')}@imobiliaria.com.br"
     )
@@ -200,7 +200,7 @@ class CompradorFactory(DjangoModelFactory):
     cpf = factory.Sequence(lambda n: f'325.513.{n:03d}-{(n % 99):02d}')
     rg = factory.Sequence(lambda n: f'MG{n:08d}')
     data_nascimento = factory.LazyFunction(lambda: date.today() - timedelta(days=365*30))
-    profissao = factory.Faker('job', locale='pt_BR')
+    profissao = factory.LazyFunction(lambda: fake.job()[:100])
     estado_civil = 'SOLTEIRO'
 
     # Endereço
@@ -212,8 +212,8 @@ class CompradorFactory(DjangoModelFactory):
     estado = 'MG'
 
     # Contato
-    telefone = factory.Faker('phone_number', locale='pt_BR')
-    celular = factory.Faker('phone_number', locale='pt_BR')
+    telefone = factory.LazyFunction(lambda: fake.phone_number()[:20])
+    celular = factory.LazyFunction(lambda: fake.phone_number()[:20])
     email = factory.Faker('email', locale='pt_BR')
 
     ativo = True

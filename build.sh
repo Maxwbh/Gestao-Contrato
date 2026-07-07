@@ -9,6 +9,28 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 # ============================================================================
+# Grava metadados de versão (.build_info) enquanto o git ainda está disponível.
+# Em runtime (produção) o git pode não existir; o core/version.py lê este
+# arquivo para exibir a versão MAJOR.MINOR.PATCH correta e o commit/data.
+# ============================================================================
+echo "==> Gravando .build_info (versão)..."
+python - <<'BUILDINFOEOF'
+import json, subprocess, pathlib
+def g(*a):
+    try:
+        return subprocess.run(['git', *a], capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:
+        return ''
+info = {
+    'patch': g('rev-list', '--count', 'HEAD') or '0',
+    'commit': g('rev-parse', '--short', 'HEAD') or 'unknown',
+    'date': (g('log', '-1', '--format=%ci') or '')[:19],
+}
+pathlib.Path('.build_info').write_text(json.dumps(info))
+print('    .build_info =', info)
+BUILDINFOEOF
+
+# ============================================================================
 # NOTA SOBRE MAKEMIGRATIONS
 # ============================================================================
 # Em produção (Render), as migrations já estão commitadas no repositório.
@@ -26,7 +48,7 @@ pip install -r requirements.txt
 echo "==> Creating schema gestao_contrato if not exists..."
 python << 'SCHEMAEOF'
 import os
-import psycopg2
+import psycopg
 from urllib.parse import urlparse, unquote
 
 # Conectar sem search_path para criar o schema
@@ -35,10 +57,10 @@ if database_url:
     result = urlparse(database_url)
     # Decodificar senha (pode ter caracteres especiais URL-encoded)
     password = unquote(result.password) if result.password else None
-    conn = psycopg2.connect(
+    conn = psycopg.connect(
         host=result.hostname,
         port=result.port or 5432,
-        database=result.path[1:],
+        dbname=result.path[1:],
         user=result.username,
         password=password
     )

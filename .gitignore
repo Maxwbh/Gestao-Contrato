@@ -25,6 +25,9 @@ wheels/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+
+# Metadados de build (gerados pelo build.sh no deploy)
+.build_info
 /static/*
 !/static/.keep
 !/static/css/

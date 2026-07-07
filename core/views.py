@@ -2435,7 +2435,7 @@ def api_parametros_exportar(request):
         ParametroSistema.objects.values('chave', 'valor', 'tipo', 'grupo', 'descricao', 'modificado_manualmente')
     )
     payload = {
-        'exportado_em': datetime.datetime.utcnow().isoformat() + 'Z',
+        'exportado_em': datetime.datetime.now(datetime.UTC).isoformat().replace('+00:00', 'Z'),
         'total': len(params),
         'parametros': params,
     }
