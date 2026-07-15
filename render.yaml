@@ -45,6 +45,11 @@ services:
         value: "3.12.3"
       - key: SECRET_KEY
         generateValue: true
+      # Cifra de credenciais de banco / token bapi_ (Boleto-API).
+      # Gerar com: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      # Definir manualmente no painel (não usar generateValue — precisa ser chave Fernet válida).
+      - key: CREDENTIALS_ENCRYPTION_KEY
+        sync: false
       - key: DEBUG
         value: "False"
       - key: ALLOWED_HOSTS

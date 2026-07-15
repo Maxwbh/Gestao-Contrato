@@ -23,6 +23,11 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-dev-key-change-in-pro
 HASHIDS_SALT = SECRET_KEY[:20]
 HASHIDS_MIN_LENGTH = 6
 
+# ── Cifra de segredos em repouso (credenciais de banco / token bapi_) ─────────
+# base64 urlsafe de 32 bytes (Fernet.generate_key()). Se vazia, core.crypto
+# deriva do SECRET_KEY (ok em dev; defina explicitamente em produção).
+CREDENTIALS_ENCRYPTION_KEY = config('CREDENTIALS_ENCRYPTION_KEY', default='')
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 

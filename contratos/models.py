@@ -13,7 +13,7 @@ from decimal import Decimal
 import logging
 
 from dateutil.relativedelta import relativedelta
-from core.models import TimeStampedModel, Imovel, Comprador, Imobiliaria
+from core.models import TimeStampedModel, Imovel, Comprador, Imobiliaria, MetodoCobranca
 
 logger = logging.getLogger(__name__)
 
@@ -488,6 +488,16 @@ class Contrato(TimeStampedModel):
         help_text='Conta bancária para geração de boletos deste contrato'
     )
 
+    # Método de cobrança escolhido para este contrato (deve estar habilitado
+    # na imobiliária — ver Contrato.clean()).
+    metodo_cobranca = models.CharField(
+        max_length=20,
+        choices=MetodoCobranca.choices,
+        default=MetodoCobranca.BOLETO,
+        verbose_name='Método de Cobrança',
+        help_text='Forma de cobrança deste contrato (habilitada na imobiliária).'
+    )
+
     # Configurações de Multa (personalizadas)
     tipo_valor_multa = models.CharField(
         max_length=10,
@@ -713,6 +723,16 @@ class Contrato(TimeStampedModel):
                 errors['imovel'] = 'O imóvel deve pertencer à mesma imobiliária do contrato.'
         # NOTA: Comprador NÃO tem campo imobiliaria - um comprador pode
         # comprar imóveis de diferentes imobiliárias através de diferentes contratos
+
+        # Método de cobrança deve estar habilitado na imobiliária.
+        # Lenient: só valida quando a imobiliária tem métodos definidos.
+        if self.imobiliaria_id and self.metodo_cobranca:
+            metodos = getattr(self.imobiliaria, 'metodos_cobranca', None) or []
+            if metodos and self.metodo_cobranca not in metodos:
+                errors['metodo_cobranca'] = (
+                    f'O método de cobrança "{self.get_metodo_cobranca_display()}" '
+                    f'não está habilitado na imobiliária.'
+                )
 
         if errors:
             raise ValidationError(errors)
