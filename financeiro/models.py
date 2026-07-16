@@ -847,7 +847,20 @@ class Parcela(TimeStampedModel):
             cobranca_payload['juros'] = float(imob.percentual_juros_padrao)
 
         client = BoletoApiClient()
-        resultado = client.registrar_cobranca(tenant_id, provider, account_config, cobranca_payload)
+        # Token stateless (Bearer) quando a conta já foi onboarded; None mantém
+        # compatibilidade com o gateway/mocks que resolvem por tenant_id.
+        bapi_token = getattr(conta_bancaria, 'bapi_token', '') or None
+        # Dispatch pelo método de cobrança do contrato (Fase 3): BoletoPix usa
+        # /bolepix; os demais caem no boleto registrado (/cobranca).
+        metodo_contrato = getattr(contrato, 'metodo_cobranca', '') or MetodoCobranca.BOLETO
+        if metodo_contrato == MetodoCobranca.BOLETO_PIX:
+            resultado = client.emitir_bolepix(
+                tenant_id, provider, account_config, cobranca_payload, bapi_token=bapi_token)
+            metodo_emitido = MetodoCobranca.BOLETO_PIX
+        else:
+            resultado = client.registrar_cobranca(
+                tenant_id, provider, account_config, cobranca_payload, bapi_token=bapi_token)
+            metodo_emitido = MetodoCobranca.BOLETO
 
         if not resultado.get('sucesso'):
             return resultado
@@ -868,7 +881,7 @@ class Parcela(TimeStampedModel):
         # Rastreio normalizado (Boleto-API): boleto registrado via gateway.
         self.registrar_emissao(
             provider=provider,
-            metodo=MetodoCobranca.BOLETO,
+            metodo=metodo_emitido,
             status=StatusCobranca.REGISTRADA,
             ext_ref=resultado.get('ext_ref', ''),
         )
