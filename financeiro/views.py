@@ -9372,12 +9372,14 @@ def painel_conciliacao_boleto_api(request):
         status='baixado', parcela__contrato__imobiliaria_id__in=imobs_escopo)
     origem_rows = [(ORIGEM_COBRANCA_LABELS.get(r['event'], r['event'] or '—'), r['n'])
                    for r in baixas.values('event').annotate(n=Count('id')).order_by('-n')]
+    total_baixas = sum(n for _, n in origem_rows)
 
     rec_counts = {r['status']: r['n']
                   for r in (RecorrenciaPix.objects
                             .filter(contrato__imobiliaria_id__in=imobs_escopo)
                             .values('status').annotate(n=Count('id')))}
     recorrencia_rows = [(label, rec_counts.get(value, 0)) for value, label in RecStatusPA.choices]
+    total_recorrencias = sum(rec_counts.values())
 
     # Eventos órfãos (sem parcela) não têm vínculo com imobiliária — são
     # inatribuíveis a um tenant. Expõe a contagem global (saúde do sistema)
@@ -9393,7 +9395,9 @@ def painel_conciliacao_boleto_api(request):
         'liquidadas': liquidadas,
         'status_rows': status_rows,
         'origem_rows': origem_rows,
+        'total_baixas': total_baixas,
         'recorrencia_rows': recorrencia_rows,
+        'total_recorrencias': total_recorrencias,
         'fila_cip': por_status.get(StatusCobranca.AGUARDANDO_CIP, 0),
         'sem_parcela': sem_parcela,
         'imobiliarias': _imobs_para_usuario(request.user),

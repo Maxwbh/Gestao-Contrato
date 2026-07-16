@@ -95,6 +95,23 @@ class TestPainelConciliacao:
         assert ('Aprovada', 1) in r.context['recorrencia_rows']
         assert ('Cancelada', 0) in r.context['recorrencia_rows']
 
+    def test_totais_nos_rodapes(self, client):
+        """Rodapés dos cards expõem os totais (polish visual)."""
+        from tests.fixtures.factories import ParcelaFactory, ContratoFactory
+        self._login(client)
+        p1 = ParcelaFactory(status_cobranca=S.LIQUIDADA, provider='c6')
+        ParcelaFactory(status_cobranca=S.REGISTRADA, provider='c6')
+        EventoCobrancaApi.objects.create(event_id='b1', event='webhook',
+                                         status='baixado', parcela=p1)
+        EventoCobrancaApi.objects.create(event_id='b2', event='polling_sicoob',
+                                         status='baixado', parcela=p1)
+        RecorrenciaPix.objects.create(contrato=ContratoFactory(), id_rec='R1', provider='c6',
+                                      status=RecStatusPA.APROVADA)
+        r = client.get(reverse(URL))
+        assert r.context['total'] == 2
+        assert r.context['total_baixas'] == 2
+        assert r.context['total_recorrencias'] == 1
+
     def test_origem_label_humanizado(self, client):
         """Slugs de origem viram rótulos legíveis ao operador."""
         from tests.fixtures.factories import ParcelaFactory
