@@ -2819,7 +2819,9 @@ class EventoCobrancaApi(models.Model):
     STATUS_CHOICES = [
         ('recebido', 'Recebido'),
         ('baixado', 'Parcela baixada'),
+        ('atualizado', 'Status atualizado'),
         ('duplicado', 'Duplicado (ignorado)'),
+        ('ignorado', 'Ignorado (não tratado nesta fase)'),
         ('sem_parcela', 'Sem parcela vinculada'),
         ('erro', 'Erro no processamento'),
     ]
@@ -2828,6 +2830,15 @@ class EventoCobrancaApi(models.Model):
         max_length=100,
         db_index=True,
         verbose_name='ID Cobrança',
+    )
+    # Idempotência por evento: o banco pode reenviar o mesmo evento.
+    event_id = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        db_index=True,
+        verbose_name='ID do Evento',
+        help_text='Identificador único do evento (idempotência).',
     )
     event = models.CharField(max_length=50, blank=True, verbose_name='Tipo de Evento')
     status_cobranca = models.CharField(
@@ -2866,6 +2877,7 @@ class EventoCobrancaApi(models.Model):
         ordering = ['-recebido_em']
         indexes = [
             models.Index(fields=['cobranca_id']),
+            models.Index(fields=['event_id']),
             models.Index(fields=['status']),
             models.Index(fields=['recebido_em']),
         ]
