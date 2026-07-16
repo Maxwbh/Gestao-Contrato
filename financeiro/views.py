@@ -38,6 +38,15 @@ def _imobs_para_usuario(user):
     return get_imobiliarias_usuario(user)
 
 
+# Rótulos amigáveis das origens de baixa no painel de conciliação Boleto-API
+# (o valor cru — slug de EventoCobrancaApi.event — vira texto legível ao operador).
+ORIGEM_COBRANCA_LABELS = {
+    'webhook': 'Webhook',
+    'polling_sicoob': 'Polling Sicoob',
+    'conciliacao_pix': 'Conciliação Pix',
+}
+
+
 def _calcular_bloqueio_reajuste(contrato, reajustes_set, hoje):
     """
     Replica verificar_bloqueio_reajuste() sem tocar no banco.
@@ -9334,15 +9343,22 @@ def painel_conciliacao_boleto_api(request):
     AGUARDANDO_CIP, pendências de casamento e recorrências Pix Automático.
     """
     from django.db.models import Count
-    from .models import EventoCobrancaApi, StatusCobranca, RecorrenciaPix
+    from .models import EventoCobrancaApi, StatusCobranca, RecorrenciaPix, RecStatusPA
 
     imobs = list(_imobs_para_usuario(request.user).values_list('id', flat=True))
     imob_filtro = str(request.GET.get('imobiliaria') or '')
 
+    # Escopo aplicado de forma consistente a TODOS os blocos: sempre limitado
+    # às imobiliárias do usuário; se uma imobiliária válida for selecionada no
+    # filtro, restringe a ela (ignora IDs fora do escopo — defesa em profundidade).
+    if imob_filtro.isdigit() and int(imob_filtro) in imobs:
+        imobs_escopo = [int(imob_filtro)]
+    else:
+        imobs_escopo = imobs
+        imob_filtro = ''
+
     parcelas = (Parcela.objects.exclude(status_cobranca='')
-                .filter(contrato__imobiliaria_id__in=imobs))
-    if imob_filtro:
-        parcelas = parcelas.filter(contrato__imobiliaria_id=imob_filtro)
+                .filter(contrato__imobiliaria_id__in=imobs_escopo))
 
     total = parcelas.count()
     por_status = {r['status_cobranca']: r['n']
@@ -9353,16 +9369,23 @@ def painel_conciliacao_boleto_api(request):
     status_rows = [(label, por_status.get(value, 0)) for value, label in StatusCobranca.choices]
 
     baixas = EventoCobrancaApi.objects.filter(
-        status='baixado', parcela__contrato__imobiliaria_id__in=imobs)
-    origem_rows = [(r['event'] or '—', r['n'])
+        status='baixado', parcela__contrato__imobiliaria_id__in=imobs_escopo)
+    origem_rows = [(ORIGEM_COBRANCA_LABELS.get(r['event'], r['event'] or '—'), r['n'])
                    for r in baixas.values('event').annotate(n=Count('id')).order_by('-n')]
 
-    from .models import RecStatusPA
     rec_counts = {r['status']: r['n']
                   for r in (RecorrenciaPix.objects
-                            .filter(contrato__imobiliaria_id__in=imobs)
+                            .filter(contrato__imobiliaria_id__in=imobs_escopo)
                             .values('status').annotate(n=Count('id')))}
     recorrencia_rows = [(label, rec_counts.get(value, 0)) for value, label in RecStatusPA.choices]
+
+    # Eventos órfãos (sem parcela) não têm vínculo com imobiliária — são
+    # inatribuíveis a um tenant. Expõe a contagem global (saúde do sistema)
+    # apenas a quem tem permissão total; usuário com escopo restrito vê 0.
+    if usuario_tem_permissao_total(request.user):
+        sem_parcela = EventoCobrancaApi.objects.filter(status='sem_parcela').count()
+    else:
+        sem_parcela = 0
 
     context = {
         'total': total,
@@ -9372,7 +9395,7 @@ def painel_conciliacao_boleto_api(request):
         'origem_rows': origem_rows,
         'recorrencia_rows': recorrencia_rows,
         'fila_cip': por_status.get(StatusCobranca.AGUARDANDO_CIP, 0),
-        'sem_parcela': EventoCobrancaApi.objects.filter(status='sem_parcela').count(),
+        'sem_parcela': sem_parcela,
         'imobiliarias': _imobs_para_usuario(request.user),
         'imob_filtro': imob_filtro,
     }
