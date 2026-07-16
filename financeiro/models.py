@@ -1060,15 +1060,69 @@ class Parcela(TimeStampedModel):
 
         return resultado
 
+    def _e_boleto_api(self) -> bool:
+        """True se esta parcela foi/será cobrada via gateway Boleto-API (C6/Sicoob)."""
+        return bool(self.provider and self.provider != ProviderBoleto.BRCOBRANCA)
+
+    def _bapi_ctx(self):
+        """(tenant_id, bapi_token) da conta bancária para chamadas ao gateway."""
+        conta = self.conta_bancaria
+        return (getattr(conta, 'tenant_id', '') or '',
+                (getattr(conta, 'bapi_token', '') or None))
+
     def cancelar_boleto(self, motivo=''):
-        """Cancela o boleto da parcela"""
+        """
+        Cancela o boleto da parcela. Para cobrança registrada via Boleto-API
+        (C6/Sicoob), propaga o cancelamento ao gateway (DELETE /cobranca) ANTES
+        de marcar localmente — se o gateway recusar, NÃO cancela local (evita
+        deixar a cobrança ativa no banco com status divergente).
+        """
         if self.status_boleto in [StatusBoleto.NAO_GERADO, StatusBoleto.CANCELADO]:
             return False
+
+        if self._e_boleto_api() and self.cobranca_id:
+            from financeiro.services.boleto_api_client import BoletoApiClient
+            tenant_id, bapi_token = self._bapi_ctx()
+            r = BoletoApiClient().baixar_cobranca(
+                self.cobranca_id, tenant_id, self.provider, bapi_token=bapi_token)
+            if not r.get('sucesso'):
+                logger.warning('[BoletoAPI] cancelamento no gateway recusado (parcela pk=%s): %s',
+                               self.pk, r.get('erro'))
+                return False
+            self.transicionar_cobranca(StatusCobranca.BAIXADA, salvar=False)
 
         self.status_boleto = StatusBoleto.CANCELADO
         self.motivo_rejeicao = motivo
         self.save()
         return True
+
+    def estornar_cobranca(self, valor=None, e2eid='', devolucao_id=''):
+        """
+        Estorna (devolve) um Pix recebido via gateway e marca a cobrança como
+        ESTORNADA. Requer o e2eid do Pix (recebido no webhook).
+        """
+        if not self._e_boleto_api():
+            return {'sucesso': False, 'erro': 'Estorno via gateway só para C6/Sicoob.'}
+        if not e2eid:
+            return {'sucesso': False, 'erro': 'e2eid do Pix é obrigatório para o estorno.'}
+        from financeiro.services.boleto_api_client import BoletoApiClient
+        tenant_id, bapi_token = self._bapi_ctx()
+        r = BoletoApiClient().devolver_pix(
+            e2eid, devolucao_id or f'DEV{self.pk}',
+            valor if valor is not None else self.valor_pago_boleto,
+            tenant_id, self.provider, bapi_token=bapi_token)
+        if r.get('sucesso'):
+            self.transicionar_cobranca(StatusCobranca.ESTORNADA)
+        return r
+
+    def alterar_cobranca(self, alteracao: dict):
+        """Altera valor/vencimento da cobrança registrada no gateway (PUT). C6."""
+        if not (self._e_boleto_api() and self.cobranca_id):
+            return {'sucesso': False, 'erro': 'Alteração via gateway só para cobrança registrada.'}
+        from financeiro.services.boleto_api_client import BoletoApiClient
+        tenant_id, bapi_token = self._bapi_ctx()
+        return BoletoApiClient().alterar_cobranca(
+            self.cobranca_id, tenant_id, self.provider, alteracao, bapi_token=bapi_token)
 
     def registrar_pagamento_boleto(self, valor_pago, data_pagamento=None,
                                    banco_pagador='', agencia_pagadora='',
