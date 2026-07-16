@@ -132,6 +132,46 @@ class TestPainelConciliacao:
         rows = dict(r.context['origem_rows'])
         assert rows == {'Webhook': 2, 'Polling Sicoob': 1, 'Conciliação Pix': 2}
 
+    def test_baixa_manual_transiciona_e_aparece_no_painel(self, client):
+        """Baixa manual de cobrança API → LIQUIDADA + origem 'Baixa manual'."""
+        from tests.fixtures.factories import ParcelaFactory
+        self._login(client)
+        p = ParcelaFactory(status_cobranca=S.REGISTRADA, provider='c6')
+        p.registrar_pagamento(valor_pago=100)
+        p.refresh_from_db()
+        assert p.status_cobranca == S.LIQUIDADA
+        assert EventoCobrancaApi.objects.filter(
+            parcela=p, event='conciliacao.manual', status='baixado').count() == 1
+        r = client.get(reverse(URL))
+        assert ('Baixa manual', 1) in r.context['origem_rows']
+        assert r.context['pct_conciliado'] == 100.0
+
+    def test_baixa_via_banco_nao_gera_evento_manual(self):
+        """Webhook/polling transicionam antes de pagar → sem evento 'manual'."""
+        from tests.fixtures.factories import ParcelaFactory
+        p = ParcelaFactory(status_cobranca=S.REGISTRADA, provider='c6')
+        p.transicionar_cobranca(S.LIQUIDADA)  # ordem dos fluxos do banco
+        p.registrar_pagamento(valor_pago=100)
+        assert not EventoCobrancaApi.objects.filter(event='conciliacao.manual').exists()
+
+    def test_baixa_manual_parcela_legado_sem_efeito(self):
+        """Parcela BRCobrança/CNAB (sem status_cobranca) não entra no trilho API."""
+        from tests.fixtures.factories import ParcelaFactory
+        p = ParcelaFactory()  # status_cobranca=''
+        p.registrar_pagamento(valor_pago=100)
+        p.refresh_from_db()
+        assert p.status_cobranca == ''
+        assert not EventoCobrancaApi.objects.exists()
+
+    def test_baixa_manual_nao_forca_transicao_ilegal(self):
+        """AGUARDANDO_CIP→LIQUIDADA é ilegal: paga, mas não transiciona nem loga."""
+        from tests.fixtures.factories import ParcelaFactory
+        p = ParcelaFactory(status_cobranca=S.AGUARDANDO_CIP, provider='c6')
+        p.registrar_pagamento(valor_pago=100)
+        p.refresh_from_db()
+        assert p.pago and p.status_cobranca == S.AGUARDANDO_CIP
+        assert not EventoCobrancaApi.objects.filter(event='conciliacao.manual').exists()
+
     def test_jobs_boleto_api_agendados_no_beat(self):
         """Os 4 jobs de conciliação/agendamento estão no beat schedule."""
         from gestao_contrato.celery import app

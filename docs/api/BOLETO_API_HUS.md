@@ -369,8 +369,11 @@ detecta o débito não liquidado e dispara a retentativa.
 **Aceite:** view `painel_conciliacao_boleto_api`
 (`/financeiro/cobranca/conciliacao/boleto-api/`): % conciliado, distribuição por
 status normalizado, recebido por origem (Webhook / Polling Sicoob / Conciliação
-Pix, agregado de `EventoCobrancaApi.event`), fila `AGUARDANDO_CIP`, eventos sem
-parcela e recorrências por status; totais no rodapé de cada card.
+Pix / Baixa manual, agregado de `EventoCobrancaApi.event`), fila `AGUARDANDO_CIP`,
+eventos sem parcela e recorrências por status; totais no rodapé de cada card.
+A **baixa manual** de cobrança registrada transiciona `status_cobranca` para
+`LIQUIDADA` (evento `conciliacao.manual`), mantendo o % conciliado fiel à
+realidade; transição ilegal (ex. `AGUARDANDO_CIP`) não é forçada.
 **Nota:** cobre **somente o trilho Boleto-API** (parcelas com `status_cobranca`);
 o trilho BRCobrança/CNAB segue conciliado pelas telas de arquivo de retorno.
 A parte extrato/recebíveis (`GET /conciliacao`, `GET /extrato`) segue na BAPI-32.

@@ -43,9 +43,11 @@ def _origem_baixa(event):
     Origem da baixa no painel de conciliação Boleto-API, a partir de
     EventoCobrancaApi.event. O webhook grava o nome do evento do gateway
     (liquidado, pago, pix.recebido…); as conciliações gravam
-    'conciliacao.<origem>' (polling-sicoob / pix). Agrega em 3 origens.
+    'conciliacao.<origem>' (polling-sicoob / pix / manual). Agrega em 4 origens.
     """
     ev = (event or '').lower()
+    if ev == 'conciliacao.manual':
+        return 'Baixa manual'
     if ev.startswith('conciliacao.polling'):
         return 'Polling Sicoob'
     if ev.startswith('conciliacao.'):
