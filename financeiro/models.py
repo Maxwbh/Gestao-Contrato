@@ -2833,6 +2833,65 @@ class AcessoBoletoPublico(models.Model):
         return f'Acesso {self.parcela} por {self.ip} em {self.acessado_em:%d/%m/%Y %H:%M}'
 
 
+class RecStatusPA(models.TextChoices):
+    """Status da recorrência de Pix Automático (débito recorrente)."""
+    CRIADA = 'CRIADA', 'Criada'
+    APROVADA = 'APROVADA', 'Aprovada'
+    REJEITADA = 'REJEITADA', 'Rejeitada'
+    CANCELADA = 'CANCELADA', 'Cancelada'
+
+
+# Transições permitidas da recorrência (guardas). Estados terminais: rejeitada/cancelada.
+TRANSICOES_REC_PA = {
+    RecStatusPA.CRIADA: {RecStatusPA.APROVADA, RecStatusPA.REJEITADA, RecStatusPA.CANCELADA},
+    RecStatusPA.APROVADA: {RecStatusPA.CANCELADA},
+    RecStatusPA.REJEITADA: set(),
+    RecStatusPA.CANCELADA: set(),
+}
+
+
+class RecorrenciaPix(TimeStampedModel):
+    """
+    Recorrência de Pix Automático de um contrato (débito recorrente). Espelha o
+    ciclo `idRec` do gateway: CRIADA → APROVADA/REJEITADA/CANCELADA.
+    """
+    contrato = models.OneToOneField(
+        'contratos.Contrato', on_delete=models.CASCADE,
+        related_name='recorrencia_pix', verbose_name='Contrato',
+    )
+    id_rec = models.CharField(max_length=100, blank=True, default='', db_index=True,
+                              verbose_name='idRec (gateway)')
+    provider = models.CharField(max_length=20, choices=ProviderBoleto.choices,
+                                blank=True, default='')
+    status = models.CharField(max_length=20, choices=RecStatusPA.choices,
+                              default=RecStatusPA.CRIADA, db_index=True)
+    aprovada_em = models.DateTimeField(null=True, blank=True)
+    cancelada_em = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Recorrência Pix Automático'
+        verbose_name_plural = 'Recorrências Pix Automático'
+
+    def __str__(self):
+        return f'RecorrenciaPix {self.id_rec or "?"} ({self.get_status_display()})'
+
+    def transicionar(self, novo) -> bool:
+        """Aplica a transição de status se permitida (guardas). Persiste se salvo."""
+        from django.utils import timezone
+        if str(novo) == str(self.status):
+            return True
+        if novo not in TRANSICOES_REC_PA.get(self.status, set()):
+            return False
+        self.status = novo
+        if novo == RecStatusPA.APROVADA:
+            self.aprovada_em = timezone.now()
+        elif novo == RecStatusPA.CANCELADA:
+            self.cancelada_em = timezone.now()
+        if self.pk:
+            self.save()
+        return True
+
+
 class EventoPIX(models.Model):
     """
     Roadmap 34.3: Log de eventos PIX recebidos via webhook do PSP.

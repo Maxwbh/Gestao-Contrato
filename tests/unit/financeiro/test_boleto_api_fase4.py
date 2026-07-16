@@ -81,10 +81,11 @@ class TestWebhookFase4:
         p.refresh_from_db()
         assert p.pago is False and p.status_cobranca == StatusCobranca.REGISTRADA
 
-    def test_pix_automatico_ignorado(self, client, settings):
+    def test_pix_automatico_evento_nao_tratado_ignorado(self, client, settings):
+        # pix_automatico.recorrencia/cobranca são tratados na Fase 8; os demais
+        # eventos pix_automatico.* continuam apenas registrados (ignorado).
         settings.EVENT_WEBHOOK_SECRET = SECRET
-        r = _post(client, {'event': 'pix_automatico.recorrencia', 'status': 'APROVADA',
-                           'idRec': 'RN-1'})
+        r = _post(client, {'event': 'pix_automatico.status', 'status': 'X', 'idRec': 'RN-1'})
         assert r.status_code == 200 and r.json()['status'] == 'ignorado'
 
     def test_sem_identificador_400(self, client, settings):
