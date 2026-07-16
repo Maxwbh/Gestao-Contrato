@@ -160,6 +160,7 @@ class ContaBancariaApiFactory(ContaBancariaFactory):
         'conta': '12345678',
         'numeroCliente': '123456789',
         'codigoModalidade': '1',
+        'numeroContaCorrente': '12345678',
     })
     convenio = factory.Sequence(lambda n: f'{n:09d}')
     carteira = '01'
