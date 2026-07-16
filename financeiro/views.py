@@ -9219,11 +9219,15 @@ def _processar_evento_cobranca(
     # Evento que representa pagamento (liquidação): status ou pix.recebido.
     liquida = st in ('liquidado', 'pago') or event == 'pix.recebido'
 
-    # Atualiza o status normalizado da parcela.
+    # Máquina de estados (Fase 5): aplica a transição só se for permitida —
+    # rejeita eventos fora de ordem (ex.: 'registrado' tardio após LIQUIDADA).
     novo_status = StatusCobranca.LIQUIDADA if liquida else _MAPA.get(st)
-    if novo_status and parcela.status_cobranca != novo_status:
-        parcela.status_cobranca = novo_status
-        parcela.save(update_fields=['status_cobranca'])
+    if novo_status and not parcela.transicionar_cobranca(novo_status):
+        evt.status = 'ignorado'
+        evt.save(update_fields=['status'])
+        logger.info('[BoletoAPI webhook] transição ilegal (%s->%s) ignorada parcela pk=%s',
+                    parcela.status_cobranca, novo_status, parcela.pk)
+        return {'status': 'ignorado', 'parcela_id': parcela.pk, 'evento_id': evt.pk}
 
     if liquida:
         if parcela.pago:

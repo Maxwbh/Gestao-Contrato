@@ -47,6 +47,26 @@ class StatusCobranca(models.TextChoices):
     ESTORNADA = 'estornada', 'Estornada'
 
 
+# Máquina de estados de StatusCobranca (Fase 5): transições permitidas.
+# '' = estado inicial (ainda não emitida). Impede transições fora de ordem —
+# ex.: um evento tardio 'registrado' após LIQUIDADA/ESTORNADA é rejeitado.
+TRANSICOES_COBRANCA = {
+    # Inicial/desconhecido (boleto legado ou ainda não rastreado): permissivo —
+    # aceita qualquer status (inclusive liquidação direta por webhook).
+    '': set(StatusCobranca.values),
+    StatusCobranca.PENDENTE: {StatusCobranca.REGISTRADA, StatusCobranca.AGUARDANDO_CIP,
+                              StatusCobranca.EXPIRADA, StatusCobranca.BAIXADA},
+    StatusCobranca.AGUARDANDO_CIP: {StatusCobranca.REGISTRADA, StatusCobranca.EXPIRADA,
+                                    StatusCobranca.BAIXADA},
+    StatusCobranca.REGISTRADA: {StatusCobranca.LIQUIDADA, StatusCobranca.EXPIRADA,
+                                StatusCobranca.BAIXADA, StatusCobranca.AGUARDANDO_CIP},
+    StatusCobranca.LIQUIDADA: {StatusCobranca.ESTORNADA},
+    StatusCobranca.BAIXADA: {StatusCobranca.PENDENTE, StatusCobranca.REGISTRADA},   # reemissão
+    StatusCobranca.EXPIRADA: {StatusCobranca.PENDENTE, StatusCobranca.REGISTRADA},  # reemissão
+    StatusCobranca.ESTORNADA: set(),  # terminal
+}
+
+
 class TipoParcela(models.TextChoices):
     """Tipos de parcela"""
     NORMAL = 'NORMAL', 'Normal'
@@ -781,18 +801,40 @@ class Parcela(TimeStampedModel):
         conta_bancaria.save(update_fields=['nosso_numero_atual'])
         return conta_bancaria.nosso_numero_atual
 
+    def pode_transicionar_cobranca(self, novo) -> bool:
+        """True se a transição do status_cobranca atual para `novo` é permitida."""
+        atual = self.status_cobranca or ''
+        if str(novo) == str(atual):
+            return True  # idempotente
+        return novo in TRANSICOES_COBRANCA.get(atual, set())
+
+    def transicionar_cobranca(self, novo, salvar=True) -> bool:
+        """
+        Aplica a transição de status_cobranca se for permitida (máquina de
+        estados — Fase 5). Retorna True se aplicou (ou já estava no estado);
+        False se a transição for ilegal (nesse caso nada muda).
+        """
+        if not self.pode_transicionar_cobranca(novo):
+            return False
+        if str(novo) != str(self.status_cobranca or ''):
+            self.status_cobranca = novo
+            if salvar and self.pk:
+                self.save(update_fields=['status_cobranca'])
+        return True
+
     def registrar_emissao(self, *, provider='', metodo='', status='',
                           cobranca_id=None, ext_ref=None, txid=None):
         """
         Registra os metadados de emissão da cobrança (Boleto-API) de forma
         consistente. Só sobrescreve o que for informado; NÃO persiste (o
         chamador salva). Usado na emissão de boleto/bolepix/pix/pix_automatico.
+        O status respeita a máquina de estados (não regride LIQUIDADA→REGISTRADA).
         """
         if provider:
             self.provider = provider
         if metodo:
             self.metodo_cobranca = metodo
-        if status:
+        if status and self.pode_transicionar_cobranca(status):
             self.status_cobranca = status
         if cobranca_id is not None:
             self.cobranca_id = cobranca_id
@@ -863,6 +905,10 @@ class Parcela(TimeStampedModel):
             metodo_emitido = MetodoCobranca.BOLETO
 
         if not resultado.get('sucesso'):
+            # 409 (CIP): registro em processamento — marca AGUARDANDO_CIP para
+            # a fila de reprocessamento (máquina de estados, Fase 5).
+            if resultado.get('motivo') == 'cip':
+                self.transicionar_cobranca(StatusCobranca.AGUARDANDO_CIP)
             return resultado
 
         # Persistir campos do boleto
