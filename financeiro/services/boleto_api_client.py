@@ -288,12 +288,14 @@ class BoletoApiClient:
         cobranca_id: str,
         tenant_id: str,
         provider: str,
+        bapi_token=None,
     ) -> dict:
         """DELETE /cobranca/{id} — solicita baixa/cancelamento no banco."""
         params = {'tenant_id': tenant_id, 'provider': provider}
         logger.info('[BoletoAPI] baixar_cobranca id=%s tenant=%s', cobranca_id, tenant_id)
         try:
-            resp = self._request('DELETE', f'/cobranca/{cobranca_id}', params=params)
+            resp = self._request('DELETE', f'/cobranca/{cobranca_id}', params=params,
+                                 headers=self._headers(bapi_token))
         except requests.RequestException as exc:
             return {'sucesso': False, 'erro': str(exc)}
         if resp.status_code in (200, 204):
@@ -301,7 +303,56 @@ class BoletoApiClient:
             if data:
                 return {'sucesso': True, **self._normalizar_cobranca(data)}
             return {'sucesso': True}
-        return {'sucesso': False, 'erro': f'HTTP {resp.status_code}'}
+        return self._classificar_erro(resp, 'baixar_cobranca')
+
+    def alterar_cobranca(
+        self,
+        cobranca_id: str,
+        tenant_id: str,
+        provider: str,
+        alteracao: dict,
+        bapi_token=None,
+    ) -> dict:
+        """PUT /cobranca/{id} — altera valor/vencimento da cobrança (C6)."""
+        payload = {'tenant_id': tenant_id, 'provider': provider, 'cobranca': alteracao or {}}
+        logger.info('[BoletoAPI] alterar_cobranca id=%s tenant=%s', cobranca_id, tenant_id)
+        try:
+            resp = self._request('PUT', f'/cobranca/{cobranca_id}', json=payload,
+                                 headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 201):
+            try:
+                return self._normalizar_cobranca(resp.json())
+            except ValueError:
+                return {'sucesso': True}
+        return self._classificar_erro(resp, 'alterar_cobranca')
+
+    def devolver_pix(
+        self,
+        e2eid: str,
+        devolucao_id: str,
+        valor,
+        tenant_id: str,
+        provider: str,
+        bapi_token=None,
+    ) -> dict:
+        """PUT /pix/recebidos/{e2eid}/devolucao/{id} — estorno (devolução) de Pix."""
+        payload = {'tenant_id': tenant_id, 'provider': provider, 'valor': _fmt_valor(valor)}
+        logger.info('[BoletoAPI] devolver_pix e2eid=%s id=%s valor=%s', e2eid, devolucao_id, valor)
+        try:
+            resp = self._request('PUT', f'/pix/recebidos/{e2eid}/devolucao/{devolucao_id}',
+                                 json=payload, headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 201):
+            try:
+                data = resp.json()
+            except ValueError:
+                data = {}
+            return {'sucesso': True, 'devolucao_id': str(data.get('id', devolucao_id)),
+                    'status': str(data.get('status', ''))}
+        return self._classificar_erro(resp, 'devolver_pix')
 
     def gerar_carne(
         self,
