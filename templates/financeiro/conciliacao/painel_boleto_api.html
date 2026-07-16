@@ -71,7 +71,7 @@
         <ul class="list-group list-group-flush">
           {% for origem, n in origem_rows %}
           <li class="list-group-item d-flex justify-content-between align-items-center">
-            <span><code>{{ origem }}</code></span><span class="badge bg-success rounded-pill">{{ n }}</span>
+            <span>{{ origem }}</span><span class="badge bg-success rounded-pill">{{ n }}</span>
           </li>
           {% empty %}
           <li class="list-group-item text-muted">Nenhuma baixa registrada ainda.</li>
@@ -98,6 +98,8 @@
   <p class="text-muted small mt-4 mb-0">
     Conciliação por evento (webhook), polling Sicoob e rede de segurança Pix.
     Cobranças ainda não emitidas via Boleto-API não aparecem aqui.
+    <strong>Eventos sem parcela</strong> são órfãos não atribuíveis a uma
+    imobiliária (métrica global do sistema, visível apenas a administradores).
   </p>
 </div>
 {% endblock %}
