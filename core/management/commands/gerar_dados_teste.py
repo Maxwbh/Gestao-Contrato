@@ -71,6 +71,15 @@ class Command(BaseCommand):
             action='store_true',
             help='Gera logos para as imobiliárias de teste (Passo 3 do setup).',
         )
+        parser.add_argument(
+            '--so-cobranca-api',
+            action='store_true',
+            help=(
+                'Simula apenas o ciclo de vida das cobranças registradas '
+                '(HUs BAPI): eventos de webhook fake → liquidada/baixada/'
+                'expirada/estornada/aguardando CIP, sem chamar a API do banco.'
+            ),
+        )
 
     def normalizar_email(self, texto):
         """Remove acentos e caracteres especiais para criar um email válido"""
@@ -100,9 +109,14 @@ class Command(BaseCommand):
         self.so_remessa = options.get('so_remessa', False)
         self.so_retorno = options.get('so_retorno', False)
         self.so_logos = options.get('so_logos', False)
+        self.so_cobranca_api = options.get('so_cobranca_api', False)
 
         if self.so_boletos:
             self._executar_so_boletos()
+            return
+
+        if self.so_cobranca_api:
+            self._executar_so_cobranca_api()
             return
 
         if self.so_remessa:
@@ -183,6 +197,14 @@ class Command(BaseCommand):
                     self.stdout.write('Simulando boletos gerados (para demo de remessa)...')
                     boletos_simulados = self.simular_boletos_gerados(contratos, contas_bancarias)
                     self.stdout.write(f'   {boletos_simulados} boletos simulados')
+
+                    # 9b. Ciclo de vida das cobranças registradas (HUs BAPI):
+                    # eventos fake pelo pipeline real do webhook — sem API do banco.
+                    self.stdout.write('Simulando ciclo de cobrança registrada (Boleto-API fake)...')
+                    ciclo_api = self.simular_ciclo_cobranca_api()
+                    self.stdout.write(
+                        '   ' + ', '.join(f'{v} {k}' for k, v in ciclo_api.items() if v)
+                    )
 
                 # 10. Gerar índices de reajuste
                 self.stdout.write('Gerando índices de reajuste...')
@@ -971,7 +993,10 @@ class Command(BaseCommand):
 
         # Resetar boletos anteriores de parcelas não pagas — garante que Passo 2
         # sempre regenera mesmo que já tenha sido executado antes (setup idempotente).
-        reset_qs = Parcela.objects.filter(pago=False, status_boleto=StatusBoleto.GERADO)
+        reset_qs = Parcela.objects.filter(
+            pago=False,
+            status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO],
+        )
         qtd_reset = reset_qs.count()
         if qtd_reset > 0:
             self.stdout.write(f'Resetando {qtd_reset} boleto(s) anteriores para regeneração...')
@@ -984,6 +1009,17 @@ class Command(BaseCommand):
                 cobranca_id='',  # Boleto-API: limpar junto com campos CNAB
                 boleto_pdf_db=b'',
                 data_geracao_boleto=None,
+                data_registro_boleto=None,
+                # Boleto fake (Boleto-API): rastreio e dados de cobrança registrada
+                codigo_barras='',
+                linha_digitavel='',
+                valor_boleto=None,
+                pix_copia_cola='',
+                pix_txid='',
+                ext_ref='',
+                provider='',
+                metodo_cobranca='',
+                status_cobranca='',
             )
 
         if self.banco_unico:
@@ -1099,7 +1135,8 @@ class Command(BaseCommand):
         from financeiro.models import Parcela, StatusBoleto as SB
         for cb in contas_bancarias:
             qtd = Parcela.objects.filter(
-                conta_bancaria=cb, status_boleto=SB.GERADO, pago=False
+                conta_bancaria=cb, pago=False,
+                status_boleto__in=[SB.GERADO, SB.REGISTRADO],
             ).count()
             if qtd > 0:
                 provider = getattr(cb, 'provider', 'brcobranca')
@@ -1118,15 +1155,24 @@ class Command(BaseCommand):
         Simula campos de boleto sem chamar APIs externas.
 
         - BRCobrança (provider=brcobranca): popula nosso_numero no formato CNAB.
-        - Boleto-API (provider=sicoob/c6): popula cobranca_id simulado + nosso_numero
-          (o banco também devolve nosso_numero no CobrancaOut real).
+        - Boleto-API (provider=sicoob/c6): monta um BOLETO FAKE completo via
+          financeiro.services.boleto_fake (linha digitável e código de barras
+          com DVs reais, Pix copia-e-cola EMV, PDF de demonstração) e registra
+          a emissão pelo mesmo caminho da emissão real (registrar_emissao →
+          provider/metodo/status_cobranca REGISTRADA + cobranca_id/ext_ref/txid),
+          sem tocar o gateway nem a API do banco.
         """
-        from financeiro.models import Parcela, StatusBoleto
+        from core.models import MetodoCobranca
+        from contratos.models import Contrato
+        from financeiro.models import Parcela, StatusBoleto, StatusCobranca
+        from financeiro.services.boleto_fake import montar_boleto_fake
         from django.utils import timezone as tz
 
         hoje = tz.now()
         contas_modificadas: dict = {}
         a_atualizar = []
+        contratos_bolepix = set()
+        metodo_por_contrato: dict = {}
 
         for parcela, conta in pares:
             if parcela.pago:
@@ -1137,12 +1183,63 @@ class Command(BaseCommand):
             seq_str = str(conta.nosso_numero_atual).zfill(9)
 
             if provider != 'brcobranca':
-                # Boleto-API: cobranca_id é o identificador principal de conciliação push.
-                # nosso_numero é retornado pelo banco no CobrancaOut (simulado aqui).
-                parcela.cobranca_id = f'sim-{conta.banco}-{seq_str}'
-                parcela.nosso_numero = seq_str
-                parcela.nosso_numero_formatado = seq_str
-                parcela.nosso_numero_dv = ''
+                # BoletoPix só no C6 (BAPI-11); alterna os contratos C6 entre
+                # boleto e bolepix para popular as telas com os dois métodos.
+                if provider == 'c6':
+                    if parcela.contrato_id not in metodo_por_contrato:
+                        proximo_e_bolepix = len(metodo_por_contrato) % 2 == 0
+                        metodo_por_contrato[parcela.contrato_id] = (
+                            MetodoCobranca.BOLETO_PIX if proximo_e_bolepix
+                            else MetodoCobranca.BOLETO
+                        )
+                    metodo = metodo_por_contrato[parcela.contrato_id]
+                    if metodo == MetodoCobranca.BOLETO_PIX:
+                        contratos_bolepix.add(parcela.contrato_id)
+                else:
+                    metodo = MetodoCobranca.BOLETO
+
+                # conta.pk no id evita colisão entre contas do mesmo banco em
+                # imobiliárias diferentes (cada conta tem sequencial próprio).
+                cobranca_id = f'sim-{conta.banco}-{conta.pk}-{seq_str}'
+                ext_ref = (f'bp-{conta.banco}-{conta.pk}-{seq_str}'
+                           if metodo == MetodoCobranca.BOLETO_PIX else '')
+                # Mesmo formato de txid da emissão real (_gerar_via_boleto_api)
+                txid = f'GC{parcela.contrato_id:07d}P{parcela.numero_parcela:04d}'
+
+                fake = montar_boleto_fake(
+                    banco=conta.banco,
+                    valor=parcela.valor_atual or parcela.valor_original,
+                    vencimento=parcela.data_vencimento,
+                    nosso_numero=seq_str,
+                    carteira=conta.carteira or '',
+                    pagador=parcela.contrato.comprador.nome,
+                    contrato=parcela.contrato.numero_contrato,
+                    metodo=str(metodo),
+                    txid=txid,
+                    cobranca_id=cobranca_id,
+                    ext_ref=ext_ref,
+                )
+
+                parcela.nosso_numero = fake['nosso_numero']
+                parcela.nosso_numero_formatado = fake['nosso_numero_formatado']
+                parcela.nosso_numero_dv = fake['nosso_numero_dv']
+                parcela.codigo_barras = fake['codigo_barras']
+                parcela.linha_digitavel = fake['linha_digitavel']
+                parcela.valor_boleto = fake['valor']
+                parcela.pix_copia_cola = fake['pix_copia_cola']
+                parcela.boleto_pdf_db = fake['pdf_content'] or b''
+                # BAPI-10: rastreio provider/método/status na emissão
+                parcela.registrar_emissao(
+                    provider=provider,
+                    metodo=metodo,
+                    status=StatusCobranca.REGISTRADA,
+                    cobranca_id=cobranca_id,
+                    ext_ref=ext_ref,
+                    txid=txid,
+                )
+                # Cobrança registrada confirmada no banco (fake) → REGISTRADO
+                parcela.status_boleto = StatusBoleto.REGISTRADO
+                parcela.data_registro_boleto = hoje
             else:
                 # BRCobrança/CNAB: formato nosso_numero varia por banco
                 if conta.banco == '001' and conta.convenio:
@@ -1152,9 +1249,9 @@ class Command(BaseCommand):
                 parcela.nosso_numero = nosso_numero_fmt
                 parcela.nosso_numero_formatado = nosso_numero_fmt
                 parcela.nosso_numero_dv = ''
+                parcela.status_boleto = StatusBoleto.GERADO
 
             parcela.conta_bancaria = conta
-            parcela.status_boleto = StatusBoleto.GERADO
             parcela.numero_documento = parcela.gerar_numero_documento()
             parcela.data_geracao_boleto = hoje
             a_atualizar.append(parcela)
@@ -1164,12 +1261,250 @@ class Command(BaseCommand):
             'conta_bancaria', 'status_boleto', 'nosso_numero',
             'nosso_numero_formatado', 'nosso_numero_dv',
             'cobranca_id', 'numero_documento', 'data_geracao_boleto',
-        ], batch_size=500)
+            'data_registro_boleto', 'codigo_barras', 'linha_digitavel',
+            'valor_boleto', 'pix_copia_cola', 'pix_txid', 'ext_ref',
+            'provider', 'metodo_cobranca', 'status_cobranca', 'boleto_pdf_db',
+        ], batch_size=200)
 
         for conta_mod in contas_modificadas.values():
             conta_mod.save(update_fields=['nosso_numero_atual'])
 
+        # Coerência BAPI-06/07: habilita os métodos na imobiliária e grava o
+        # método escolhido nos contratos que receberam BoletoPix.
+        if contratos_bolepix:
+            from core.models import Imobiliaria
+            imob_ids = set(
+                Contrato.objects.filter(pk__in=contratos_bolepix)
+                .values_list('imobiliaria_id', flat=True)
+            )
+            for imob in Imobiliaria.objects.filter(pk__in=imob_ids):
+                metodos = list(imob.metodos_cobranca or [])
+                if MetodoCobranca.BOLETO_PIX not in metodos:
+                    metodos.append(str(MetodoCobranca.BOLETO_PIX))
+                    imob.metodos_cobranca = metodos
+                    imob.save(update_fields=['metodos_cobranca'])
+            Contrato.objects.filter(pk__in=contratos_bolepix).update(
+                metodo_cobranca=MetodoCobranca.BOLETO_PIX)
+
         return len(a_atualizar)
+
+    def _executar_so_cobranca_api(self):
+        """Executa só a simulação do ciclo de cobrança registrada (HUs BAPI)."""
+        resultado = self.simular_ciclo_cobranca_api()
+        if not any(resultado.values()):
+            self.stdout.write(self.style.ERROR(
+                'Nenhuma cobrança registrada (status REGISTRADA) encontrada. '
+                'Gere os boletos antes (Passo 2 / --so-boletos).'
+            ))
+            return
+        self.stdout.write(self.style.SUCCESS('Ciclo de cobrança registrada simulado:'))
+        for chave, qtd in resultado.items():
+            if qtd:
+                self.stdout.write(self.style.SUCCESS(f'   • {qtd} {chave}'))
+
+    def simular_ciclo_cobranca_api(self):
+        """
+        Simula o ciclo de vida das cobranças registradas (HUs BAPI-13..25) SEM
+        chamar a API do banco: injeta eventos FAKE no pipeline REAL do webhook
+        (_processar_evento_cobranca), exercitando o casamento por múltiplas
+        chaves (cobranca_id/ext_ref/txid), a baixa automática, a idempotência,
+        a máquina de estados e o log EventoCobrancaApi.
+
+        Distribuição determinística (por índice) das parcelas REGISTRADAS:
+          0-2 → LIQUIDADA por cobranca_id (BAPI-18)      3 → LIQUIDADA por ext_ref/txid (BAPI-13)
+          4   → LIQUIDADA por pix.recebido/txid (BAPI-16) 5 → BAIXADA (cancelada no banco)
+          6   → EXPIRADA (vencida no banco)               7 → LIQUIDADA → ESTORNADA (BAPI-28)
+          8-9 → permanecem REGISTRADAS (em aberto)
+        Extras: evento duplicado (BAPI-19), evento fora de ordem (BAPI-24),
+        evento sem parcela (BAPI-22) e parcelas AGUARDANDO_CIP (BAPI-25/33).
+        """
+        import json
+        from django.utils import timezone as tz
+        from financeiro.models import EventoCobrancaApi, Parcela, StatusCobranca
+        from financeiro.views import _processar_evento_cobranca
+
+        # Sequência de event_id única entre execuções (idempotência real do
+        # webhook dedupa por event_id — reiniciar do zero marcaria tudo como
+        # duplicado numa segunda rodada de --so-cobranca-api).
+        if not hasattr(self, '_seq_evento_sim'):
+            from financeiro.models import EventoCobrancaApi as _Evt
+            self._seq_evento_sim = _Evt.objects.filter(
+                event_id__startswith='evt-sim-').count()
+
+        def _evento(status, event, *, cobranca_id='', ext_ref='', txid='',
+                    paid_at='', valor=''):
+            """Injeta um evento fake no pipeline real do webhook."""
+            self._seq_evento_sim += 1
+            payload = {
+                'id': cobranca_id, 'event': event, 'status': status,
+                'ext_ref': ext_ref, 'txid': txid, 'paid_at': paid_at,
+                'valor': valor, 'event_id': f'evt-sim-{self._seq_evento_sim:05d}',
+                'simulado': True,
+            }
+            return _processar_evento_cobranca(
+                cobranca_id=cobranca_id,
+                status_cobranca=status,
+                event=event,
+                paid_at_str=paid_at,
+                valor_str=str(valor),
+                payload_raw=json.dumps(payload, ensure_ascii=False, default=str),
+                event_id=payload['event_id'],
+                ext_ref=ext_ref,
+                txid=txid,
+            )
+
+        parcelas = list(
+            Parcela.objects
+            .filter(status_cobranca=StatusCobranca.REGISTRADA, pago=False)
+            .exclude(cobranca_id='')
+            .select_related('contrato')
+            .order_by('pk')
+        )
+
+        stats = {
+            'liquidadas': 0, 'baixadas': 0, 'expiradas': 0, 'estornadas': 0,
+            'registradas (em aberto)': 0, 'aguardando CIP': 0,
+            'eventos duplicados': 0, 'eventos fora de ordem': 0,
+            'eventos sem parcela': 0,
+        }
+        primeira_liquidada = None
+        primeira_baixada = None
+
+        for i, parcela in enumerate(parcelas):
+            papel = i % 10
+            valor = parcela.valor_boleto or parcela.valor_atual or 0
+            pago_em = min(
+                parcela.data_vencimento + timedelta(days=(i % 7)),
+                tz.now().date(),
+            ).isoformat()
+
+            if papel <= 2:  # BAPI-18: baixa automática por cobranca_id
+                r = _evento('liquidado', 'cobranca.liquidada',
+                            cobranca_id=parcela.cobranca_id, paid_at=pago_em, valor=valor)
+            elif papel == 3:  # BAPI-13/16: casamento sem cobranca_id (ext_ref → txid)
+                if parcela.ext_ref:
+                    r = _evento('liquidado', 'cobranca.liquidada',
+                                ext_ref=parcela.ext_ref, paid_at=pago_em, valor=valor)
+                else:
+                    r = _evento('liquidado', 'cobranca.liquidada',
+                                txid=parcela.pix_txid, paid_at=pago_em, valor=valor)
+            elif papel == 4:  # BAPI-16: Pix recebido casa por txid
+                r = _evento('', 'pix.recebido',
+                            txid=parcela.pix_txid, paid_at=pago_em, valor=valor)
+            elif papel == 5:  # BAPI-20/26: cancelada/baixada no banco
+                r = _evento('baixado', 'cobranca.baixada',
+                            cobranca_id=parcela.cobranca_id)
+                if r.get('status') == 'atualizado':
+                    stats['baixadas'] += 1
+                    if primeira_baixada is None:
+                        primeira_baixada = parcela
+                continue
+            elif papel == 6:  # BAPI-20: expirada (vencida no banco)
+                r = _evento('expirado', 'cobranca.expirada',
+                            cobranca_id=parcela.cobranca_id)
+                if r.get('status') == 'atualizado':
+                    stats['expiradas'] += 1
+                continue
+            elif papel == 7:  # BAPI-28: liquidada e depois estornada pela gestão
+                _evento('liquidado', 'cobranca.liquidada',
+                        cobranca_id=parcela.cobranca_id, paid_at=pago_em, valor=valor)
+                # Estorno segue o fluxo da gestão (estornar_cobranca → transição
+                # LIQUIDADA→ESTORNADA), não o webhook — que dedupa pós-baixa.
+                parcela.refresh_from_db()
+                if parcela.transicionar_cobranca(StatusCobranca.ESTORNADA):
+                    EventoCobrancaApi.objects.create(
+                        cobranca_id=parcela.cobranca_id,
+                        event='pix.devolvido',
+                        status_cobranca='estornado',
+                        parcela=parcela,
+                        valor=valor,
+                        status='atualizado',
+                        payload_raw=json.dumps(
+                            {'simulado': True, 'origem': 'estorno-gestao'},
+                            ensure_ascii=False),
+                    )
+                    stats['estornadas'] += 1
+                continue
+            else:  # 8-9: permanecem em aberto (REGISTRADA)
+                stats['registradas (em aberto)'] += 1
+                continue
+
+            if r.get('status') == 'baixado':
+                stats['liquidadas'] += 1
+                if primeira_liquidada is None:
+                    primeira_liquidada = parcela
+
+        # ── Cenários de borda (idempotência / máquina de estados / auditoria) ──
+        if primeira_liquidada is not None:
+            # BAPI-19: reenvio do banco → duplicado (parcela já baixada)
+            r = _evento('liquidado', 'cobranca.liquidada',
+                        cobranca_id=primeira_liquidada.cobranca_id,
+                        valor=primeira_liquidada.valor_boleto or 0)
+            if r.get('status') == 'duplicado':
+                stats['eventos duplicados'] += 1
+        if primeira_baixada is not None:
+            # BAPI-24: evento fora de ordem → ignorado pela máquina de estados
+            # ('liquidado' tardio após BAIXADA; BAIXADA→LIQUIDADA é ilegal).
+            # Obs.: em parcela já LIQUIDADA o reenvio nem chega à máquina de
+            # estados — o dedup por cobranca_id+baixado responde antes (BAPI-19).
+            r = _evento('liquidado', 'cobranca.liquidada',
+                        cobranca_id=primeira_baixada.cobranca_id,
+                        valor=primeira_baixada.valor_boleto or 0)
+            if r.get('status') == 'ignorado':
+                stats['eventos fora de ordem'] += 1
+
+        # BAPI-22: evento sem parcela vinculada → registrado para auditoria
+        r = _evento('liquidado', 'cobranca.liquidada',
+                    cobranca_id='sim-000-inexistente')
+        if r.get('status') == 'sem_parcela':
+            stats['eventos sem parcela'] += 1
+
+        # BAPI-25/33: emissões que caíram no 409/CIP — sem cobranca_id (a
+        # emissão não completou), com conta atribuída para a fila reprocessar.
+        stats['aguardando CIP'] += self._simular_aguardando_cip()
+
+        return stats
+
+    def _simular_aguardando_cip(self, quantidade=4):
+        """
+        Marca algumas parcelas sem boleto como AGUARDANDO_CIP (BAPI-25),
+        simulando emissões que receberam 409 do banco — insumo para a fila de
+        reprocessamento (BAPI-33) e para os filtros das telas de cobrança.
+        """
+        from core.models import ContaBancaria, MetodoCobranca
+        from financeiro.models import Parcela, StatusBoleto, StatusCobranca
+
+        contas_api = list(
+            ContaBancaria.objects.exclude(provider='brcobranca').filter(ativo=True)
+        )
+        marcadas = 0
+        for conta in contas_api:
+            if marcadas >= quantidade:
+                break
+            parcela = (
+                Parcela.objects
+                .filter(
+                    contrato__imobiliaria_id=conta.imobiliaria_id,
+                    pago=False,
+                    status_boleto=StatusBoleto.NAO_GERADO,
+                    status_cobranca='',
+                )
+                .order_by('data_vencimento')
+                .first()
+            )
+            if not parcela:
+                continue
+            parcela.conta_bancaria = conta
+            parcela.registrar_emissao(
+                provider=conta.provider,
+                metodo=MetodoCobranca.BOLETO,
+                status=StatusCobranca.AGUARDANDO_CIP,
+            )
+            parcela.save(update_fields=[
+                'conta_bancaria', 'provider', 'metodo_cobranca', 'status_cobranca',
+            ])
+            marcadas += 1
+        return marcadas
 
     def verificar_dados_boleto_remessa(self, contratos, contas_bancarias):
         """
@@ -2144,12 +2479,15 @@ class Command(BaseCommand):
         hoje = tz.now()
         total_pago = 0
 
-        # Agrupar REGISTRADO por conta_bancaria
+        # Agrupar REGISTRADO por conta_bancaria — apenas fluxo CNAB/BRCobrança:
+        # cobrança registrada (Sicoob/C6 via Boleto-API) concilia por webhook
+        # fake (simular_ciclo_cobranca_api), nunca por retorno CNAB.
         parcelas_por_conta = {}
         for p in Parcela.objects.filter(
             status_boleto=StatusBoleto.REGISTRADO,
             pago=False,
             nosso_numero__gt='',
+            conta_bancaria__provider='brcobranca',
         ).select_related('conta_bancaria').order_by('conta_bancaria', 'data_vencimento'):
             parcelas_por_conta.setdefault(p.conta_bancaria_id, []).append(p)
 
