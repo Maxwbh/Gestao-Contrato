@@ -66,11 +66,12 @@ Status: ✅ Entregue · 🟡 Parcial · ⬜ Planejado — Todas são 🆕 **NOVA
 | BAPI-27 | Não cancelar local se o gateway recusar | Operador | 6 | ✅ |
 | BAPI-28 | Estornar (devolver) Pix | Operador | 6 | ✅ |
 | BAPI-29 | Alterar valor/vencimento da cobrança | Operador | 6 | ✅ |
-| **Planejadas** ||||
-| BAPI-30 | Polling de boleto Sicoob (sem webhook) | Sistema | 7 | ⬜ |
-| BAPI-31 | Conciliação Pix (rede de segurança) | Sistema | 7 | ⬜ |
+| **Agendadores (Fase 7)** ||||
+| BAPI-30 | Polling de boleto Sicoob (sem webhook) | Sistema | 7 | ✅ |
+| BAPI-31 | Conciliação Pix (rede de segurança) | Sistema | 7 | ✅ |
 | BAPI-32 | Conciliação financeira (extrato/recebíveis) | Gestor | 7 | ⬜ |
-| BAPI-33 | Fila de reprocessamento 409/CIP | Sistema | 7 | ⬜ |
+| BAPI-33 | Fila de reprocessamento 409/CIP | Sistema | 7 | ✅ |
+| **Planejadas** ||||
 | BAPI-34 | Aderir contrato ao Pix Automático | Operador | 8 | ⬜ |
 | BAPI-35 | Agendar cobrança do Pix Automático (D-2) | Sistema | 8 | ⬜ |
 | BAPI-36 | Retentativa do Pix Automático | Sistema | 8 | ⬜ |
@@ -281,23 +282,36 @@ pagador e a cobrança fique `ESTORNADA`.
 
 ---
 
-## Planejadas (Fases 7–9)
+## Agendadores (Fase 7)
 
-### BAPI-30 — Polling de boleto Sicoob 🆕 ⬜
+### BAPI-30 — Polling de boleto Sicoob 🆕 ✅
 **Como** sistema **quero** consultar periodicamente as cobranças Sicoob em aberto
-**para que** concilie mesmo sem webhook de boleto. *Job diário `GET /cobranca/{id}`.*
+**para que** concilie mesmo sem webhook de boleto.
+**Aceite:** job `polling_boletos_sicoob` consulta `GET /cobranca/{id}` das parcelas
+Sicoob em aberto e baixa via `baixar_por_conciliacao()` (idempotente).
+**Ref.:** `financeiro/tasks.py`, `financeiro/services/boleto_api_conciliacao.py`.
 
-### BAPI-31 — Conciliação Pix (rede de segurança) 🆕 ⬜
+### BAPI-31 — Conciliação Pix (rede de segurança) 🆕 ✅
 **Como** sistema **quero** cruzar `GET /pix/recebidos` com as parcelas **para que**
 eu tenha um fallback do webhook.
+**Aceite:** job `conciliar_pix_recebidos(dias)` casa por `pix_txid` e baixa as não
+pagas; parcela já paga → `duplicado` (sem baixa dupla).
+**Ref.:** `financeiro/tasks.py`, `financeiro/services/boleto_api_conciliacao.py`.
+
+### BAPI-33 — Fila de reprocessamento 409/CIP 🆕 ✅
+**Como** sistema **quero** reprocessar cobranças `AGUARDANDO_CIP` **para que** a
+emissão se complete quando a CIP liberar.
+**Aceite:** job `reprocessar_fila_cip` reemite (`gerar_boleto(force=True)`) as
+parcelas `AGUARDANDO_CIP`; sucesso atualiza o status pela própria emissão.
+**Ref.:** `financeiro/tasks.py`.
+
+---
+
+## Planejadas (Fases 7–9)
 
 ### BAPI-32 — Conciliação financeira (extrato/recebíveis) 🆕 ⬜
 **Como** gestor **quero** cruzar `GET /conciliacao` e `GET /extrato` **para que** eu
 tenha relatório financeiro consolidado.
-
-### BAPI-33 — Fila de reprocessamento 409/CIP 🆕 ⬜
-**Como** sistema **quero** reprocessar cobranças `AGUARDANDO_CIP` **para que** a
-emissão se complete quando a CIP liberar.
 
 ### BAPI-34 — Aderir contrato ao Pix Automático 🆕 ⬜
 **Como** operador **quero** aderir o contrato ao débito recorrente **para que** as
@@ -332,7 +346,10 @@ carnê use cobrança registrada (hoje usa o PDF local BRCobrança).
 | Emissão + rastreio + estados | `financeiro/models.py` (`Parcela`, `StatusCobranca`, `TRANSICOES_COBRANCA`) |
 | Webhook / conciliação | `financeiro/views.py` (`webhook_boleto_api`, `_processar_evento_cobranca`) |
 | Log de eventos | `financeiro/models.py` (`EventoCobrancaApi`) |
-| Testes | `tests/unit/financeiro/test_boleto_api_fase{2..6}.py`, `tests/unit/core/*fase1*` |
+| Agendadores (Fase 7) | `financeiro/tasks.py`, `financeiro/services/boleto_api_conciliacao.py` |
+| Boleto fake (dados de teste, sem API do banco) | `financeiro/services/boleto_fake.py`, `core/management/commands/gerar_dados_teste.py` |
+| Cenários de teste | `docs/analise/CENARIOS_TESTE_BOLETO_API.md` |
+| Testes | `tests/unit/financeiro/test_boleto_api_fase{2..7}.py`, `tests/unit/core/*fase1*` |
 
 ## Endpoints do gateway consumidos
 

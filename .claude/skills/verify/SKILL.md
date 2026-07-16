@@ -20,7 +20,11 @@ python manage.py gerar_dados_teste --limpar        # base (contratos, parcelas, 
 python manage.py gerar_dados_teste --so-boletos    # boletos GERADO (simulados se API BRCobrança off)
 python manage.py gerar_dados_teste --so-remessa    # ArquivoRemessa ENVIADO (libera tela de retorno)
 python manage.py gerar_dados_teste --so-retorno    # baixas simuladas (alimenta conciliação)
+python manage.py gerar_dados_teste --so-cobranca-api  # ciclo BAPI: eventos webhook fake (LIQUIDADA/BAIXADA/EXPIRADA/ESTORNADA/CIP)
 ```
+- Contas Sicoob (756) e C6 (336) usam **boleto fake** (Boleto-API, status
+  REGISTRADO, sem rede): linha digitável/código de barras/Pix/PDF completos —
+  cenários em `docs/analise/CENARIOS_TESTE_BOLETO_API.md`.
 - Cenário de bloqueio HU-06: contrato IPCA com `data_contrato` 14 meses atrás,
   `prazo_reajuste_meses=12`, sem `Reajuste` aplicado → parcela 13+ bloqueada.
 - Boletos "gerados" de teste precisam de `conta_bancaria` preenchida para
