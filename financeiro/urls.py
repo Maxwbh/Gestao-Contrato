@@ -96,6 +96,9 @@ urlpatterns = [
     # HU-26 — Painel de Conciliação & Saúde da Cobrança
     path('cobranca/conciliacao/', views.painel_conciliacao_saude, name='painel_conciliacao_saude'),
     path('api/conciliacao/saude/', views.api_conciliacao_saude, name='api_conciliacao_saude'),
+    # Fase 9 — Painel de conciliação da cobrança registrada (Boleto-API)
+    path('cobranca/conciliacao/boleto-api/', views.painel_conciliacao_boleto_api,
+         name='painel_conciliacao_boleto_api'),
     path('api/remessa/validar/', views.api_remessa_validar, name='api_remessa_validar'),
     path('cnab/remessa/download-lote/', views.remessa_download_lote, name='remessa_download_lote'),
     path('cnab/remessa/<str:hid>/cancelar-envio/', views.remessa_cancelar_envio, name='remessa_cancelar_envio'),

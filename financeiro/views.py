@@ -9326,6 +9326,59 @@ def webhook_boleto_api(request):
     return JsonResponse(resultado, status=200)
 
 
+@login_required
+def painel_conciliacao_boleto_api(request):
+    """
+    Fase 9 — Painel de conciliação da cobrança registrada (Boleto-API):
+    % conciliado, distribuição por status, recebido por origem, fila
+    AGUARDANDO_CIP, pendências de casamento e recorrências Pix Automático.
+    """
+    from django.db.models import Count
+    from .models import EventoCobrancaApi, StatusCobranca, RecorrenciaPix
+
+    imobs = list(_imobs_para_usuario(request.user).values_list('id', flat=True))
+    imob_filtro = str(request.GET.get('imobiliaria') or '')
+
+    parcelas = (Parcela.objects.exclude(status_cobranca='')
+                .filter(contrato__imobiliaria_id__in=imobs))
+    if imob_filtro:
+        parcelas = parcelas.filter(contrato__imobiliaria_id=imob_filtro)
+
+    total = parcelas.count()
+    por_status = {r['status_cobranca']: r['n']
+                  for r in parcelas.values('status_cobranca').annotate(n=Count('id'))}
+    liquidadas = por_status.get(StatusCobranca.LIQUIDADA, 0)
+    pct_conciliado = round(100 * liquidadas / total, 1) if total else 0.0
+
+    status_rows = [(label, por_status.get(value, 0)) for value, label in StatusCobranca.choices]
+
+    baixas = EventoCobrancaApi.objects.filter(
+        status='baixado', parcela__contrato__imobiliaria_id__in=imobs)
+    origem_rows = [(r['event'] or '—', r['n'])
+                   for r in baixas.values('event').annotate(n=Count('id')).order_by('-n')]
+
+    from .models import RecStatusPA
+    rec_counts = {r['status']: r['n']
+                  for r in (RecorrenciaPix.objects
+                            .filter(contrato__imobiliaria_id__in=imobs)
+                            .values('status').annotate(n=Count('id')))}
+    recorrencia_rows = [(label, rec_counts.get(value, 0)) for value, label in RecStatusPA.choices]
+
+    context = {
+        'total': total,
+        'pct_conciliado': pct_conciliado,
+        'liquidadas': liquidadas,
+        'status_rows': status_rows,
+        'origem_rows': origem_rows,
+        'recorrencia_rows': recorrencia_rows,
+        'fila_cip': por_status.get(StatusCobranca.AGUARDANDO_CIP, 0),
+        'sem_parcela': EventoCobrancaApi.objects.filter(status='sem_parcela').count(),
+        'imobiliarias': _imobs_para_usuario(request.user),
+        'imob_filtro': imob_filtro,
+    }
+    return render(request, 'financeiro/conciliacao/painel_boleto_api.html', context)
+
+
 # =============================================================================
 # 34.5 P3 — Relatórios Agendados e Exportação para BI
 # =============================================================================
