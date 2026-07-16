@@ -834,3 +834,95 @@ def enviar_relatorio_posicao_contratos(formato='excel'):
     except Exception as exc:
         logger.exception('Erro ao enviar relatório de posição: %s', exc)
         return {'enviado': False, 'erro': str(exc)}
+
+
+# =============================================================================
+# Boleto-API — Agendadores (Fase 7): polling, conciliação Pix e fila 409/CIP
+# =============================================================================
+
+@shared_task
+def polling_boletos_sicoob():
+    """
+    Sicoob não envia webhook de boleto: consulta GET /cobranca/{id} das parcelas
+    Sicoob em aberto e baixa as que estiverem liquidadas. Rodar diariamente.
+    """
+    from core.models import ProviderBoleto
+    from .models import Parcela
+    from .services.boleto_api_client import BoletoApiClient
+    from .services.boleto_api_conciliacao import baixar_por_conciliacao
+
+    parcelas = (Parcela.objects
+                .filter(provider=ProviderBoleto.SICOOB, pago=False)
+                .exclude(cobranca_id='')
+                .select_related('conta_bancaria'))
+    client = BoletoApiClient()
+    baixadas = 0
+    for p in parcelas:
+        conta = p.conta_bancaria
+        r = client.consultar_cobranca(
+            p.cobranca_id, getattr(conta, 'tenant_id', '') or '', p.provider,
+            bapi_token=(getattr(conta, 'bapi_token', '') or None))
+        if r.get('sucesso') and str(r.get('status', '')).lower() in ('liquidado', 'pago'):
+            baixar_por_conciliacao(p, valor=r.get('valor'), origem='polling-sicoob')
+            baixadas += 1
+    logger.info('[BoletoAPI] polling Sicoob: %d parcela(s) baixada(s)', baixadas)
+    return {'baixadas': baixadas}
+
+
+@shared_task
+def conciliar_pix_recebidos(dias=1):
+    """
+    Rede de segurança do webhook Pix: lista GET /pix/recebidos do período e baixa
+    as parcelas casadas por txid ainda não pagas. Rodar diariamente.
+    """
+    from core.models import ProviderBoleto, ContaBancaria
+    from .models import Parcela
+    from .services.boleto_api_client import BoletoApiClient
+    from .services.boleto_api_conciliacao import baixar_por_conciliacao
+
+    fim = timezone.now().date()
+    inicio = fim - timedelta(days=dias)
+    client = BoletoApiClient()
+    baixadas = 0
+    contas = ContaBancaria.objects.filter(
+        provider__in=[ProviderBoleto.C6, ProviderBoleto.SICOOB], ativo=True)
+    for conta in contas:
+        r = client.listar_pix_recebidos(
+            inicio.isoformat(), fim.isoformat(), conta.tenant_id, conta.provider,
+            bapi_token=(conta.bapi_token or None))
+        if not r.get('sucesso'):
+            continue
+        for item in r.get('itens', []):
+            txid = str(item.get('txid') or '')
+            if not txid:
+                continue
+            p = Parcela.objects.filter(pix_txid=txid, pago=False).first()
+            if p:
+                baixar_por_conciliacao(p, valor=item.get('valor'), origem='conciliacao-pix')
+                baixadas += 1
+    logger.info('[BoletoAPI] conciliação Pix: %d parcela(s) baixada(s)', baixadas)
+    return {'baixadas': baixadas}
+
+
+@shared_task
+def reprocessar_fila_cip():
+    """
+    Reprocessa cobranças que ficaram AGUARDANDO_CIP (409 na emissão): tenta emitir
+    de novo. Ao ter sucesso, a própria emissão atualiza o status. Rodar por evento
+    ou diariamente.
+    """
+    from .models import Parcela, StatusCobranca
+
+    parcelas = (Parcela.objects
+                .filter(status_cobranca=StatusCobranca.AGUARDANDO_CIP, pago=False)
+                .select_related('conta_bancaria'))
+    reprocessadas = 0
+    for p in parcelas:
+        conta = p.conta_bancaria
+        if not conta:
+            continue
+        r = p.gerar_boleto(conta_bancaria=conta, force=True, enviar_email=False)
+        if r.get('sucesso'):
+            reprocessadas += 1
+    logger.info('[BoletoAPI] fila CIP: %d cobrança(s) reprocessada(s)', reprocessadas)
+    return {'reprocessadas': reprocessadas}
