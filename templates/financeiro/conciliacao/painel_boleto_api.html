@@ -49,10 +49,10 @@
     </div>
   </div>
 
-  <div class="row g-3">
+  <div class="row g-3 align-items-start">
     <!-- Por status normalizado -->
     <div class="col-md-4">
-      <div class="card h-100">
+      <div class="card">
         <div class="card-header"><i class="fas fa-layer-group me-1"></i>Por status</div>
         <ul class="list-group list-group-flush">
           {% for label, n in status_rows %}
@@ -61,12 +61,15 @@
           </li>
           {% endfor %}
         </ul>
+        <div class="card-footer d-flex justify-content-between align-items-center text-muted small">
+          <span>Total</span><span class="fw-semibold">{{ total }}</span>
+        </div>
       </div>
     </div>
 
     <!-- Recebido por origem -->
     <div class="col-md-4">
-      <div class="card h-100">
+      <div class="card">
         <div class="card-header"><i class="fas fa-inbox me-1"></i>Recebido por origem</div>
         <ul class="list-group list-group-flush">
           {% for origem, n in origem_rows %}
@@ -77,12 +80,15 @@
           <li class="list-group-item text-muted">Nenhuma baixa registrada ainda.</li>
           {% endfor %}
         </ul>
+        <div class="card-footer d-flex justify-content-between align-items-center text-muted small">
+          <span>Total baixado</span><span class="fw-semibold">{{ total_baixas }}</span>
+        </div>
       </div>
     </div>
 
     <!-- Recorrências Pix Automático -->
     <div class="col-md-4">
-      <div class="card h-100">
+      <div class="card">
         <div class="card-header"><i class="fas fa-sync-alt me-1"></i>Pix Automático (recorrências)</div>
         <ul class="list-group list-group-flush">
           {% for label, n in recorrencia_rows %}
@@ -91,6 +97,9 @@
           </li>
           {% endfor %}
         </ul>
+        <div class="card-footer d-flex justify-content-between align-items-center text-muted small">
+          <span>Total</span><span class="fw-semibold">{{ total_recorrencias }}</span>
+        </div>
       </div>
     </div>
   </div>

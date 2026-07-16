@@ -613,6 +613,21 @@ class Parcela(TimeStampedModel):
             self.observacoes = observacoes
         self.save()
 
+        # Cobrança registrada (Boleto-API): a baixa manual também transiciona o
+        # status normalizado — sem isso a parcela paga ficaria 'Registrada' para
+        # sempre no painel de conciliação. Os fluxos do banco (webhook/polling)
+        # transicionam ANTES de registrar o pagamento, então este bloco só age
+        # na baixa manual; respeita a máquina de estados (transição ilegal,
+        # ex. AGUARDANDO_CIP→LIQUIDADA, não é forçada).
+        if (self.status_cobranca
+                and self.status_cobranca != StatusCobranca.LIQUIDADA
+                and self.transicionar_cobranca(StatusCobranca.LIQUIDADA)):
+            EventoCobrancaApi.objects.create(
+                cobranca_id=self.cobranca_id or '', event='conciliacao.manual',
+                status_cobranca='liquidado', parcela=self, valor=valor_pago,
+                status='baixado', payload_raw='',
+            )
+
     def cancelar_pagamento(self):
         """Cancela o pagamento da parcela"""
         self.pago = False

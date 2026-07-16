@@ -38,13 +38,21 @@ def _imobs_para_usuario(user):
     return get_imobiliarias_usuario(user)
 
 
-# Rótulos amigáveis das origens de baixa no painel de conciliação Boleto-API
-# (o valor cru — slug de EventoCobrancaApi.event — vira texto legível ao operador).
-ORIGEM_COBRANCA_LABELS = {
-    'webhook': 'Webhook',
-    'polling_sicoob': 'Polling Sicoob',
-    'conciliacao_pix': 'Conciliação Pix',
-}
+def _origem_baixa(event):
+    """
+    Origem da baixa no painel de conciliação Boleto-API, a partir de
+    EventoCobrancaApi.event. O webhook grava o nome do evento do gateway
+    (liquidado, pago, pix.recebido…); as conciliações gravam
+    'conciliacao.<origem>' (polling-sicoob / pix / manual). Agrega em 4 origens.
+    """
+    ev = (event or '').lower()
+    if ev == 'conciliacao.manual':
+        return 'Baixa manual'
+    if ev.startswith('conciliacao.polling'):
+        return 'Polling Sicoob'
+    if ev.startswith('conciliacao.'):
+        return 'Conciliação Pix'
+    return 'Webhook'
 
 
 def _calcular_bloqueio_reajuste(contrato, reajustes_set, hoje):
@@ -9370,14 +9378,19 @@ def painel_conciliacao_boleto_api(request):
 
     baixas = EventoCobrancaApi.objects.filter(
         status='baixado', parcela__contrato__imobiliaria_id__in=imobs_escopo)
-    origem_rows = [(ORIGEM_COBRANCA_LABELS.get(r['event'], r['event'] or '—'), r['n'])
-                   for r in baixas.values('event').annotate(n=Count('id')).order_by('-n')]
+    por_origem: dict = {}
+    for r in baixas.values('event').annotate(n=Count('id')):
+        origem = _origem_baixa(r['event'])
+        por_origem[origem] = por_origem.get(origem, 0) + r['n']
+    origem_rows = sorted(por_origem.items(), key=lambda kv: -kv[1])
+    total_baixas = sum(por_origem.values())
 
     rec_counts = {r['status']: r['n']
                   for r in (RecorrenciaPix.objects
                             .filter(contrato__imobiliaria_id__in=imobs_escopo)
                             .values('status').annotate(n=Count('id')))}
     recorrencia_rows = [(label, rec_counts.get(value, 0)) for value, label in RecStatusPA.choices]
+    total_recorrencias = sum(rec_counts.values())
 
     # Eventos órfãos (sem parcela) não têm vínculo com imobiliária — são
     # inatribuíveis a um tenant. Expõe a contagem global (saúde do sistema)
@@ -9393,7 +9406,9 @@ def painel_conciliacao_boleto_api(request):
         'liquidadas': liquidadas,
         'status_rows': status_rows,
         'origem_rows': origem_rows,
+        'total_baixas': total_baixas,
         'recorrencia_rows': recorrencia_rows,
+        'total_recorrencias': total_recorrencias,
         'fila_cip': por_status.get(StatusCobranca.AGUARDANDO_CIP, 0),
         'sem_parcela': sem_parcela,
         'imobiliarias': _imobs_para_usuario(request.user),
