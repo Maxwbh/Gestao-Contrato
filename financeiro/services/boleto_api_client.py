@@ -272,16 +272,45 @@ class BoletoApiClient:
         cobranca_id: str,
         tenant_id: str,
         provider: str,
+        bapi_token=None,
     ) -> dict:
-        """GET /cobranca/{id}"""
+        """GET /cobranca/{id} — usado no polling (Sicoob não tem webhook de boleto)."""
         params = {'tenant_id': tenant_id, 'provider': provider}
         try:
-            resp = self._request('GET', f'/cobranca/{cobranca_id}', params=params)
+            resp = self._request('GET', f'/cobranca/{cobranca_id}', params=params,
+                                 headers=self._headers(bapi_token))
         except requests.RequestException as exc:
             return {'sucesso': False, 'erro': str(exc)}
         if resp.status_code == 200:
             return self._normalizar_cobranca(resp.json())
-        return {'sucesso': False, 'erro': f'HTTP {resp.status_code}'}
+        return self._classificar_erro(resp, 'consultar_cobranca')
+
+    def listar_pix_recebidos(
+        self,
+        inicio: str,
+        fim: str,
+        tenant_id: str,
+        provider: str,
+        bapi_token=None,
+    ) -> dict:
+        """
+        GET /pix/recebidos?inicio&fim — Pix recebidos no período (rede de
+        segurança do webhook). Retorna {'sucesso', 'itens': [{txid, valor, ...}]}.
+        """
+        params = {'tenant_id': tenant_id, 'provider': provider, 'inicio': inicio, 'fim': fim}
+        try:
+            resp = self._request('GET', '/pix/recebidos', params=params,
+                                 headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': str(exc)}
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+            except ValueError:
+                return {'sucesso': False, 'erro': 'Resposta não-JSON'}
+            itens = data if isinstance(data, list) else data.get('itens') or data.get('pix') or []
+            return {'sucesso': True, 'itens': itens}
+        return self._classificar_erro(resp, 'listar_pix_recebidos')
 
     def baixar_cobranca(
         self,
