@@ -31,6 +31,7 @@ class ContratoForm(forms.ModelForm):
             'percentual_fruicao', 'percentual_multa_rescisao_penal',
             'percentual_multa_rescisao_adm', 'percentual_cessao',
             'usar_config_boleto_imobiliaria', 'conta_bancaria_padrao',
+            'metodo_cobranca',
             'tipo_valor_multa', 'valor_multa_boleto',
             'tipo_valor_juros', 'valor_juros_boleto', 'dias_carencia_boleto',
             'tipo_valor_desconto', 'valor_desconto_boleto', 'dias_desconto_boleto',
@@ -331,6 +332,9 @@ class ContratoForm(forms.ModelForm):
             Row(
                 Column(Field('usar_config_boleto_imobiliaria', wrapper_class='mb-2'), css_class='col-md-6'),
                 Column(Field('conta_bancaria_padrao', wrapper_class='mb-2'), css_class='col-md-6'),
+            ),
+            Row(
+                Column(Field('metodo_cobranca', wrapper_class='mb-2'), css_class='col-md-6'),
             ),
             HTML('<div id="boleto-config-personalizada">'),
             Row(

@@ -106,6 +106,27 @@ class ProviderBoleto(models.TextChoices):
     SICOOB = 'sicoob', 'Sicoob (cobrança registrada)'
 
 
+class MetodoCobranca(models.TextChoices):
+    """Método de cobrança oferecido/escolhido (Boleto-API)."""
+    BOLETO = 'boleto', 'Boleto registrado'
+    CARNE = 'carne', 'Carnê'
+    BOLETO_PIX = 'bolepix', 'Boleto + Pix (BoletoPix)'
+    PIX_AUTOMATICO = 'pix_automatico', 'Pix Automático (débito recorrente)'
+
+
+def default_metodos_cobranca():
+    """Default do campo Imobiliaria.metodos_cobranca (mutável → callable)."""
+    return [MetodoCobranca.BOLETO]
+
+
+# Bancos → provedores de cobrança compatíveis (para validação banco↔provider).
+# Bancos fora do mapa aceitam apenas BRCobrança (CNAB local).
+PROVIDERS_POR_BANCO = {
+    '336': {ProviderBoleto.C6, ProviderBoleto.BRCOBRANCA},      # C6 Bank
+    '756': {ProviderBoleto.SICOOB, ProviderBoleto.BRCOBRANCA},  # Sicoob / Bancoob
+}
+
+
 class Imobiliaria(TimeStampedModel):
     """Modelo para representar a Imobiliária/Beneficiário do contrato (PF ou PJ)"""
 
@@ -376,6 +397,15 @@ class Imobiliaria(TimeStampedModel):
         verbose_name='Aceite'
     )
 
+    # Métodos de cobrança oferecidos por esta imobiliária (lista multi-seleção).
+    # Restringe o que cada contrato pode escolher (Contrato.metodo_cobranca).
+    metodos_cobranca = models.JSONField(
+        default=default_metodos_cobranca,
+        blank=True,
+        verbose_name='Métodos de Cobrança Disponíveis',
+        help_text='Métodos habilitados: boleto, carne, bolepix, pix_automatico.',
+    )
+
     ativo = models.BooleanField(default=True, verbose_name='Ativo')
 
     class Meta:
@@ -390,6 +420,10 @@ class Imobiliaria(TimeStampedModel):
     def nome_fantasia(self):
         """Compatibilidade: retorna razao_social como nome_fantasia"""
         return self.razao_social or ''
+
+    def metodo_habilitado(self, metodo) -> bool:
+        """True se o método de cobrança está habilitado nesta imobiliária."""
+        return metodo in (self.metodos_cobranca or [])
 
     def clean(self):
         from django.core.exceptions import ValidationError
@@ -552,10 +586,11 @@ class ContaBancaria(TimeStampedModel):
         blank=True,
         verbose_name='Config. da Conta (Boleto-API)',
         help_text=(
-            'Parâmetros bancários sem segredos para o Boleto-API. '
-            'C6: {"agencia","conta","convenio"}. '
-            'Sicoob: {"cooperativa","conta","numeroCliente","codigoModalidade"}. '
-            'Credenciais (client_id/secret/.pfx) ficam no cofre do Boleto-API.'
+            'Parâmetros bancários SEM segredos para o Boleto-API. '
+            'C6: {"billing_scheme","chave_pix"}. '
+            'Sicoob: {"numeroCliente","codigoModalidade","numeroContaCorrente","chave_pix"}. '
+            'As credenciais (client_id/secret/.pfx/token) ficam cifradas em '
+            '`credenciais_cifradas` (ver property `credenciais`).'
         ),
     )
     tenant_id = models.CharField(
@@ -618,6 +653,28 @@ class ContaBancaria(TimeStampedModel):
         help_text='Número sequencial da remessa CNAB'
     )
 
+    # ── Boleto-API (stateless): credenciais do banco cifradas + token bapi_ ──
+    # O produto guarda as credenciais de API do banco (C6/Sicoob) cifradas e as
+    # envia ao gateway (POST /credenciais), que devolve o token `bapi_` de uso
+    # diário — também guardado cifrado. Nunca em texto claro. Ver core.crypto.
+    credenciais_cifradas = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Credenciais do Banco (cifradas)',
+        help_text='JSON cifrado das credenciais de API do banco. Use a property `credenciais`.',
+    )
+    bapi_token_cifrado = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Token Boleto-API (cifrado)',
+        help_text='Token bapi_ devolvido pelo gateway. Use a property `bapi_token`.',
+    )
+    bapi_token_criado_em = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Token Boleto-API criado em',
+    )
+
     ativo = models.BooleanField(default=True, verbose_name='Ativo')
 
     class Meta:
@@ -642,6 +699,45 @@ class ContaBancaria(TimeStampedModel):
     def banco_nome(self):
         """Retorna o nome completo do banco"""
         return self.get_banco_display() if self.banco else ''
+
+    # ── Credenciais cifradas (Boleto-API) ──
+    @property
+    def credenciais(self) -> dict:
+        """Credenciais de API do banco (decifradas). {} se não houver."""
+        from core.crypto import decrypt_dict
+        return decrypt_dict(self.credenciais_cifradas)
+
+    @credenciais.setter
+    def credenciais(self, value):
+        from core.crypto import encrypt_dict
+        self.credenciais_cifradas = encrypt_dict(value or {})
+
+    @property
+    def bapi_token(self) -> str:
+        """Token bapi_ (decifrado). '' se não houver."""
+        from core.crypto import decrypt_str
+        return decrypt_str(self.bapi_token_cifrado)
+
+    def set_bapi_token(self, token):
+        """Grava o token bapi_ cifrado e registra o timestamp de criação."""
+        from core.crypto import encrypt_str
+        from django.utils import timezone
+        self.bapi_token_cifrado = encrypt_str(token or '')
+        self.bapi_token_criado_em = timezone.now() if token else None
+
+    def clean(self):
+        """Valida compatibilidade banco↔provider."""
+        super().clean()
+        from django.core.exceptions import ValidationError
+        permitidos = PROVIDERS_POR_BANCO.get(self.banco, {ProviderBoleto.BRCOBRANCA})
+        if self.provider and self.provider not in permitidos:
+            nomes = ', '.join(sorted(permitidos))
+            raise ValidationError({
+                'provider': (
+                    f'Provedor "{self.get_provider_display()}" incompatível com o '
+                    f'banco {self.get_banco_display()}. Permitidos: {nomes}.'
+                )
+            })
 
 
 class TipoImovel(models.TextChoices):

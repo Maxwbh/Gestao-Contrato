@@ -50,7 +50,7 @@ class ImobiliariaAdmin(admin.ModelAdmin):
             'fields': ('endereco', 'telefone', 'email', 'responsavel_financeiro')
         }),
         ('Dados Bancários', {
-            'fields': ('banco', 'agencia', 'conta', 'pix')
+            'fields': ('banco', 'agencia', 'conta', 'pix', 'metodos_cobranca')
         }),
         ('Identidade Visual (Boleto)', {
             'fields': ('logo', 'cor_marca', 'rodape_contato', 'marca_dagua'),

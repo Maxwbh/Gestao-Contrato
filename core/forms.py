@@ -12,7 +12,8 @@ from crispy_forms.bootstrap import PrependedText, AppendedText
 from .models import (
     Contabilidade, Imobiliaria, Imovel, Comprador,
     ContaBancaria,
-    AcessoUsuario
+    AcessoUsuario,
+    MetodoCobranca,
 )
 from django.contrib.auth import get_user_model
 
@@ -609,6 +610,14 @@ class ImovelForm(forms.ModelForm):
 class ImobiliariaForm(forms.ModelForm):
     """Formulário para cadastro de Imobiliária"""
 
+    metodos_cobranca = forms.MultipleChoiceField(
+        choices=MetodoCobranca.choices,
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        label='Métodos de Cobrança Disponíveis',
+        help_text='Marque os métodos que esta imobiliária oferece aos contratos.',
+    )
+
     class Meta:
         model = Imobiliaria
         fields = [
@@ -626,7 +635,8 @@ class ImobiliariaForm(forms.ModelForm):
             'tipo_valor_desconto', 'percentual_desconto_padrao', 'dias_para_desconto_padrao',
             'tipo_valor_desconto2', 'desconto2_padrao', 'dias_para_desconto2_padrao',
             'tipo_valor_desconto3', 'desconto3_padrao', 'dias_para_desconto3_padrao',
-            'instrucao_padrao', 'tipo_titulo', 'aceite'
+            'instrucao_padrao', 'tipo_titulo', 'aceite',
+            'metodos_cobranca',
         ]
         widgets = {
             'nome': forms.TextInput(attrs={'placeholder': 'Nome fantasia da imobiliária'}),
@@ -845,6 +855,10 @@ class ImobiliariaForm(forms.ModelForm):
             Row(
                 Column(Field('tipo_titulo', wrapper_class='mb-2'), css_class='col-md-4'),
                 Column(Field('instrucao_padrao', wrapper_class='mb-2'), css_class='col-md-8'),
+            ),
+            HTML('<hr><h6 class="text-muted mb-3"><i class="fas fa-hand-holding-usd me-1"></i>Métodos de Cobrança Disponíveis</h6>'),
+            Row(
+                Column(Field('metodos_cobranca'), css_class='col-md-12'),
             ),
             HTML('<hr><h6 class="text-muted mb-3"><i class="fas fa-cog me-1"></i>Opções do Boleto</h6>'),
             Row(
