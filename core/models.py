@@ -126,6 +126,24 @@ PROVIDERS_POR_BANCO = {
     '756': {ProviderBoleto.SICOOB, ProviderBoleto.BRCOBRANCA},  # Sicoob / Bancoob
 }
 
+# account_config (sem segredos) por provider: chaves obrigatórias e opcionais.
+# Usado como schema de referência e por ContaBancaria.account_config_faltando()
+# (validação branda para onboarding — NÃO é enforced no clean()).
+ACCOUNT_CONFIG_SCHEMA = {
+    ProviderBoleto.C6: {
+        'obrigatorias': ['billing_scheme'],
+        'opcionais': ['chave_pix'],
+    },
+    ProviderBoleto.SICOOB: {
+        'obrigatorias': ['numeroCliente', 'codigoModalidade', 'numeroContaCorrente'],
+        'opcionais': ['chave_pix'],
+    },
+    ProviderBoleto.BRCOBRANCA: {
+        'obrigatorias': [],
+        'opcionais': [],
+    },
+}
+
 
 class Imobiliaria(TimeStampedModel):
     """Modelo para representar a Imobiliária/Beneficiário do contrato (PF ou PJ)"""
@@ -724,6 +742,20 @@ class ContaBancaria(TimeStampedModel):
         from django.utils import timezone
         self.bapi_token_cifrado = encrypt_str(token or '')
         self.bapi_token_criado_em = timezone.now() if token else None
+
+    def get_config(self, chave, default=None):
+        """Lê um parâmetro (sem segredo) de account_config."""
+        return (self.account_config or {}).get(chave, default)
+
+    def account_config_faltando(self):
+        """
+        Lista as chaves OBRIGATÓRIAS de account_config ausentes para o provider
+        desta conta (validação branda para onboarding). [] para BRCobrança ou
+        quando tudo presente. Não é enforced no clean().
+        """
+        schema = ACCOUNT_CONFIG_SCHEMA.get(self.provider, {})
+        cfg = self.account_config or {}
+        return [k for k in schema.get('obrigatorias', []) if not cfg.get(k)]
 
     def clean(self):
         """Valida compatibilidade banco↔provider."""

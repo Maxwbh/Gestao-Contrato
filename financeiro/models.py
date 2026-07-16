@@ -15,7 +15,7 @@ from datetime import timedelta
 import logging
 import uuid
 
-from core.models import TimeStampedModel, ContaBancaria
+from core.models import TimeStampedModel, ContaBancaria, ProviderBoleto, MetodoCobranca
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,21 @@ class StatusBoleto(models.TextChoices):
     CANCELADO = 'CANCELADO', 'Cancelado'
     PROTESTADO = 'PROTESTADO', 'Protestado'
     BAIXADO = 'BAIXADO', 'Baixado'
+
+
+class StatusCobranca(models.TextChoices):
+    """
+    Status NORMALIZADO da cobrança (Boleto-API), transversal a boleto/pix/
+    bolepix/pix_automatico. Complementa StatusBoleto (específico de boleto).
+    As transições formais (guardas) são da Fase 5; aqui é o campo de dados.
+    """
+    PENDENTE = 'pendente', 'Pendente'
+    REGISTRADA = 'registrada', 'Registrada'
+    AGUARDANDO_CIP = 'aguardando_cip', 'Aguardando CIP'
+    LIQUIDADA = 'liquidada', 'Liquidada'
+    BAIXADA = 'baixada', 'Baixada'
+    EXPIRADA = 'expirada', 'Expirada'
+    ESTORNADA = 'estornada', 'Estornada'
 
 
 class TipoParcela(models.TextChoices):
@@ -327,6 +342,42 @@ class Parcela(TimeStampedModel):
         db_index=True,
         verbose_name='ID Cobrança (Boleto-API)',
         help_text='ID retornado pelo Boleto-API ao registrar a cobrança. Usado para casamento no webhook push.',
+    )
+    # Rastreio de emissão (Boleto-API) — como/onde esta parcela foi cobrada.
+    # Registrado na emissão (Fase 3); o provider é gravado por parcela porque a
+    # conta pode mudar de provider ao longo do tempo.
+    provider = models.CharField(
+        max_length=20,
+        choices=ProviderBoleto.choices,
+        blank=True,
+        default='',
+        verbose_name='Provedor da Cobrança',
+        help_text='Provedor que emitiu esta cobrança (registrado na emissão).',
+    )
+    metodo_cobranca = models.CharField(
+        max_length=20,
+        choices=MetodoCobranca.choices,
+        blank=True,
+        default='',
+        verbose_name='Método da Cobrança',
+        help_text='Método usado nesta cobrança (boleto/carne/bolepix/pix_automatico).',
+    )
+    ext_ref = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        db_index=True,
+        verbose_name='Referência Externa (bolepix)',
+        help_text='ext_ref devolvido pelo gateway para BoletoPix. Usado no casamento do webhook.',
+    )
+    status_cobranca = models.CharField(
+        max_length=20,
+        choices=StatusCobranca.choices,
+        blank=True,
+        default='',
+        db_index=True,
+        verbose_name='Status Normalizado da Cobrança',
+        help_text='Status transversal (boleto/pix). Vazio = ainda não emitida via Boleto-API.',
     )
 
     class Meta:
@@ -730,6 +781,26 @@ class Parcela(TimeStampedModel):
         conta_bancaria.save(update_fields=['nosso_numero_atual'])
         return conta_bancaria.nosso_numero_atual
 
+    def registrar_emissao(self, *, provider='', metodo='', status='',
+                          cobranca_id=None, ext_ref=None, txid=None):
+        """
+        Registra os metadados de emissão da cobrança (Boleto-API) de forma
+        consistente. Só sobrescreve o que for informado; NÃO persiste (o
+        chamador salva). Usado na emissão de boleto/bolepix/pix/pix_automatico.
+        """
+        if provider:
+            self.provider = provider
+        if metodo:
+            self.metodo_cobranca = metodo
+        if status:
+            self.status_cobranca = status
+        if cobranca_id is not None:
+            self.cobranca_id = cobranca_id
+        if ext_ref is not None:
+            self.ext_ref = ext_ref
+        if txid is not None:
+            self.pix_txid = txid
+
     def _gerar_via_boleto_api(self, conta_bancaria, provider: str, force: bool, enviar_email: bool) -> dict:
         """
         Emite cobrança registrada via Boleto-API gateway (C6/Sicoob).
@@ -794,6 +865,13 @@ class Parcela(TimeStampedModel):
         # Status REGISTRADO indica cobrança confirmada no banco (acima de apenas GERADO)
         self.status_boleto = StatusBoleto.REGISTRADO
         self.data_geracao_boleto = timezone.now()
+        # Rastreio normalizado (Boleto-API): boleto registrado via gateway.
+        self.registrar_emissao(
+            provider=provider,
+            metodo=MetodoCobranca.BOLETO,
+            status=StatusCobranca.REGISTRADA,
+            ext_ref=resultado.get('ext_ref', ''),
+        )
 
         if resultado.get('pdf_content'):
             from django.core.files.base import ContentFile
