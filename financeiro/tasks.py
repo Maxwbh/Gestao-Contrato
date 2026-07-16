@@ -898,7 +898,7 @@ def conciliar_pix_recebidos(dias=1):
                 continue
             p = Parcela.objects.filter(pix_txid=txid, pago=False).first()
             if p:
-                baixar_por_conciliacao(p, valor=item.get('valor'), origem='conciliacao-pix')
+                baixar_por_conciliacao(p, valor=item.get('valor'), origem='pix')
                 baixadas += 1
     logger.info('[BoletoAPI] conciliação Pix: %d parcela(s) baixada(s)', baixadas)
     return {'baixadas': baixadas}

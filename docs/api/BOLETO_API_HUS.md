@@ -47,8 +47,8 @@ Status: ✅ Entregue · 🟡 Parcial · ⬜ Planejado — Todas são 🆕 **NOVA
 | BAPI-12 | Disponibilizar copia-e-cola / QR ao pagador | Pagador | 3 | ✅ |
 | BAPI-13 | Conciliar BoletoPix por `ext_ref` | Sistema | 4 | ✅ |
 | **Pix** ||||
-| BAPI-14 | Emitir Pix com vencimento (cobv) | Operador | 3 | ✅ |
-| BAPI-15 | Emitir Pix imediato (2ª via / quitação) | Operador | 3 | ✅ |
+| BAPI-14 | Emitir Pix com vencimento (cobv) | Operador | 3 | 🟡 |
+| BAPI-15 | Emitir Pix imediato (2ª via / quitação) | Operador | 3 | 🟡 |
 | BAPI-16 | Conciliar Pix por `txid` | Sistema | 4 | ✅ |
 | **Conciliação por webhook** ||||
 | BAPI-17 | Receber webhook autenticado (HMAC) | Sistema | 4 | ✅ |
@@ -71,12 +71,17 @@ Status: ✅ Entregue · 🟡 Parcial · ⬜ Planejado — Todas são 🆕 **NOVA
 | BAPI-31 | Conciliação Pix (rede de segurança) | Sistema | 7 | ✅ |
 | BAPI-32 | Conciliação financeira (extrato/recebíveis) | Gestor | 7 | ⬜ |
 | BAPI-33 | Fila de reprocessamento 409/CIP | Sistema | 7 | ✅ |
+| **Pix Automático (Fase 8)** ||||
+| BAPI-34 | Aderir contrato ao Pix Automático | Operador | 8 | ✅ |
+| BAPI-35 | Agendar cobrança do Pix Automático (D-2) | Sistema | 8 | ✅ |
+| BAPI-36 | Retentativa do Pix Automático | Sistema | 8 | 🟡 |
+| BAPI-39 | Cancelar adesão do Pix Automático | Operador | 8 | ✅ |
+| BAPI-40 | Máquina de estados da recorrência | Sistema | 8 | ✅ |
+| **Painel de conciliação (Fase 9)** ||||
+| BAPI-38 | Painel de conciliação da cobrança registrada | Gestor | 9 | ✅ |
+| BAPI-41 | Escopo multi-tenant e filtro do painel | Gestor | 9 | ✅ |
 | **Planejadas** ||||
-| BAPI-34 | Aderir contrato ao Pix Automático | Operador | 8 | ⬜ |
-| BAPI-35 | Agendar cobrança do Pix Automático (D-2) | Sistema | 8 | ⬜ |
-| BAPI-36 | Retentativa do Pix Automático | Sistema | 8 | ⬜ |
 | BAPI-37 | Gerar carnê via gateway (`/carne`) | Operador | 6+ | ⬜ |
-| BAPI-38 | Painel de conciliação (recebíveis/extrato) | Gestor | 9 | ⬜ |
 
 ---
 
@@ -174,15 +179,18 @@ o BoletoPix baixe corretamente.
 
 ## Pix
 
-### BAPI-14 — Emitir Pix com vencimento (cobv) 🆕 ✅
+### BAPI-14 — Emitir Pix com vencimento (cobv) 🆕 🟡
 **Como** operador **quero** emitir uma cobrança Pix com vencimento **para que** o
 pagador quite via Pix respeitando a data.
 **Aceite:** `POST /pix`; retorna `txid` + EMV.
+**Pendente:** `emitir_pix` está pronto no client, mas nenhuma tela/fluxo emite
+Pix avulso — falta expor a emissão (contrato ou ação da parcela).
 
-### BAPI-15 — Emitir Pix imediato (2ª via / quitação) 🆕 ✅
+### BAPI-15 — Emitir Pix imediato (2ª via / quitação) 🆕 🟡
 **Como** operador **quero** gerar um Pix imediato **para que** o pagador faça uma
 quitação/2ª via na hora.
 **Aceite:** `POST /pix` (cob); retorna `txid` + copia-e-cola.
+**Pendente:** mesmo gap da BAPI-14 — client pronto, sem fluxo de emissão.
 
 ### BAPI-16 — Conciliar Pix por `txid` 🆕 ✅
 **Como** sistema **quero** casar o Pix recebido pelo `txid` **para que** a parcela
@@ -288,50 +296,105 @@ pagador e a cobrança fique `ESTORNADA`.
 **Como** sistema **quero** consultar periodicamente as cobranças Sicoob em aberto
 **para que** concilie mesmo sem webhook de boleto.
 **Aceite:** job `polling_boletos_sicoob` consulta `GET /cobranca/{id}` das parcelas
-Sicoob em aberto e baixa via `baixar_por_conciliacao()` (idempotente).
-**Ref.:** `financeiro/tasks.py`, `financeiro/services/boleto_api_conciliacao.py`.
+Sicoob em aberto e baixa via `baixar_por_conciliacao()` (idempotente); agendado
+no beat (de hora em hora).
+**Ref.:** `financeiro/tasks.py`, `financeiro/services/boleto_api_conciliacao.py`,
+`gestao_contrato/celery.py`.
 
 ### BAPI-31 — Conciliação Pix (rede de segurança) 🆕 ✅
 **Como** sistema **quero** cruzar `GET /pix/recebidos` com as parcelas **para que**
 eu tenha um fallback do webhook.
 **Aceite:** job `conciliar_pix_recebidos(dias)` casa por `pix_txid` e baixa as não
-pagas; parcela já paga → `duplicado` (sem baixa dupla).
-**Ref.:** `financeiro/tasks.py`, `financeiro/services/boleto_api_conciliacao.py`.
+pagas; parcela já paga → `duplicado` (sem baixa dupla); agendado no beat (diário).
+**Ref.:** `financeiro/tasks.py`, `financeiro/services/boleto_api_conciliacao.py`,
+`gestao_contrato/celery.py`.
 
 ### BAPI-33 — Fila de reprocessamento 409/CIP 🆕 ✅
 **Como** sistema **quero** reprocessar cobranças `AGUARDANDO_CIP` **para que** a
 emissão se complete quando a CIP liberar.
 **Aceite:** job `reprocessar_fila_cip` reemite (`gerar_boleto(force=True)`) as
-parcelas `AGUARDANDO_CIP`; sucesso atualiza o status pela própria emissão.
-**Ref.:** `financeiro/tasks.py`.
+parcelas `AGUARDANDO_CIP`; sucesso atualiza o status pela própria emissão;
+agendado no beat (a cada 30 min).
+**Ref.:** `financeiro/tasks.py`, `gestao_contrato/celery.py`.
 
 ---
 
-## Planejadas (Fases 7–9)
+## Pix Automático (Fase 8)
+
+### BAPI-34 — Aderir contrato ao Pix Automático 🆕 ✅
+**Como** operador **quero** aderir o contrato ao débito recorrente **para que** as
+parcelas sejam cobradas automaticamente.
+**Aceite:** `Contrato.aderir_pix_automatico()` cria a recorrência no gateway
+(`POST /pix-automatico/recorrencias`) e grava `RecorrenciaPix` (OneToOne, `id_rec`,
+status inicial `CRIADA`); exige método `pix_automatico` habilitado.
+**Ref.:** `contratos/models.py`, `financeiro/models.py` (`RecorrenciaPix`).
+
+### BAPI-39 — Cancelar adesão do Pix Automático 🆕 ✅
+**Como** operador **quero** cancelar a adesão do contrato **para que** o débito
+recorrente pare no banco, não só no sistema.
+**Aceite:** `Contrato.cancelar_pix_automatico()` chama
+`PATCH /pix-automatico/recorrencias/{idRec}` (status `CANCELADA`) e transiciona a
+recorrência local; recusa do gateway não cancela local.
+
+### BAPI-40 — Máquina de estados da recorrência 🆕 ✅
+**Como** sistema **quero** transições formais da recorrência **para que** eventos
+de webhook fora de ordem não corrompam a adesão.
+**Aceite:** `TRANSICOES_REC_PA` (`CRIADA→APROVADA/REJEITADA/CANCELADA`,
+`APROVADA→CANCELADA`; `REJEITADA`/`CANCELADA` terminais); evento
+`pix_automatico.recorrencia` do webhook atualiza via `RecorrenciaPix.transicionar()`;
+transição ilegal → `ignorado`.
+
+### BAPI-35 — Agendar cobrança do Pix Automático (D-2) 🆕 ✅
+**Como** sistema **quero** agendar a cobrança recorrente 2 dias antes do vencimento
+**para que** o débito ocorra no prazo.
+**Aceite:** job `agendar_cobrancas_pix_automatico` (beat diário) agenda via
+`PUT /pix-automatico/cobrancas/{txid}` as parcelas D-2 de recorrências `APROVADA`,
+com `txid` determinístico (`CT<contrato><YYYYMM>`); a liquidação entra pelo fluxo
+normal do webhook (casa por `txid`).
+
+### BAPI-36 — Retentativa do Pix Automático 🆕 🟡
+**Como** sistema **quero** retentar cobranças não pagas conforme a política **para
+que** a inadimplência recorrente seja recuperada.
+**Aceite:** `POST /pix-automatico/cobrancas/{txid}/retentativa/{data}`.
+**Pendente:** `retentar_cobranca_pa` pronto no client; falta o job/fluxo que
+detecta o débito não liquidado e dispara a retentativa.
+
+---
+
+## Painel de conciliação (Fase 9)
+
+### BAPI-38 — Painel de conciliação da cobrança registrada 🆕 ✅
+**Como** gestor **quero** um painel da cobrança registrada **para que** eu acompanhe
+% conciliado, recebido por origem e pendências.
+**Aceite:** view `painel_conciliacao_boleto_api`
+(`/financeiro/cobranca/conciliacao/boleto-api/`): % conciliado, distribuição por
+status normalizado, recebido por origem (Webhook / Polling Sicoob / Conciliação
+Pix, agregado de `EventoCobrancaApi.event`), fila `AGUARDANDO_CIP`, eventos sem
+parcela e recorrências por status; totais no rodapé de cada card.
+**Nota:** cobre **somente o trilho Boleto-API** (parcelas com `status_cobranca`);
+o trilho BRCobrança/CNAB segue conciliado pelas telas de arquivo de retorno.
+A parte extrato/recebíveis (`GET /conciliacao`, `GET /extrato`) segue na BAPI-32.
+
+### BAPI-41 — Escopo multi-tenant e filtro do painel 🆕 ✅
+**Como** gestor **quero** que o painel respeite meu escopo e o filtro escolhido
+**para que** eu não veja (nem vaze) dados de outras imobiliárias.
+**Aceite:** escopo único (imobiliárias do usuário + filtro selecionado) aplicado
+aos três blocos; filtro de imobiliária fora do escopo é ignorado; **eventos sem
+parcela** (órfãos, inatribuíveis a tenant) visíveis apenas a superuser/staff.
+
+---
+
+## Planejadas
 
 ### BAPI-32 — Conciliação financeira (extrato/recebíveis) 🆕 ⬜
 **Como** gestor **quero** cruzar `GET /conciliacao` e `GET /extrato` **para que** eu
 tenha relatório financeiro consolidado.
 
-### BAPI-34 — Aderir contrato ao Pix Automático 🆕 ⬜
-**Como** operador **quero** aderir o contrato ao débito recorrente **para que** as
-parcelas sejam cobradas automaticamente (idRec, recorrência).
-
-### BAPI-35 — Agendar cobrança do Pix Automático (D-2) 🆕 ⬜
-**Como** sistema **quero** agendar a cobrança recorrente 2 dias antes do vencimento
-**para que** o débito ocorra no prazo.
-
-### BAPI-36 — Retentativa do Pix Automático 🆕 ⬜
-**Como** sistema **quero** retentar cobranças não pagas conforme a política **para
-que** a inadimplência recorrente seja recuperada.
-
 ### BAPI-37 — Gerar carnê via gateway 🆕 ⬜
 **Como** operador **quero** gerar o carnê registrado via `POST /carne` **para que** o
 carnê use cobrança registrada (hoje usa o PDF local BRCobrança).
-
-### BAPI-38 — Painel de conciliação 🆕 ⬜
-**Como** gestor **quero** um painel de recebíveis/extrato **para que** eu acompanhe
-% conciliado, recebido por origem e pendências.
+**Nota:** hoje um contrato `carne` em conta com provider API cai na emissão de
+boleto avulso (`/cobranca`) — validar/guardar até o `/carne` existir.
 
 ---
 
@@ -346,10 +409,12 @@ carnê use cobrança registrada (hoje usa o PDF local BRCobrança).
 | Emissão + rastreio + estados | `financeiro/models.py` (`Parcela`, `StatusCobranca`, `TRANSICOES_COBRANCA`) |
 | Webhook / conciliação | `financeiro/views.py` (`webhook_boleto_api`, `_processar_evento_cobranca`) |
 | Log de eventos | `financeiro/models.py` (`EventoCobrancaApi`) |
-| Agendadores (Fase 7) | `financeiro/tasks.py`, `financeiro/services/boleto_api_conciliacao.py` |
+| Agendadores (Fases 7–8) | `financeiro/tasks.py`, `financeiro/services/boleto_api_conciliacao.py`, `gestao_contrato/celery.py` (beat) |
+| Pix Automático (Fase 8) | `contratos/models.py`, `financeiro/models.py` (`RecorrenciaPix`, `TRANSICOES_REC_PA`) |
+| Painel de conciliação (Fase 9) | `financeiro/views.py` (`painel_conciliacao_boleto_api`), `templates/financeiro/conciliacao/painel_boleto_api.html` |
 | Boleto fake (dados de teste, sem API do banco) | `financeiro/services/boleto_fake.py`, `core/management/commands/gerar_dados_teste.py` |
 | Cenários de teste | `docs/analise/CENARIOS_TESTE_BOLETO_API.md` |
-| Testes | `tests/unit/financeiro/test_boleto_api_fase{2..7}.py`, `tests/unit/core/*fase1*` |
+| Testes | `tests/unit/financeiro/test_boleto_api_fase{2..9}.py`, `tests/unit/core/test_boleto_api_fase1.py`, `tests/unit/core/test_account_config_fase2.py` |
 
 ## Endpoints do gateway consumidos
 
@@ -362,6 +427,12 @@ carnê use cobrança registrada (hoje usa o PDF local BRCobrança).
 | PUT | `/cobranca/{id}` | BAPI-29 |
 | DELETE | `/cobranca/{id}` | BAPI-26 |
 | PUT | `/pix/recebidos/{e2eid}/devolucao/{id}` | BAPI-28 |
+| GET | `/cobranca/{id}` | BAPI-30 |
+| GET | `/pix/recebidos` | BAPI-31 |
+| POST | `/pix-automatico/recorrencias` | BAPI-34 |
+| PATCH | `/pix-automatico/recorrencias/{idRec}` | BAPI-39 |
+| PUT | `/pix-automatico/cobrancas/{txid}` | BAPI-35 |
+| POST | `/pix-automatico/cobrancas/{txid}/retentativa/{data}` | BAPI-36 (client pronto) |
 | POST | `/carne` | BAPI-37 (planejado) |
-| GET | `/cobranca/{id}`, `/pix/recebidos`, `/conciliacao`, `/extrato` | BAPI-30..32 (planejado) |
-| (webhook) | `POST /financeiro/webhooks/boleto-api/` | BAPI-17..22 |
+| GET | `/conciliacao`, `/extrato` | BAPI-32 (planejado) |
+| (webhook) | `POST /financeiro/webhooks/boleto-api/` | BAPI-17..22, BAPI-40 |

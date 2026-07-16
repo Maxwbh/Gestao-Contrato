@@ -24,4 +24,21 @@ app.conf.beat_schedule = {
         'task': 'notificacoes.tasks.enviar_notificacoes_vencimento',
         'schedule': crontab(hour=8, minute=0),  # Executa diariamente às 8h
     },
+    # ── Boleto-API: conciliação e agendadores (Fases 7–8) ──────────────────
+    'boleto-api-polling-sicoob': {
+        'task': 'financeiro.tasks.polling_boletos_sicoob',
+        'schedule': crontab(minute=15),  # a cada hora (Sicoob não tem webhook de boleto)
+    },
+    'boleto-api-conciliar-pix': {
+        'task': 'financeiro.tasks.conciliar_pix_recebidos',
+        'schedule': crontab(hour=6, minute=0),  # diário — rede de segurança do webhook
+    },
+    'boleto-api-reprocessar-cip': {
+        'task': 'financeiro.tasks.reprocessar_fila_cip',
+        'schedule': crontab(minute='*/30'),  # CIP libera em minutos/horas
+    },
+    'boleto-api-pix-automatico-d2': {
+        'task': 'financeiro.tasks.agendar_cobrancas_pix_automatico',
+        'schedule': crontab(hour=7, minute=0),  # diário — agenda cobranças D-2
+    },
 }

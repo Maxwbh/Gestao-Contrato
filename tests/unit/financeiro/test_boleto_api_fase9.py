@@ -63,10 +63,10 @@ class TestPainelConciliacao:
         imob_a = ImobiliariaFactory()
         imob_b = ImobiliariaFactory()
 
-        # imob A: 1 liquidada + baixa por webhook + 1 recorrência aprovada
+        # imob A: 1 liquidada + baixa por webhook (evento do gateway) + 1 recorrência
         pa = ParcelaFactory(contrato__imovel__imobiliaria=imob_a,
                             status_cobranca=S.LIQUIDADA, provider='c6')
-        EventoCobrancaApi.objects.create(event_id='a1', event='webhook',
+        EventoCobrancaApi.objects.create(event_id='a1', event='liquidado',
                                          status='baixado', parcela=pa)
         RecorrenciaPix.objects.create(contrato=ContratoFactory(imovel__imobiliaria=imob_a),
                                       id_rec='RA', provider='c6', status=RecStatusPA.APROVADA)
@@ -74,7 +74,7 @@ class TestPainelConciliacao:
         # imob B: 1 liquidada + baixa por polling + 1 recorrência cancelada
         pb = ParcelaFactory(contrato__imovel__imobiliaria=imob_b,
                             status_cobranca=S.LIQUIDADA, provider='sicoob')
-        EventoCobrancaApi.objects.create(event_id='b1', event='polling_sicoob',
+        EventoCobrancaApi.objects.create(event_id='b1', event='conciliacao.polling-sicoob',
                                          status='baixado', parcela=pb)
         RecorrenciaPix.objects.create(contrato=ContratoFactory(imovel__imobiliaria=imob_b),
                                       id_rec='RB', provider='sicoob', status=RecStatusPA.CANCELADA)
@@ -101,9 +101,9 @@ class TestPainelConciliacao:
         self._login(client)
         p1 = ParcelaFactory(status_cobranca=S.LIQUIDADA, provider='c6')
         ParcelaFactory(status_cobranca=S.REGISTRADA, provider='c6')
-        EventoCobrancaApi.objects.create(event_id='b1', event='webhook',
+        EventoCobrancaApi.objects.create(event_id='b1', event='liquidado',
                                          status='baixado', parcela=p1)
-        EventoCobrancaApi.objects.create(event_id='b2', event='polling_sicoob',
+        EventoCobrancaApi.objects.create(event_id='b2', event='conciliacao.polling-sicoob',
                                          status='baixado', parcela=p1)
         RecorrenciaPix.objects.create(contrato=ContratoFactory(), id_rec='R1', provider='c6',
                                       status=RecStatusPA.APROVADA)
@@ -112,15 +112,34 @@ class TestPainelConciliacao:
         assert r.context['total_baixas'] == 2
         assert r.context['total_recorrencias'] == 1
 
-    def test_origem_label_humanizado(self, client):
-        """Slugs de origem viram rótulos legíveis ao operador."""
+    def test_origem_agrega_valores_reais_de_producao(self, client):
+        """
+        Origem agrega pelos valores que produção grava em EventoCobrancaApi.event:
+        eventos do gateway (liquidado, pago, pix.recebido…) → Webhook;
+        'conciliacao.polling-sicoob' → Polling Sicoob;
+        'conciliacao.pix' (e o legado 'conciliacao.conciliacao-pix') → Conciliação Pix.
+        """
         from tests.fixtures.factories import ParcelaFactory
         self._login(client)
         p = ParcelaFactory(status_cobranca=S.LIQUIDADA, provider='c6')
-        EventoCobrancaApi.objects.create(event_id='e1', event='conciliacao_pix',
-                                         status='baixado', parcela=p)
+        for eid, ev in [('e1', 'liquidado'), ('e2', 'pix.recebido'),
+                        ('e3', 'conciliacao.polling-sicoob'),
+                        ('e4', 'conciliacao.pix'),
+                        ('e5', 'conciliacao.conciliacao-pix')]:
+            EventoCobrancaApi.objects.create(event_id=eid, event=ev,
+                                             status='baixado', parcela=p)
         r = client.get(reverse(URL))
-        assert ('Conciliação Pix', 1) in r.context['origem_rows']
+        rows = dict(r.context['origem_rows'])
+        assert rows == {'Webhook': 2, 'Polling Sicoob': 1, 'Conciliação Pix': 2}
+
+    def test_jobs_boleto_api_agendados_no_beat(self):
+        """Os 4 jobs de conciliação/agendamento estão no beat schedule."""
+        from gestao_contrato.celery import app
+        tasks = {e['task'] for e in app.conf.beat_schedule.values()}
+        assert {'financeiro.tasks.polling_boletos_sicoob',
+                'financeiro.tasks.conciliar_pix_recebidos',
+                'financeiro.tasks.reprocessar_fila_cip',
+                'financeiro.tasks.agendar_cobrancas_pix_automatico'} <= tasks
 
     def test_sem_parcela_apenas_para_permissao_total(self, client):
         """Órfãos (sem parcela) são métrica global só para superuser/staff."""
