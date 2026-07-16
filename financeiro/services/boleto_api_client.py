@@ -267,6 +267,71 @@ class BoletoApiClient:
             }
         return self._classificar_erro(resp, 'emitir_pix')
 
+    # ------------------------------------------------------------------ #
+    # Pix Automático (débito recorrente)
+    # ------------------------------------------------------------------ #
+
+    def criar_recorrencia(self, tenant_id, provider, dados, bapi_token=None) -> dict:
+        """POST /pix-automatico/recorrencias — cria a recorrência; retorna idRec."""
+        payload = {'tenant_id': tenant_id, 'provider': provider, **(dados or {})}
+        try:
+            resp = self._request('POST', '/pix-automatico/recorrencias', json=payload,
+                                 headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 201):
+            try:
+                data = resp.json()
+            except ValueError:
+                return {'sucesso': False, 'erro': 'Resposta não-JSON'}
+            id_rec = str(data.get('idRec') or data.get('id_rec') or data.get('id') or '')
+            if not id_rec:
+                return {'sucesso': False, 'erro': 'Gateway não retornou idRec'}
+            return {'sucesso': True, 'id_rec': id_rec, 'status': str(data.get('status', 'CRIADA'))}
+        return self._classificar_erro(resp, 'criar_recorrencia')
+
+    def cancelar_recorrencia(self, id_rec, tenant_id, provider, bapi_token=None) -> dict:
+        """PATCH /pix-automatico/recorrencias/{idRec} {status: CANCELADA}."""
+        payload = {'tenant_id': tenant_id, 'provider': provider, 'status': 'CANCELADA'}
+        try:
+            resp = self._request('PATCH', f'/pix-automatico/recorrencias/{id_rec}',
+                                 json=payload, headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 204):
+            return {'sucesso': True}
+        return self._classificar_erro(resp, 'cancelar_recorrencia')
+
+    def agendar_cobranca_pa(self, txid, tenant_id, provider, cobranca, bapi_token=None) -> dict:
+        """PUT /pix-automatico/cobrancas/{txid} — agenda uma cobrança do ciclo."""
+        payload = {'tenant_id': tenant_id, 'provider': provider, 'cobranca': cobranca or {}}
+        try:
+            resp = self._request('PUT', f'/pix-automatico/cobrancas/{txid}',
+                                 json=payload, headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 201):
+            try:
+                data = resp.json()
+            except ValueError:
+                data = {}
+            return {'sucesso': True, 'txid': str(data.get('txid', txid)),
+                    'status': str(data.get('status', ''))}
+        return self._classificar_erro(resp, 'agendar_cobranca_pa')
+
+    def retentar_cobranca_pa(self, txid, data_retentativa, tenant_id, provider, bapi_token=None) -> dict:
+        """POST /pix-automatico/cobrancas/{txid}/retentativa/{data} — retentativa."""
+        payload = {'tenant_id': tenant_id, 'provider': provider}
+        try:
+            resp = self._request(
+                'POST', f'/pix-automatico/cobrancas/{txid}/retentativa/{data_retentativa}',
+                json=payload, headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 201):
+            return {'sucesso': True}
+        return self._classificar_erro(resp, 'retentar_cobranca_pa')
+
     def consultar_cobranca(
         self,
         cobranca_id: str,

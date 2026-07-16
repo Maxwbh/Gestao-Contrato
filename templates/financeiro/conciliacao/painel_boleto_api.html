@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+
+{% block title %}Conciliação Boleto-API - Gestão de Contratos{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">
+      <i class="fas fa-handshake me-2 text-primary"></i>Conciliação — Cobrança Registrada (Boleto-API)
+    </h3>
+  </div>
+
+  <form method="get" class="row g-2 mb-4">
+    <div class="col-md-5">
+      <select name="imobiliaria" class="form-select" onchange="this.form.submit()">
+        <option value="">Todas as imobiliárias</option>
+        {% for im in imobiliarias %}
+        <option value="{{ im.id }}" {% if imob_filtro == im.id|stringformat:'s' %}selected{% endif %}>{{ im.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+
+  <!-- KPIs -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card text-center h-100"><div class="card-body">
+        <div class="display-6 text-success">{{ pct_conciliado }}%</div>
+        <div class="text-muted">Conciliado</div>
+      </div></div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center h-100"><div class="card-body">
+        <div class="display-6">{{ total }}</div>
+        <div class="text-muted">Cobranças (Boleto-API)</div>
+      </div></div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center h-100"><div class="card-body">
+        <div class="display-6 text-warning">{{ fila_cip }}</div>
+        <div class="text-muted">Aguardando CIP</div>
+      </div></div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center h-100"><div class="card-body">
+        <div class="display-6 text-danger">{{ sem_parcela }}</div>
+        <div class="text-muted">Eventos sem parcela</div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- Por status normalizado -->
+    <div class="col-md-4">
+      <div class="card h-100">
+        <div class="card-header"><i class="fas fa-layer-group me-1"></i>Por status</div>
+        <ul class="list-group list-group-flush">
+          {% for label, n in status_rows %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span>{{ label }}</span><span class="badge bg-secondary rounded-pill">{{ n }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+
+    <!-- Recebido por origem -->
+    <div class="col-md-4">
+      <div class="card h-100">
+        <div class="card-header"><i class="fas fa-inbox me-1"></i>Recebido por origem</div>
+        <ul class="list-group list-group-flush">
+          {% for origem, n in origem_rows %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span><code>{{ origem }}</code></span><span class="badge bg-success rounded-pill">{{ n }}</span>
+          </li>
+          {% empty %}
+          <li class="list-group-item text-muted">Nenhuma baixa registrada ainda.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+
+    <!-- Recorrências Pix Automático -->
+    <div class="col-md-4">
+      <div class="card h-100">
+        <div class="card-header"><i class="fas fa-sync-alt me-1"></i>Pix Automático (recorrências)</div>
+        <ul class="list-group list-group-flush">
+          {% for label, n in recorrencia_rows %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span>{{ label }}</span><span class="badge bg-info text-dark rounded-pill">{{ n }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <p class="text-muted small mt-4 mb-0">
+    Conciliação por evento (webhook), polling Sicoob e rede de segurança Pix.
+    Cobranças ainda não emitidas via Boleto-API não aparecem aqui.
+  </p>
+</div>
+{% endblock %}

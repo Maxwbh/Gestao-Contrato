@@ -926,3 +926,41 @@ def reprocessar_fila_cip():
             reprocessadas += 1
     logger.info('[BoletoAPI] fila CIP: %d cobrança(s) reprocessada(s)', reprocessadas)
     return {'reprocessadas': reprocessadas}
+
+
+@shared_task
+def agendar_cobrancas_pix_automatico(dias_antecedencia=2):
+    """
+    Pix Automático (Fase 8): para cada contrato com recorrência APROVADA e parcela
+    vencendo em D+`dias_antecedencia`, agenda a cobrança do ciclo
+    (PUT /pix-automatico/cobrancas/{txid}). Rodar diariamente.
+    """
+    from core.models import MetodoCobranca
+    from .models import RecorrenciaPix, RecStatusPA, StatusCobranca
+    from .services.boleto_api_client import BoletoApiClient
+
+    alvo = timezone.now().date() + timedelta(days=dias_antecedencia)
+    recs = (RecorrenciaPix.objects
+            .filter(status=RecStatusPA.APROVADA)
+            .select_related('contrato'))
+    client = BoletoApiClient()
+    agendadas = 0
+    for rec in recs:
+        contrato = rec.contrato
+        conta = contrato.get_conta_bancaria()
+        parcela = contrato.parcelas.filter(data_vencimento=alvo, pago=False).first()
+        if not parcela:
+            continue
+        txid = f'CT{contrato.id:07d}{alvo.strftime("%Y%m")}'
+        r = client.agendar_cobranca_pa(
+            txid, getattr(conta, 'tenant_id', '') or '', rec.provider,
+            {'valor': float(parcela.valor_atual or 0), 'vencimento': alvo.isoformat()},
+            bapi_token=(getattr(conta, 'bapi_token', '') or None))
+        if r.get('sucesso'):
+            parcela.registrar_emissao(
+                provider=rec.provider, metodo=MetodoCobranca.PIX_AUTOMATICO,
+                status=StatusCobranca.REGISTRADA, txid=txid)
+            parcela.save(update_fields=['pix_txid', 'provider', 'metodo_cobranca', 'status_cobranca'])
+            agendadas += 1
+    logger.info('[BoletoAPI] Pix Automático: %d cobrança(s) agendada(s) p/ %s', agendadas, alvo)
+    return {'agendadas': agendadas}

@@ -9147,6 +9147,7 @@ def _processar_evento_cobranca(
     event_id: str = '',
     ext_ref: str = '',
     txid: str = '',
+    id_rec: str = '',
 ) -> dict:
     """
     Processa um evento push do Boleto-API: casa a parcela (por cobranca_id,
@@ -9179,8 +9180,19 @@ def _processar_evento_cobranca(
     if event_id and EventoCobrancaApi.objects.filter(event_id=event_id).exclude(status='recebido').exists():
         return {'status': 'duplicado', 'evento_id': _log('duplicado').pk}
 
-    # Pix Automático ainda não é tratado nesta fase (Fase 8) — registra e ignora.
-    if event.startswith('pix_automatico'):
+    # Pix Automático (Fase 8): recorrência atualiza o RecorrenciaPix; a cobrança
+    # do ciclo segue o fluxo normal (casa por txid e baixa se liquidada).
+    if event == 'pix_automatico.recorrencia':
+        from .models import RecorrenciaPix, RecStatusPA
+        rec = RecorrenciaPix.objects.filter(id_rec=id_rec).first() if id_rec else None
+        if rec:
+            _mapa_rec = {'APROVADA': RecStatusPA.APROVADA, 'REJEITADA': RecStatusPA.REJEITADA,
+                         'CANCELADA': RecStatusPA.CANCELADA}
+            novo = _mapa_rec.get(str(status_cobranca).upper())
+            if novo:
+                rec.transicionar(novo)
+        return {'status': 'recorrencia', 'id_rec': id_rec, 'evento_id': _log('atualizado').pk}
+    if event.startswith('pix_automatico') and event != 'pix_automatico.cobranca':
         return {'status': 'ignorado', 'evento_id': _log('ignorado').pk}
 
     paid_at = None
@@ -9293,9 +9305,10 @@ def webhook_boleto_api(request):
     event_id = str(payload.get('event_id') or payload.get('evento_id') or '').strip()
     ext_ref = str(payload.get('ext_ref', '')).strip()
     txid = str(payload.get('txid', '')).strip()
+    id_rec = str(payload.get('idRec') or payload.get('id_rec') or '').strip()
     # Exige ao menos um identificador de casamento (boleto/bolepix/pix). Eventos
-    # de pix_automatico são apenas registrados nesta fase (tratados na Fase 8).
-    if not (cobranca_id or ext_ref or txid) and not event.startswith('pix_automatico'):
+    # de pix_automatico são casados por idRec/txid.
+    if not (cobranca_id or ext_ref or txid or id_rec) and not event.startswith('pix_automatico'):
         return JsonResponse({'erro': 'Identificador ausente (id/ext_ref/txid)'}, status=400)
 
     resultado = _processar_evento_cobranca(
@@ -9308,8 +9321,62 @@ def webhook_boleto_api(request):
         event_id=event_id,
         ext_ref=ext_ref,
         txid=txid,
+        id_rec=id_rec,
     )
     return JsonResponse(resultado, status=200)
+
+
+@login_required
+def painel_conciliacao_boleto_api(request):
+    """
+    Fase 9 — Painel de conciliação da cobrança registrada (Boleto-API):
+    % conciliado, distribuição por status, recebido por origem, fila
+    AGUARDANDO_CIP, pendências de casamento e recorrências Pix Automático.
+    """
+    from django.db.models import Count
+    from .models import EventoCobrancaApi, StatusCobranca, RecorrenciaPix
+
+    imobs = list(_imobs_para_usuario(request.user).values_list('id', flat=True))
+    imob_filtro = str(request.GET.get('imobiliaria') or '')
+
+    parcelas = (Parcela.objects.exclude(status_cobranca='')
+                .filter(contrato__imobiliaria_id__in=imobs))
+    if imob_filtro:
+        parcelas = parcelas.filter(contrato__imobiliaria_id=imob_filtro)
+
+    total = parcelas.count()
+    por_status = {r['status_cobranca']: r['n']
+                  for r in parcelas.values('status_cobranca').annotate(n=Count('id'))}
+    liquidadas = por_status.get(StatusCobranca.LIQUIDADA, 0)
+    pct_conciliado = round(100 * liquidadas / total, 1) if total else 0.0
+
+    status_rows = [(label, por_status.get(value, 0)) for value, label in StatusCobranca.choices]
+
+    baixas = EventoCobrancaApi.objects.filter(
+        status='baixado', parcela__contrato__imobiliaria_id__in=imobs)
+    origem_rows = [(r['event'] or '—', r['n'])
+                   for r in baixas.values('event').annotate(n=Count('id')).order_by('-n')]
+
+    from .models import RecStatusPA
+    rec_counts = {r['status']: r['n']
+                  for r in (RecorrenciaPix.objects
+                            .filter(contrato__imobiliaria_id__in=imobs)
+                            .values('status').annotate(n=Count('id')))}
+    recorrencia_rows = [(label, rec_counts.get(value, 0)) for value, label in RecStatusPA.choices]
+
+    context = {
+        'total': total,
+        'pct_conciliado': pct_conciliado,
+        'liquidadas': liquidadas,
+        'status_rows': status_rows,
+        'origem_rows': origem_rows,
+        'recorrencia_rows': recorrencia_rows,
+        'fila_cip': por_status.get(StatusCobranca.AGUARDANDO_CIP, 0),
+        'sem_parcela': EventoCobrancaApi.objects.filter(status='sem_parcela').count(),
+        'imobiliarias': _imobs_para_usuario(request.user),
+        'imob_filtro': imob_filtro,
+    }
+    return render(request, 'financeiro/conciliacao/painel_boleto_api.html', context)
 
 
 # =============================================================================
