@@ -99,6 +99,12 @@ urlpatterns = [
     # Fase 9 — Painel de conciliação da cobrança registrada (Boleto-API)
     path('cobranca/conciliacao/boleto-api/', views.painel_conciliacao_boleto_api,
          name='painel_conciliacao_boleto_api'),
+    # BAPI-32 — conciliação financeira (recebíveis do gateway × sistema)
+    path('cobranca/conciliacao/boleto-api/financeira/',
+         views.relatorio_conciliacao_financeira, name='relatorio_conciliacao_financeira'),
+    # BAPI-14/15 — Pix avulso (2ª via / quitação) via Boleto-API
+    path('parcelas/<int:parcela_id>/emitir-pix/', views.emitir_pix_parcela,
+         name='emitir_pix_parcela'),
     path('api/remessa/validar/', views.api_remessa_validar, name='api_remessa_validar'),
     path('cnab/remessa/download-lote/', views.remessa_download_lote, name='remessa_download_lote'),
     path('cnab/remessa/<str:hid>/cancelar-envio/', views.remessa_cancelar_envio, name='remessa_cancelar_envio'),

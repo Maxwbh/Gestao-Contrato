@@ -964,3 +964,41 @@ def agendar_cobrancas_pix_automatico(dias_antecedencia=2):
             agendadas += 1
     logger.info('[BoletoAPI] Pix Automático: %d cobrança(s) agendada(s) p/ %s', agendadas, alvo)
     return {'agendadas': agendadas}
+
+
+@shared_task
+def retentar_cobrancas_pix_automatico(janela_dias=7):
+    """
+    Pix Automático (BAPI-36): retenta cobranças do ciclo vencidas e não pagas
+    de recorrências APROVADAS (POST /pix-automatico/cobrancas/{txid}/
+    retentativa/{data}). Janela limitada evita retentativa eterna. Rodar
+    diariamente.
+    """
+    from core.models import MetodoCobranca
+    from .models import Parcela, RecorrenciaPix, RecStatusPA, StatusCobranca
+    from .services.boleto_api_client import BoletoApiClient
+
+    hoje = timezone.now().date()
+    parcelas = (Parcela.objects
+                .filter(metodo_cobranca=MetodoCobranca.PIX_AUTOMATICO,
+                        status_cobranca=StatusCobranca.REGISTRADA,
+                        pago=False,
+                        data_vencimento__lt=hoje,
+                        data_vencimento__gte=hoje - timedelta(days=janela_dias))
+                .exclude(pix_txid='')
+                .select_related('contrato'))
+    client = BoletoApiClient()
+    retentadas = 0
+    for p in parcelas:
+        rec = RecorrenciaPix.objects.filter(
+            contrato=p.contrato, status=RecStatusPA.APROVADA).first()
+        if not rec:
+            continue
+        tenant_id, bapi_token = p._bapi_ctx()
+        r = client.retentar_cobranca_pa(
+            p.pix_txid, (hoje + timedelta(days=1)).isoformat(),
+            tenant_id, p.provider, bapi_token=bapi_token)
+        if r.get('sucesso'):
+            retentadas += 1
+    logger.info('[BoletoAPI] Pix Automático: %d retentativa(s) agendada(s)', retentadas)
+    return {'retentadas': retentadas}

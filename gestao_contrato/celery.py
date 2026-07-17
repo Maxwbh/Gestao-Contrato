@@ -41,4 +41,8 @@ app.conf.beat_schedule = {
         'task': 'financeiro.tasks.agendar_cobrancas_pix_automatico',
         'schedule': crontab(hour=7, minute=0),  # diário — agenda cobranças D-2
     },
+    'boleto-api-pix-automatico-retentativa': {
+        'task': 'financeiro.tasks.retentar_cobrancas_pix_automatico',
+        'schedule': crontab(hour=9, minute=0),  # diário — retenta PA vencido não pago
+    },
 }

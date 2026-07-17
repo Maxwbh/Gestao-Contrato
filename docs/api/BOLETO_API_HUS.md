@@ -47,8 +47,8 @@ Status: ✅ Entregue · 🟡 Parcial · ⬜ Planejado — Todas são 🆕 **NOVA
 | BAPI-12 | Disponibilizar copia-e-cola / QR ao pagador | Pagador | 3 | ✅ |
 | BAPI-13 | Conciliar BoletoPix por `ext_ref` | Sistema | 4 | ✅ |
 | **Pix** ||||
-| BAPI-14 | Emitir Pix com vencimento (cobv) | Operador | 3 | 🟡 |
-| BAPI-15 | Emitir Pix imediato (2ª via / quitação) | Operador | 3 | 🟡 |
+| BAPI-14 | Emitir Pix com vencimento (cobv) | Operador | 3 | ✅ |
+| BAPI-15 | Emitir Pix imediato (2ª via / quitação) | Operador | 3 | ✅ |
 | BAPI-16 | Conciliar Pix por `txid` | Sistema | 4 | ✅ |
 | **Conciliação por webhook** ||||
 | BAPI-17 | Receber webhook autenticado (HMAC) | Sistema | 4 | ✅ |
@@ -69,19 +69,19 @@ Status: ✅ Entregue · 🟡 Parcial · ⬜ Planejado — Todas são 🆕 **NOVA
 | **Agendadores (Fase 7)** ||||
 | BAPI-30 | Polling de boleto Sicoob (sem webhook) | Sistema | 7 | ✅ |
 | BAPI-31 | Conciliação Pix (rede de segurança) | Sistema | 7 | ✅ |
-| BAPI-32 | Conciliação financeira (extrato/recebíveis) | Gestor | 7 | ⬜ |
+| BAPI-32 | Conciliação financeira (extrato/recebíveis) | Gestor | 7 | ✅ |
 | BAPI-33 | Fila de reprocessamento 409/CIP | Sistema | 7 | ✅ |
 | **Pix Automático (Fase 8)** ||||
 | BAPI-34 | Aderir contrato ao Pix Automático | Operador | 8 | ✅ |
 | BAPI-35 | Agendar cobrança do Pix Automático (D-2) | Sistema | 8 | ✅ |
-| BAPI-36 | Retentativa do Pix Automático | Sistema | 8 | 🟡 |
+| BAPI-36 | Retentativa do Pix Automático | Sistema | 8 | ✅ |
 | BAPI-39 | Cancelar adesão do Pix Automático | Operador | 8 | ✅ |
 | BAPI-40 | Máquina de estados da recorrência | Sistema | 8 | ✅ |
 | **Painel de conciliação (Fase 9)** ||||
 | BAPI-38 | Painel de conciliação da cobrança registrada | Gestor | 9 | ✅ |
 | BAPI-41 | Escopo multi-tenant e filtro do painel | Gestor | 9 | ✅ |
-| **Planejadas** ||||
-| BAPI-37 | Gerar carnê via gateway (`/carne`) | Operador | 6+ | ⬜ |
+| **Carnê registrado** ||||
+| BAPI-37 | Gerar carnê via gateway (`/carne`) | Operador | 6+ | ✅ |
 
 ---
 
@@ -179,18 +179,19 @@ o BoletoPix baixe corretamente.
 
 ## Pix
 
-### BAPI-14 — Emitir Pix com vencimento (cobv) 🆕 🟡
+### BAPI-14 — Emitir Pix com vencimento (cobv) 🆕 ✅
 **Como** operador **quero** emitir uma cobrança Pix com vencimento **para que** o
 pagador quite via Pix respeitando a data.
-**Aceite:** `POST /pix`; retorna `txid` + EMV.
-**Pendente:** `emitir_pix` está pronto no client, mas nenhuma tela/fluxo emite
-Pix avulso — falta expor a emissão (contrato ou ação da parcela).
+**Aceite:** `Parcela.emitir_pix_avulso(modalidade='cobv')` → `POST /pix`; persiste
+`txid` + copia-e-cola e marca `REGISTRADA`; endpoint
+`POST /financeiro/parcelas/{id}/emitir-pix/` (escopo de tenant; recusa parcela
+paga e imobiliária sem conta de API).
 
-### BAPI-15 — Emitir Pix imediato (2ª via / quitação) 🆕 🟡
+### BAPI-15 — Emitir Pix imediato (2ª via / quitação) 🆕 ✅
 **Como** operador **quero** gerar um Pix imediato **para que** o pagador faça uma
 quitação/2ª via na hora.
-**Aceite:** `POST /pix` (cob); retorna `txid` + copia-e-cola.
-**Pendente:** mesmo gap da BAPI-14 — client pronto, sem fluxo de emissão.
+**Aceite:** mesmo fluxo da BAPI-14 com `modalidade='cob'` (`POST /pix` cob);
+retorna `txid` + copia-e-cola sem alterar o método de cobrança do contrato.
 
 ### BAPI-16 — Conciliar Pix por `txid` 🆕 ✅
 **Como** sistema **quero** casar o Pix recebido pelo `txid` **para que** a parcela
@@ -352,12 +353,13 @@ transição ilegal → `ignorado`.
 com `txid` determinístico (`CT<contrato><YYYYMM>`); a liquidação entra pelo fluxo
 normal do webhook (casa por `txid`).
 
-### BAPI-36 — Retentativa do Pix Automático 🆕 🟡
+### BAPI-36 — Retentativa do Pix Automático 🆕 ✅
 **Como** sistema **quero** retentar cobranças não pagas conforme a política **para
 que** a inadimplência recorrente seja recuperada.
-**Aceite:** `POST /pix-automatico/cobrancas/{txid}/retentativa/{data}`.
-**Pendente:** `retentar_cobranca_pa` pronto no client; falta o job/fluxo que
-detecta o débito não liquidado e dispara a retentativa.
+**Aceite:** job `retentar_cobrancas_pix_automatico` (beat diário) localiza as
+cobranças do ciclo vencidas e não pagas (janela de 7 dias) de recorrências
+`APROVADA` e chama `POST /pix-automatico/cobrancas/{txid}/retentativa/{data}`
+para D+1.
 
 ---
 
@@ -387,17 +389,25 @@ parcela** (órfãos, inatribuíveis a tenant) visíveis apenas a superuser/staff
 
 ---
 
-## Planejadas
+## Conciliação financeira e carnê
 
-### BAPI-32 — Conciliação financeira (extrato/recebíveis) 🆕 ⬜
+### BAPI-32 — Conciliação financeira (extrato/recebíveis) 🆕 ✅
 **Como** gestor **quero** cruzar `GET /conciliacao` e `GET /extrato` **para que** eu
 tenha relatório financeiro consolidado.
+**Aceite:** `conciliacao_financeira(imobiliaria, inicio, fim)` cruza os recebíveis
+do gateway com as parcelas Liquidadas e classifica **conferidos / divergentes
+(valor) / só no banco / só no sistema**; relatório em
+`/financeiro/cobranca/conciliacao/boleto-api/financeira/` (filtro imobiliária +
+período), linkado no painel de conciliação. Falha de consulta por conta é
+reportada sem quebrar o relatório.
 
-### BAPI-37 — Gerar carnê via gateway 🆕 ⬜
+### BAPI-37 — Gerar carnê via gateway 🆕 ✅
 **Como** operador **quero** gerar o carnê registrado via `POST /carne` **para que** o
-carnê use cobrança registrada (hoje usa o PDF local BRCobrança).
-**Nota:** hoje um contrato `carne` em conta com provider API cai na emissão de
-boleto avulso (`/cobranca`) — validar/guardar até o `/carne` existir.
+carnê use cobrança registrada (antes usava só o BRCobrança).
+**Aceite:** `gerar_carne_pdf()` despacha pelo provider da conta principal:
+API (C6/Sicoob) → `POST /carne` registra as N cobranças, devolve o PDF e
+persiste `cobranca_id`/linha digitável/`REGISTRADA`/método `carne` em cada
+parcela; BRCobrança → fluxo legado `POST /api/boleto/multi` intacto.
 
 ---
 
@@ -435,7 +445,7 @@ boleto avulso (`/cobranca`) — validar/guardar até o `/carne` existir.
 | POST | `/pix-automatico/recorrencias` | BAPI-34 |
 | PATCH | `/pix-automatico/recorrencias/{idRec}` | BAPI-39 |
 | PUT | `/pix-automatico/cobrancas/{txid}` | BAPI-35 |
-| POST | `/pix-automatico/cobrancas/{txid}/retentativa/{data}` | BAPI-36 (client pronto) |
-| POST | `/carne` | BAPI-37 (planejado) |
-| GET | `/conciliacao`, `/extrato` | BAPI-32 (planejado) |
+| POST | `/pix-automatico/cobrancas/{txid}/retentativa/{data}` | BAPI-36 |
+| POST | `/carne` | BAPI-37 |
+| GET | `/conciliacao`, `/extrato` | BAPI-32 |
 | (webhook) | `POST /financeiro/webhooks/boleto-api/` | BAPI-17..22, BAPI-40 |

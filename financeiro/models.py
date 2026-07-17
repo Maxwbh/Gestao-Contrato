@@ -1111,6 +1111,56 @@ class Parcela(TimeStampedModel):
         self.save()
         return True
 
+    def emitir_pix_avulso(self, modalidade='cobv'):
+        """
+        Emite uma cobrança Pix avulsa para esta parcela via Boleto-API
+        (BAPI-14/15): 'cobv' (com vencimento) ou 'cob' (imediata, para 2ª via/
+        quitação na hora). Persiste txid e copia-e-cola sem alterar o método de
+        cobrança do contrato nem substituir o boleto já emitido.
+        """
+        from financeiro.services.boleto_api_client import BoletoApiClient
+
+        if self.pago:
+            return {'sucesso': False, 'erro': 'Parcela já paga.'}
+
+        conta = self.conta_bancaria
+        if not conta or getattr(conta, 'provider', '') in ('', ProviderBoleto.BRCOBRANCA):
+            imob = self.contrato.imobiliaria
+            conta = imob.contas_bancarias.filter(ativo=True).exclude(
+                provider=ProviderBoleto.BRCOBRANCA).order_by('-principal').first()
+        if not conta:
+            return {'sucesso': False,
+                    'erro': 'Nenhuma conta bancária com provedor de API (C6/Sicoob) disponível.'}
+
+        comprador = self.contrato.comprador
+        documento = (getattr(comprador, 'cnpj', '') or getattr(comprador, 'cpf', '') or '')
+        documento = documento.replace('.', '').replace('/', '').replace('-', '')
+        cobranca = {
+            'modalidade': modalidade,
+            'valor': float(self.valor_atual or self.valor_boleto or 0),
+            'vencimento': self.data_vencimento.isoformat() if self.data_vencimento else '',
+            'seu_numero': str(self.numero_documento
+                              or f'{self.contrato.numero_contrato}/{self.numero_parcela}'),
+            'pagador': {'nome': comprador.nome[:60], 'documento': documento},
+        }
+        r = BoletoApiClient().emitir_pix(
+            conta.tenant_id, conta.provider,
+            getattr(conta, 'account_config', None) or {}, cobranca,
+            bapi_token=(conta.bapi_token or None))
+        if not r.get('sucesso'):
+            return r
+
+        self.conta_bancaria = conta
+        self.pix_txid = r.get('txid') or self.pix_txid
+        if r.get('pix_copia_cola'):
+            self.pix_copia_cola = r['pix_copia_cola']
+        self.registrar_emissao(provider=conta.provider,
+                               status=StatusCobranca.REGISTRADA,
+                               txid=self.pix_txid)
+        self.save()
+        return {'sucesso': True, 'txid': self.pix_txid,
+                'pix_copia_cola': self.pix_copia_cola}
+
     def estornar_cobranca(self, valor=None, e2eid='', devolucao_id=''):
         """
         Estorna (devolve) um Pix recebido via gateway e marca a cobrança como

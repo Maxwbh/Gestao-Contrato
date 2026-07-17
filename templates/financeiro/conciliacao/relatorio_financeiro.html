@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+
+{% block title %}Conciliação Financeira Boleto-API - Gestão de Contratos{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">
+      <i class="fas fa-balance-scale me-2 text-primary"></i>Conciliação Financeira — Recebíveis (Boleto-API)
+    </h3>
+    <a href="{% url 'financeiro:painel_conciliacao_boleto_api' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left me-1"></i>Painel de conciliação
+    </a>
+  </div>
+
+  <form method="get" class="row g-2 mb-4">
+    <div class="col-md-4">
+      <select name="imobiliaria" class="form-select" required>
+        <option value="">Selecione a imobiliária…</option>
+        {% for im in imobiliarias %}
+        <option value="{{ im.id }}" {% if imobiliaria and imobiliaria.id == im.id %}selected{% endif %}>{{ im.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <input type="date" name="inicio" value="{{ inicio|date:'Y-m-d' }}" class="form-control">
+    </div>
+    <div class="col-md-3">
+      <input type="date" name="fim" value="{{ fim|date:'Y-m-d' }}" class="form-control">
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-primary w-100"><i class="fas fa-sync-alt me-1"></i>Conciliar</button>
+    </div>
+  </form>
+
+  {% if not imobiliaria %}
+  <div class="alert alert-info">Selecione uma imobiliária e o período para cruzar os recebíveis do banco com as parcelas liquidadas.</div>
+  {% elif resultado %}
+
+  <!-- KPIs -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card text-center h-100"><div class="card-body">
+        <div class="display-6 text-success">{{ resultado.conferidos|length }}</div>
+        <div class="text-muted">Conferidos</div>
+      </div></div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center h-100"><div class="card-body">
+        <div class="display-6 text-warning">{{ resultado.divergentes|length }}</div>
+        <div class="text-muted">Divergentes (valor)</div>
+      </div></div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center h-100"><div class="card-body">
+        <div class="display-6 text-danger">{{ resultado.apenas_gateway|length }}</div>
+        <div class="text-muted">Só no banco</div>
+      </div></div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center h-100"><div class="card-body">
+        <div class="display-6 text-danger">{{ resultado.apenas_sistema|length }}</div>
+        <div class="text-muted">Só no sistema</div>
+      </div></div>
+    </div>
+  </div>
+
+  {% if resultado.erros %}
+  <div class="alert alert-warning">
+    <i class="fas fa-exclamation-triangle me-1"></i>
+    Falha ao consultar o gateway para:
+    {% for e in resultado.erros %}<code>{{ e.conta }}</code> ({{ e.erro }}){% if not forloop.last %}, {% endif %}{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if resultado.divergentes %}
+  <div class="card mb-4">
+    <div class="card-header bg-warning-subtle"><i class="fas fa-not-equal me-1"></i><strong>Divergências de valor</strong></div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-light"><tr><th>Parcela</th><th>Cobrança/txid</th><th>Banco (R$)</th><th>Sistema (R$)</th></tr></thead>
+        <tbody>
+          {% for d in resultado.divergentes %}
+          <tr>
+            <td>{{ d.parcela.contrato.numero_contrato }} / {{ d.parcela.numero_parcela }}</td>
+            <td><code>{{ d.cobranca_id|default:d.txid }}</code></td>
+            <td class="text-danger">{{ d.valor_gateway }}</td>
+            <td>{{ d.valor_sistema }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header"><i class="fas fa-university me-1"></i>Recebido no banco sem parcela casada</div>
+        <ul class="list-group list-group-flush">
+          {% for item in resultado.apenas_gateway %}
+          <li class="list-group-item d-flex justify-content-between">
+            <code>{{ item.cobranca_id|default:item.txid|default:'—' }}</code>
+            <span class="text-danger">R$ {{ item.valor }}</span>
+          </li>
+          {% empty %}<li class="list-group-item text-muted">Nenhuma pendência.</li>{% endfor %}
+        </ul>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header"><i class="fas fa-desktop me-1"></i>Liquidado no sistema sem recebível no banco</div>
+        <ul class="list-group list-group-flush">
+          {% for p in resultado.apenas_sistema %}
+          <li class="list-group-item d-flex justify-content-between">
+            <span>{{ p.contrato.numero_contrato }} / {{ p.numero_parcela }}</span>
+            <span class="text-danger">R$ {{ p.valor_pago|default:p.valor_boleto }}</span>
+          </li>
+          {% empty %}<li class="list-group-item text-muted">Nenhuma pendência.</li>{% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <p class="text-muted small mt-4 mb-0">
+    Cruza <code>GET /conciliacao</code> do gateway (recebíveis liquidados no banco no período)
+    com as parcelas <strong>Liquidadas</strong> no sistema. Baixas manuais aparecem em
+    "só no sistema" até o banco confirmar.
+  </p>
+  {% endif %}
+</div>
+{% endblock %}
