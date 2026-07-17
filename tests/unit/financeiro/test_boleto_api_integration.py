@@ -280,8 +280,9 @@ class TestWebhookBoletoApi:
         resp = self._post({'id': 'x', 'status': 'liquidado'}, sig='sha256=invalido')
         assert resp.status_code == 401
 
-    def test_sem_secret_configurado_aceita(self, settings):
+    def test_sem_secret_em_debug_aceita(self, settings):
         settings.EVENT_WEBHOOK_SECRET = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         parcela = self._criar_parcela_com_cobranca('cob-nosig')
         resp = self._post({'id': 'cob-nosig', 'status': 'liquidado', 'valor': '100.00'})
         assert resp.status_code == 200
@@ -299,6 +300,7 @@ class TestWebhookBoletoApi:
 
     def test_liquidado_baixa_parcela(self, settings):
         settings.EVENT_WEBHOOK_SECRET = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         parcela = self._criar_parcela_com_cobranca('cob-liq')
         resp = self._post({
             'id': 'cob-liq', 'status': 'liquidado', 'event': 'payment.confirmed',
@@ -313,6 +315,7 @@ class TestWebhookBoletoApi:
     def test_liquidado_idempotente(self, settings):
         """Segundo evento liquidado para a mesma cobrança não re-baixa a parcela."""
         settings.EVENT_WEBHOOK_SECRET = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         parcela = self._criar_parcela_com_cobranca('cob-idem')
         payload = {'id': 'cob-idem', 'status': 'liquidado', 'valor': '5000.00'}
         self._post(payload)
@@ -325,23 +328,27 @@ class TestWebhookBoletoApi:
 
     def test_sem_parcela_vinculada(self, settings):
         settings.EVENT_WEBHOOK_SECRET = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         resp = self._post({'id': 'cob-inexistente', 'status': 'liquidado', 'valor': '100'})
         assert resp.status_code == 200
         assert resp.json()['status'] == 'sem_parcela'
 
     def test_id_ausente_retorna_400(self, settings):
         settings.EVENT_WEBHOOK_SECRET = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         resp = self._post({'status': 'liquidado'})  # sem 'id'
         assert resp.status_code == 400
 
     def test_json_invalido_retorna_400(self, settings):
         settings.EVENT_WEBHOOK_SECRET = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         resp = Client().post(self.URL, data=b'nao-e-json', content_type='application/json')
         assert resp.status_code == 400
 
     def test_evento_nao_liquidado_nao_baixa(self, settings):
         """status != liquidado não deve baixar a parcela."""
         settings.EVENT_WEBHOOK_SECRET = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         parcela = self._criar_parcela_com_cobranca('cob-pend')
         self._post({'id': 'cob-pend', 'status': 'pendente', 'valor': '5000'})
         parcela.refresh_from_db()

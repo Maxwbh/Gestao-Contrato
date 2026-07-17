@@ -9104,12 +9104,17 @@ def webhook_pix(request):
 
     Suporta o formato padrão Banco Central (array "pix" de eventos).
     Autenticação: Authorization: Bearer <PIX_WEBHOOK_TOKEN> ou x-api-key header.
-    Quando PIX_WEBHOOK_TOKEN está vazio, a validação é pulada (dev/staging).
+    Fail-closed em produção: token vazio ⇒ 503 (o webhook dá baixa em parcela;
+    sem autenticação configurada não pode aceitar POST anônimo). Em DEBUG a
+    validação é pulada (dev/staging).
     """
     from .models import EventoPIX
     import hmac as _hmac
 
     token_esperado = getattr(_settings, 'PIX_WEBHOOK_TOKEN', '')
+    if not token_esperado and not getattr(_settings, 'DEBUG', False):
+        return JsonResponse({'erro': 'Webhook PIX não configurado (PIX_WEBHOOK_TOKEN)'},
+                            status=503)
     if token_esperado:
         auth = request.headers.get('Authorization', '')
         api_key = request.headers.get('x-api-key', '')
@@ -9294,6 +9299,9 @@ def webhook_boleto_api(request):
 
     Autenticação: X-Signature: sha256=<hmac_sha256(EVENT_WEBHOOK_SECRET, raw_body)>
     Reutiliza hmac.compare_digest (proteção timing-attack, igual ao webhook PIX).
+    Fail-closed em produção: secret vazio ⇒ 503 — o webhook dá baixa em
+    parcela; sem HMAC configurado não pode aceitar POST anônimo. Em DEBUG a
+    validação é pulada (dev/staging).
     """
     import hashlib as _hashlib
     import hmac as _hmac
@@ -9301,6 +9309,9 @@ def webhook_boleto_api(request):
 
     raw_body = request.body
     secret = getattr(_settings, 'EVENT_WEBHOOK_SECRET', '')
+    if not secret and not getattr(_settings, 'DEBUG', False):
+        return JsonResponse(
+            {'erro': 'Webhook não configurado (EVENT_WEBHOOK_SECRET)'}, status=503)
     if secret:
         sig_header = request.headers.get('X-Signature', '')
         expected = 'sha256=' + _hmac.new(

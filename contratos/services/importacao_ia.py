@@ -165,7 +165,12 @@ class ImportacaoIA:
                 import anthropic
             except ImportError:
                 raise RuntimeError('Pacote anthropic não instalado. Execute: pip install anthropic')
+            # Precedência unificada com o chatbot: env (settings) primeiro,
+            # ParametroSistema como fallback legado.
             api_key = getattr(settings, 'ANTHROPIC_API_KEY', '')
+            if not api_key:
+                from core.parametros import get_param
+                api_key = get_param('ANTHROPIC_API_KEY', '')
             if not api_key:
                 raise RuntimeError('ANTHROPIC_API_KEY não configurada nas variáveis de ambiente.')
             self._client = anthropic.Anthropic(api_key=api_key)

@@ -40,6 +40,26 @@ class TestWebhookFase4:
                         content_type='application/json', HTTP_X_SIGNATURE='sha256=errado')
         assert r.status_code == 401
 
+    def test_secret_vazio_em_producao_503(self, client, settings):
+        """Fail-closed: sem EVENT_WEBHOOK_SECRET e DEBUG=False ⇒ 503."""
+        settings.EVENT_WEBHOOK_SECRET = ''
+        settings.DEBUG = False
+        r = client.post(reverse('financeiro:webhook_boleto_api'),
+                        data=json.dumps({'id': 'X'}),
+                        content_type='application/json')
+        assert r.status_code == 503
+
+    def test_secret_vazio_em_debug_processa(self, client, settings):
+        """Em DEBUG (dev/staging) o webhook segue funcionando sem HMAC."""
+        settings.EVENT_WEBHOOK_SECRET = ''
+        settings.DEBUG = True
+        p = _parcela(cobranca_id='CDBG')
+        r = client.post(reverse('financeiro:webhook_boleto_api'),
+                        data=json.dumps({'id': 'CDBG', 'status': 'liquidado',
+                                         'event': 'cobranca.atualizada', 'valor': '10.00'}),
+                        content_type='application/json')
+        assert r.status_code == 200 and r.json()['status'] == 'baixado'
+
     def test_liquidado_baixa_e_status(self, client, settings):
         settings.EVENT_WEBHOOK_SECRET = SECRET
         p = _parcela(cobranca_id='C1')

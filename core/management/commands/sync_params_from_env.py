@@ -126,8 +126,10 @@ PARAMETROS = [
      'Máximo de acessos por IP por hora na URL pública de boleto.'),
 
     # ── Chatbot IA (Seção 30) ────────────────────────────────────────────────
-    ('ANTHROPIC_API_KEY', 'chatbot_ia', 'secret', '',
-     'Chave de API da Anthropic para o chatbot humanizado. Obtenha em console.anthropic.com'),
+    # ANTHROPIC_API_KEY NÃO é sincronizada: ParametroSistema guarda o valor em
+    # texto claro no banco (visível no Admin). A chave vive só como variável de
+    # ambiente (settings); linhas legadas no banco seguem funcionando como
+    # fallback de leitura, mas não são criadas/atualizadas por este comando.
     ('CHATBOT_IA_ATIVO', 'chatbot_ia', 'str', 'false',
      'H-10: ativa/desativa IA no chatbot sem deploy. Valores: true | false'),
     ('CHATBOT_MODELO', 'chatbot_ia', 'str', 'claude-haiku-4-5-20251001',
