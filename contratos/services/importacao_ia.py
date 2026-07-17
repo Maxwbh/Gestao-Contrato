@@ -25,33 +25,46 @@ from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
-# Modelo gratuito do Tier 0. Centralizado para facilitar migração entre
-# versões do Gemini (ex.: gemini-2.0-flash → gemini-2.5-flash).
-_GEMINI_MODEL = 'gemini-2.0-flash'
-
-# Cascade padrão hardcoded — usada como fallback quando não há WorkflowIA ativo.
+# Defaults dos modelos — os valores efetivos são configuráveis sem deploy via
+# ParametroSistema (IA_GEMINI_MODELO, IA_TIERS_CLAUDE) e, para a cascade
+# Claude, também via WorkflowIA/WorkflowIATier no Admin.
+_GEMINI_MODEL_DEFAULT = 'gemini-2.0-flash'
 _TIERS_CLAUDE = (
     'claude-haiku-4-5-20251001',  # Tier 1 — barato: contratos legíveis e padronizados
-    'claude-sonnet-4-6',          # Tier 2 — intermediário: maioria dos casos difíceis
+    'claude-sonnet-5',            # Tier 2 — intermediário: maioria dos casos difíceis
     'claude-opus-4-8',            # Tier 3 — caro: último recurso para documentos muito difíceis
 )
 
 
+def _gemini_model() -> str:
+    """Modelo do Tier 0 (Gemini), configurável via parâmetro IA_GEMINI_MODELO."""
+    try:
+        from core.parametros import get_param
+        return (get_param('IA_GEMINI_MODELO', _GEMINI_MODEL_DEFAULT)
+                or _GEMINI_MODEL_DEFAULT)
+    except Exception:
+        return _GEMINI_MODEL_DEFAULT
+
+
 def _carregar_tiers_workflow() -> tuple:
     """
-    Retorna tuple de modelos para a cascade Claude.
-    Se houver WorkflowIA ativo com tiers habilitados, usa o DB.
-    Caso contrário, usa _TIERS_CLAUDE como fallback.
-    Falha silenciosamente para nunca quebrar importações em produção.
+    Retorna tuple de modelos para a cascade Claude, em ordem de precedência:
+    WorkflowIA ativo no Admin → parâmetro IA_TIERS_CLAUDE (CSV barato→caro)
+    → default hardcoded. Falha silenciosamente para nunca quebrar importações
+    em produção.
     """
     try:
         from core.models import WorkflowIA
         wf = WorkflowIA.objects.filter(ativo=True).prefetch_related('tiers').first()
-        if wf is None:
-            return _TIERS_CLAUDE
-        tiers = tuple(
-            wf.tiers.filter(habilitado=True).order_by('ordem').values_list('modelo', flat=True)
-        )
+        if wf is not None:
+            tiers = tuple(
+                wf.tiers.filter(habilitado=True).order_by('ordem').values_list('modelo', flat=True)
+            )
+            if tiers:
+                return tiers
+        from core.parametros import get_param
+        csv = get_param('IA_TIERS_CLAUDE', '') or ''
+        tiers = tuple(m.strip() for m in csv.split(',') if m.strip())
         return tiers if tiers else _TIERS_CLAUDE
     except Exception:
         return _TIERS_CLAUDE
@@ -220,9 +233,10 @@ class ImportacaoIA:
         api_key = getattr(settings, 'GEMINI_API_KEY', '').strip()
         if not api_key:
             return None
+        gemini_model = _gemini_model()
         try:
             from core.services.ia_monitor import checar_limite, LimiteUsoIAExcedido
-            checar_limite(modelo=_GEMINI_MODEL, operacao='IMPORTACAO_PDF')
+            checar_limite(modelo=gemini_model, operacao='IMPORTACAO_PDF')
         except LimiteUsoIAExcedido as e:
             logger.info('Gemini bloqueado por limite mensal (%s) — escalando para cadeia Claude', e)
             return None
@@ -233,7 +247,7 @@ class ImportacaoIA:
             return None
         try:
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(_GEMINI_MODEL)
+            model = genai.GenerativeModel(gemini_model)
             content = [{'mime_type': p['mime_type'], 'data': p['data']} for p in partes]
             content.append(_PROMPT)
             resposta = model.generate_content(content)
@@ -245,7 +259,7 @@ class ImportacaoIA:
             from core.services.ia_monitor import registrar, PROVIDER_GOOGLE, OP_IMPORTACAO_PDF
             registrar(
                 provider=PROVIDER_GOOGLE,
-                modelo=_GEMINI_MODEL,
+                modelo=gemini_model,
                 operacao=OP_IMPORTACAO_PDF,
                 tokens_input=tok_in,
                 tokens_output=tok_out,

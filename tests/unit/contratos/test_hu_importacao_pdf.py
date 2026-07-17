@@ -304,7 +304,7 @@ class TestEstrategiaHibrida:
         assert resultado == dados_sonnet
         assert ia._client.messages.create.call_count == 2
         modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
-        assert modelos == ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6']
+        assert modelos == ['claude-haiku-4-5-20251001', 'claude-sonnet-5']
 
     def test_haiku_baixo_escala_para_sonnet(self):
         """Haiku BAIXO → Sonnet resolve → Opus não chamado."""
@@ -320,7 +320,7 @@ class TestEstrategiaHibrida:
 
         assert resultado == dados_sonnet
         assert ia._client.messages.create.call_count == 2
-        assert ia._client.messages.create.call_args.kwargs['model'] == 'claude-sonnet-4-6'
+        assert ia._client.messages.create.call_args.kwargs['model'] == 'claude-sonnet-5'
 
     def test_haiku_sem_campo_confianca_escala_para_sonnet(self):
         """JSON sem 'confianca' é não-ALTO → escala preventiva para Sonnet."""
@@ -335,7 +335,7 @@ class TestEstrategiaHibrida:
         ia._call([])
 
         modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
-        assert modelos[1] == 'claude-sonnet-4-6'
+        assert modelos[1] == 'claude-sonnet-5'
 
     # ── Tier 2: Sonnet ───────────────────────────────────────────────────────
 
@@ -372,7 +372,7 @@ class TestEstrategiaHibrida:
         assert resultado == dados_opus
         assert ia._client.messages.create.call_count == 3
         modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
-        assert modelos == ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-8']
+        assert modelos == ['claude-haiku-4-5-20251001', 'claude-sonnet-5', 'claude-opus-4-8']
 
     # ── Tier 3: Opus ─────────────────────────────────────────────────────────
 
@@ -409,7 +409,7 @@ class TestEstrategiaHibrida:
         assert resultado == dados_sonnet
         assert ia._client.messages.create.call_count == 2
         modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
-        assert modelos == ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6']
+        assert modelos == ['claude-haiku-4-5-20251001', 'claude-sonnet-5']
 
     def test_falha_no_tier_final_usa_melhor_parcial(self):
         """Se Opus falha mas Sonnet trouxe dados parciais, retorna o parcial."""

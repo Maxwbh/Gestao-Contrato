@@ -1,0 +1,37 @@
+name: 💡 Sugerir Melhoria
+description: Nova funcionalidade ou aprimoramento
+title: "[FEATURE] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Qual problema isso resolve?
+      description: Descreva a dor/necessidade do ponto de vista de quem usa (contador, imobiliária, comprador).
+      placeholder: "Como operador financeiro, preciso de X para que Y..."
+    validations:
+      required: true
+  - type: textarea
+    id: solucao
+    attributes:
+      label: Solução proposta
+      description: Como você imagina a funcionalidade funcionando.
+    validations:
+      required: true
+  - type: dropdown
+    id: modulo
+    attributes:
+      label: Módulo relacionado
+      options:
+        - Contratos
+        - Financeiro / Cobrança (boletos, CNAB, Boleto-API)
+        - Portal do Comprador
+        - Notificações
+        - Cadastros (core)
+        - Relatórios / BI
+        - Outro
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas consideradas
+      description: Outras formas de resolver que você avaliou (opcional).

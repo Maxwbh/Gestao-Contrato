@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Dúvida de uso? Pergunte nas Discussions
+    url: https://github.com/Maxwbh/Gestao-Contrato/discussions
+    about: Perguntas, ideias iniciais e conversas ficam nas Discussions — issues são para bug e melhoria definida.
+  - name: 🔒 Reportar vulnerabilidade de segurança
+    url: https://github.com/Maxwbh/Gestao-Contrato/blob/master/SECURITY.md
+    about: Falhas de segurança NÃO devem virar issue pública — siga a política de segurança.
+  - name: 📚 Documentação
+    url: https://github.com/Maxwbh/Gestao-Contrato/blob/master/docs/README.md
+    about: Manuais, HUs, deploy e referência de configuração.

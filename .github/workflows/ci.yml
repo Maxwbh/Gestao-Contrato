@@ -2,15 +2,33 @@ name: CI
 
 on:
   push:
-    branches: ["claude/**"]        # feature branches: roda tudo
+    branches: ["claude/**"]              # feature branches: roda tudo
   pull_request:
-    branches: ["V3.1", "master"]  # PRs para main: roda tudo
-  # push para V3.1/master (merge) NÃO roda CI — já foi validado no PR
+    branches: ["V3.1", "master", "hml"]  # PRs para hml (validação) e main
+  # Fluxo: QUALQUER branch → PR para hml (validação/homologação; deploy exibe
+  # versão com sufixo -hml) → promoção hml → master via SQUASH (1 commit).
+  # Na main, commit de FONTE avança o PATCH; commit só de documentação não
+  # altera a versão (ver _EXCLUIR_NAO_FONTE em core/version.py e build.sh).
+  # push para hml/master (merge) NÃO roda CI — já foi validado no PR
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # ── Guarda do fluxo: PR para master só a partir de hml ───────────────────
+  fluxo-branches:
+    name: Fluxo de branches (hml → main)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'master'
+    steps:
+      - name: PRs para master devem partir de hml
+        run: |
+          if [ "${{ github.head_ref }}" != "hml" ]; then
+            echo "::error::Fluxo: qualquer branch abre PR para 'hml'; apenas 'hml' promove para 'master' (recebido: '${{ github.head_ref }}'). Promova via squash (1 commit)."
+            exit 1
+          fi
+          echo "OK: promoção hml → master."
+
   # ── Detecta módulos afetados pelo diff ───────────────────────────────────
   # Roda só os testes dos módulos que mudaram. Mudança em código compartilhado
   # (settings, requirements, core/mixins|models, base.html, workflows) força a
