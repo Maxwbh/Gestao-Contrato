@@ -101,8 +101,19 @@ def _post(client, data, token=None):
 
 @pytest.mark.django_db
 class TestAutenticacaoWebhookPIX:
-    def test_sem_token_configurado_aceita_qualquer_requisicao(self, client_pix, settings, parcela_pix):
+    def test_sem_token_em_producao_responde_503(self, client_pix, settings, parcela_pix):
+        """Fail-closed: token vazio + DEBUG=False ⇒ 503 (não aceita POST anônimo)."""
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
+        settings.DEBUG = False
+        resp = _post(client_pix, _payload())
+        assert resp.status_code == 503
+
+    def test_sem_token_em_debug_aceita(self, client_pix, settings, parcela_pix):
+        """Em DEBUG (dev/staging) a validação continua sendo pulada."""
+        settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
+        settings.DEBUG = True
         resp = _post(client_pix, _payload())
         assert resp.status_code == 200
 
@@ -133,6 +144,7 @@ class TestAutenticacaoWebhookPIX:
 
     def test_get_nao_permitido(self, client_pix, settings):
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         resp = client_pix.get(reverse('financeiro:webhook_pix'))
         assert resp.status_code == 405
 
@@ -145,12 +157,14 @@ class TestAutenticacaoWebhookPIX:
 class TestBaixaAutomaticaPIX:
     def test_parcela_e_baixada_apos_webhook(self, client_pix, settings, parcela_pix):
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         _post(client_pix, _payload(txid=parcela_pix.pix_txid))
         parcela_pix.refresh_from_db()
         assert parcela_pix.pago is True
 
     def test_status_retornado_e_baixado(self, client_pix, settings, parcela_pix):
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         resp = _post(client_pix, _payload(txid=parcela_pix.pix_txid))
         data = resp.json()
         assert data['processados'][0]['status'] == 'BAIXADO'
@@ -158,12 +172,14 @@ class TestBaixaAutomaticaPIX:
     def test_evento_pix_criado_no_banco(self, client_pix, settings, parcela_pix):
         from financeiro.models import EventoPIX
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         eid = 'E99999999202501011200000000001'
         _post(client_pix, _payload(end_to_end_id=eid, txid=parcela_pix.pix_txid))
         assert EventoPIX.objects.filter(end_to_end_id=eid, status='BAIXADO').exists()
 
     def test_valor_pago_reflete_webhook(self, client_pix, settings, parcela_pix):
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         _post(client_pix, _payload(txid=parcela_pix.pix_txid, valor='950.00'))
         parcela_pix.refresh_from_db()
         assert parcela_pix.valor_pago == Decimal('950.00')
@@ -171,6 +187,7 @@ class TestBaixaAutomaticaPIX:
     def test_observacao_menciona_end_to_end_id(self, client_pix, settings, parcela_pix):
         from financeiro.models import HistoricoPagamento
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         eid = 'E11111111202501011200000000001'
         _post(client_pix, _payload(end_to_end_id=eid, txid=parcela_pix.pix_txid))
         hp = HistoricoPagamento.objects.filter(parcela=parcela_pix).last()
@@ -186,6 +203,7 @@ class TestBaixaAutomaticaPIX:
 class TestDeduplicacaoPIX:
     def test_segundo_envio_mesmo_end_to_end_id_retorna_duplicado(self, client_pix, settings, parcela_pix):
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         eid = 'E22222222202501011200000000001'
         _post(client_pix, _payload(end_to_end_id=eid, txid=parcela_pix.pix_txid))
         # segundo envio
@@ -196,6 +214,7 @@ class TestDeduplicacaoPIX:
     def test_deduplicacao_nao_paga_duas_vezes(self, client_pix, settings, parcela_pix):
         from financeiro.models import HistoricoPagamento
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         eid = 'E33333333202501011200000000001'
         _post(client_pix, _payload(end_to_end_id=eid, txid=parcela_pix.pix_txid))
         _post(client_pix, _payload(end_to_end_id=eid, txid=parcela_pix.pix_txid))
@@ -211,6 +230,7 @@ class TestDeduplicacaoPIX:
 class TestSemParcelaPIX:
     def test_txid_nao_encontrado_retorna_sem_parcela(self, client_pix, settings, parcela_pix):
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         resp = _post(client_pix, _payload(txid='TXID-INEXISTENTE'))
         data = resp.json()
         assert data['processados'][0]['status'] == 'SEM_PARCELA'
@@ -218,12 +238,14 @@ class TestSemParcelaPIX:
     def test_evento_criado_mesmo_sem_parcela(self, client_pix, settings, parcela_pix):
         from financeiro.models import EventoPIX
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         eid = 'E44444444202501011200000000001'
         _post(client_pix, _payload(end_to_end_id=eid, txid='TXID-INEXISTENTE'))
         assert EventoPIX.objects.filter(end_to_end_id=eid, status='SEM_PARCELA').exists()
 
     def test_txid_parcela_ja_paga_retorna_sem_parcela(self, client_pix, settings, parcela_pix):
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         # Pagar a parcela manualmente primeiro
         parcela_pix.pago = True
         parcela_pix.valor_pago = Decimal('1000.00')
@@ -247,6 +269,7 @@ class TestSemParcelaPIX:
 class TestFormatoPayloadPIX:
     def test_payload_invalido_retorna_400(self, client_pix, settings):
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         resp = client_pix.post(
             reverse('financeiro:webhook_pix'),
             data='nao-e-json',
@@ -256,6 +279,7 @@ class TestFormatoPayloadPIX:
 
     def test_evento_sem_end_to_end_id_e_ignorado(self, client_pix, settings, parcela_pix):
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         payload = {'pix': [{'txid': 'x', 'valor': '100.00'}]}
         resp = _post(client_pix, payload)
         assert resp.status_code == 200
@@ -264,6 +288,7 @@ class TestFormatoPayloadPIX:
 
     def test_evento_unico_sem_wrapper_pix_e_aceito(self, client_pix, settings, parcela_pix):
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         payload = {
             'endToEndId': 'E66666666202501011200000000001',
             'txid': parcela_pix.pix_txid,
@@ -278,6 +303,7 @@ class TestFormatoPayloadPIX:
 
     def test_multiplos_eventos_processados_juntos(self, client_pix, settings, dominio_pix):
         settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         from contratos.models import Contrato, TipoAmortizacao, TipoCorrecao, StatusContrato
         imob, imovel, comprador = dominio_pix
         contrato = Contrato.objects.create(
@@ -336,9 +362,11 @@ class TestWebhookPixDedupAtomico:
         end_to_end_field = EventoPIX._meta.get_field('end_to_end_id')
         assert end_to_end_field.unique, 'end_to_end_id deve ser unique no DB'
 
-    def test_dedup_via_integrity_error_retorna_duplicado(self, parcela_pix, client_pix):
+    def test_dedup_via_integrity_error_retorna_duplicado(self, parcela_pix, client_pix, settings):
         """Simula race criando manualmente o EventoPIX antes do segundo POST."""
         from financeiro.models import EventoPIX
+        settings.PIX_WEBHOOK_TOKEN = ''
+        settings.DEBUG = True  # fail-closed só em produção (DEBUG=False)
         EventoPIX.objects.create(
             end_to_end_id='E_RACE_001',
             txid='TXID-TESTE-001',

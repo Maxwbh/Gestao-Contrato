@@ -6,8 +6,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
 ![Django](https://img.shields.io/badge/Django-6.0-092E20?logo=django&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12+-4169E1?logo=postgresql&logoColor=white)
-![Testes](https://img.shields.io/badge/testes-1683%20passando-2ea44f)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-4169E1?logo=postgresql&logoColor=white)
+![Testes](https://img.shields.io/badge/testes-1842-2ea44f)
 ![Versão](https://img.shields.io/badge/vers%C3%A3o-3.2-0058be)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-Proprietary-lightgrey)
 
@@ -51,8 +51,11 @@ O isolamento por tenant (`get_imobiliarias_usuario()`) garante que cada usuário
 
 ## ✨ Novidades da Versão 3.2
 
-> Modernização da plataforma e do pipeline de CI:
+> Cobrança registrada multi-método (épico Boleto-API completo), modernização da plataforma e do pipeline de CI:
 
+- **💠 Cobrança registrada multi-método (BAPI-01..41)** — épico Boleto-API concluído: credenciais bancárias **cifradas** (Fernet) por provedor, onboarding stateless (`bapi_` Bearer), emissão de **Boleto, BoletoPix, Pix avulso (2ª via/quitação), Pix Automático (débito recorrente)** e **carnê registrado** via gateway; máquina de estados da cobrança, webhook HMAC idempotente, polling Sicoob, fila CIP e retentativa de PA agendados no Celery beat.
+- **📊 Painel de Conciliação Boleto-API** — % conciliado, distribuição por status, recebido por origem (Webhook / Polling Sicoob / Conciliação Pix / Baixa manual) e recorrências, com escopo multi-tenant; **conciliação financeira** cruzando os recebíveis do banco (`GET /conciliacao`) com as parcelas liquidadas.
+- **🔐 Fail-closed nos webhooks** — em produção, webhooks de baixa (`EVENT_WEBHOOK_SECRET`, `PIX_WEBHOOK_TOKEN`) e API de BI respondem 503 quando a chave não está configurada; chaves de IA são env-only (fora do banco).
 - **⬆️ Python 3.12 + Django 6.0** — atualização do runtime (de Python 3.11 / Django 4.2 LTS, em fim de vida) e do driver de banco **psycopg 3** (de psycopg2).
 - **🔒 Dependências de segurança** — gunicorn 23 (corrige request smuggling), Pillow 11, requests 2.34; celery 5.6, redis 8, django-celery-beat 2.9, crispy-forms 2.6, drf-spectacular 0.30, reportlab 5.
 - **⚡ CI por módulo alterado** — o pipeline analisa o diff e roda só os testes dos módulos afetados, em runners paralelos; mudança apenas em documentação/infra não executa testes. PR típico cai de ~5 min para ~30 s–2 min.
@@ -90,10 +93,12 @@ O isolamento por tenant (`get_imobiliarias_usuario()`) garante que cada usuário
 ### 3. Gestão Financeira
 - Geração de parcelas, cálculo de juros/multa por atraso, saldo devedor e histórico de pagamentos
 - **Boletos bancários** via BRCobrança (CNAB) **ou** cobrança registrada via **Boleto-API** (C6/Sicoob)
+- **Métodos de cobrança por contrato**: Boleto, Carnê, **BoletoPix** (boleto + QR Pix), **Pix Automático** (débito recorrente com agendamento D-2 e retentativa) e **Pix avulso** (2ª via/quitação)
 - **CNAB Remessa** (G-08) e **CNAB Retorno** (G-09) com rastreamento de nosso número
-- **Carnê** consolidado por contrato (PDF)
-- **Registro manual de pagamento**, **quitação/antecipação** com desconto e **conciliação OFX**
-- **Webhook Boleto-API** (`/financeiro/webhooks/boleto-api/`) — baixa idempotente por evento, assinatura **HMAC-SHA256**
+- **Carnê** consolidado por contrato (PDF) — via BRCobrança ou **registrado via gateway** (`POST /carne`)
+- **Registro manual de pagamento** (sincroniza o status da cobrança registrada), **quitação/antecipação** com desconto e **conciliação OFX**
+- **Webhook Boleto-API** (`/financeiro/webhooks/boleto-api/`) — baixa idempotente por evento, assinatura **HMAC-SHA256**, máquina de estados que rejeita eventos fora de ordem
+- **Painel de Conciliação Boleto-API** (`/financeiro/cobranca/conciliacao/boleto-api/`) + **conciliação financeira** de recebíveis (HUs BAPI-01..41 em [docs/api/BOLETO_API_HUS.md](docs/api/BOLETO_API_HUS.md))
 
 ### 4. Reajuste Automático
 - Integração com a **API do Banco Central** (IPCA/IGP-M/SELIC), com número-índice e acumulados
@@ -136,6 +141,7 @@ Três telas dedicadas, orquestradas pelo **Hub "Cobrança do Mês"** (`/financei
 | **2. Gerar Remessa** (HU-23) | `/financeiro/remessa/` | Agrupa por banco/layout (1 arquivo = 1 conta), "Gerar e Baixar", ZIP em lote, marcação de envio. Contas C6/Sicoob (Boleto-API) **não entram no CNAB** — conciliam por webhook |
 | **3. Receber Retorno** (HU-23) | `/financeiro/retorno/` | Upload do `.ret` que **já processa a baixa**; rejeições devolvem o boleto para "Gerado" (RN-18) |
 | **Fechamento** (HU-26) | `/financeiro/cobranca/conciliacao/` | % conciliado, recebido por origem, aging clicável e reinclusão de rejeitados |
+| **Conciliação Boleto-API** (BAPI-38) | `/financeiro/cobranca/conciliacao/boleto-api/` | Trilho da cobrança registrada: status normalizado, origem da baixa (webhook/polling/Pix/manual), fila CIP, recorrências e relatório de recebíveis × sistema |
 
 > Detalhes no [Manual do Contador](docs/manual_contador.md) e nas [Histórias de Usuário](docs/analise/historias-usuario/).
 
@@ -143,7 +149,7 @@ Três telas dedicadas, orquestradas pelo **Hub "Cobrança do Mês"** (`/financei
 
 ## 🛠️ Tecnologias
 
-**Backend:** Python 3.11+ · Django 4.2.7 · PostgreSQL · Gunicorn
+**Backend:** Python 3.12 · Django 6.0 · PostgreSQL 14+ (psycopg 3) · Gunicorn · Celery + Redis (beat)
 **Frontend:** Bootstrap 5 · AG Grid · Font Awesome · PWA (service worker + Web Push)
 **Integrações:**
 - **Banco Central** — índices econômicos (IPCA/IGP-M/SELIC)
@@ -190,11 +196,16 @@ docker-compose up -d brcobranca
 
 ## 🔧 Configuração (.env)
 
+> Referência completa (todas as chaves, camadas e defaults): [docs/deployment/ENV_PARAMETROS.md](docs/deployment/ENV_PARAMETROS.md) · modelo pronto: [`.env.example`](.env.example)
+
 ```env
 SECRET_KEY=sua-chave-secreta
 DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
 DATABASE_URL=postgresql://user:password@localhost:5432/gestao_contrato
+
+# Cifra das credenciais bancárias / token bapi_ (Fernet; em produção defina!)
+CREDENTIALS_ENCRYPTION_KEY=
 
 # Tarefas agendadas (cron-job.org)
 TASK_TOKEN=seu-token-secreto
@@ -220,10 +231,13 @@ BRCOBRANCA_REMESSA_COOLDOWN_S=5        # cooldown boletos → remessa
 BOLETO_API_URL=http://localhost:8001
 BOLETO_API_TIMEOUT=30
 BOLETO_API_MAX_TENTATIVAS=3
+# OBRIGATÓRIOS em produção (fail-closed: vazio + DEBUG=False ⇒ webhook responde 503)
 EVENT_WEBHOOK_SECRET=segredo-hmac-do-webhook   # assina X-Signature (HMAC-SHA256)
-
-# Webhook PIX
 PIX_WEBHOOK_TOKEN=seu-token-pix
+
+# IA (env-only — não vão para o banco)
+ANTHROPIC_API_KEY=          # chatbot, importação de PDF e workflows
+GEMINI_API_KEY=             # tier 0 gratuito (opcional)
 
 # API BI (Power BI / Looker / Metabase)
 BI_API_TOKEN=seu-token-bi
@@ -242,6 +256,12 @@ VAPID_CLAIMS_EMAIL=admin@empresa.com
 ## 🚀 Deploy no Render
 
 > **Plano Gratuito** — sem Celery. Tarefas agendadas via **cron-job.org** (HTTP POST autenticado).
+>
+> ⚠️ **Cobrança registrada (Boleto-API):** os jobs de conciliação/agendamento
+> (polling Sicoob, conciliação Pix, fila CIP, Pix Automático D-2 e retentativa)
+> são tasks do **Celery beat** (`gestao_contrato/celery.py`) e exigem worker +
+> beat rodando (plano com background worker). Sem Celery, a conciliação da
+> cobrança registrada fica só por webhook.
 
 O `build.sh` executa automaticamente: `pip install` → `migrate` → templates de relatório e boleto → `collectstatic` → criação dos superusuários.
 
@@ -264,12 +284,14 @@ Configure cada job como `POST` com header `X-Task-Token: <TASK_TOKEN>` (mesmo va
 Gestao-Contrato/
 ├── gestao_contrato/          # settings, urls, wsgi
 ├── core/                     # Contabilidade, Imobiliária, Imóvel, Comprador, ContaBancaria (provider)
-│   └── management/commands/  # gerar_dados_teste, setup
+│   ├── crypto.py             # Fernet — credenciais bancárias e token bapi_ cifrados
+│   └── management/commands/  # gerar_dados_teste, sync_params_from_env, setup
 ├── contratos/                # Contrato, TabelaJurosContrato, PrestacaoIntermediaria, IndiceReajuste
-│   └── services/             # rescisao_service, cessao_service
-├── financeiro/               # Parcela, Reajuste, EventoPIX, EventoCobrancaApi, ArquivoRemessa/Retorno
-│   └── services/             # boleto_service, boleto_api_client, cnab_service, carne_service,
-│                             # indices_economicos_service, ofx_service, reajuste_service, relatorio_service
+│   └── services/             # rescisao_service, cessao_service, importacao_ia
+├── financeiro/               # Parcela, Reajuste, EventoPIX, EventoCobrancaApi, RecorrenciaPix
+│   ├── tasks.py              # Celery: reajustes, polling Sicoob, conciliação Pix, CIP, Pix Automático
+│   └── services/             # boleto_service, boleto_api_client/_onboarding/_conciliacao, boleto_fake,
+│                             # cnab_service, carne_service, indices, ofx, reajuste, relatorio
 ├── notificacoes/             # Notificacao, TemplateNotificacao, RegraNotificacao
 ├── portal_comprador/         # AcessoComprador, PushSubscriptionPortal (PWA/Web Push)
 ├── accounts/                 # Autenticação e permissões
@@ -293,9 +315,9 @@ pytest tests/integration/     # integração
 pytest --cov=. --cov-report=html   # cobertura
 ```
 
-**Status:** ✅ **1683 testes** · **Meta de cobertura:** > 80%
+**Status:** ✅ **1842 testes** (1624 unitários no CI por módulo) · **Meta de cobertura:** > 80%
 
-Cobertura ampla das HUs (cobrança CNAB, Boleto-API, portal, PWA, relatórios BI, webhooks) e serviços. Detalhes em [/tests/README.md](tests/README.md).
+Cobertura ampla das HUs (cobrança CNAB, épico Boleto-API BAPI-01..41, portal, PWA, relatórios BI, webhooks) e serviços. Cenários de teste da cobrança registrada com **boleto fake** (sem API de banco): [docs/analise/CENARIOS_TESTE_BOLETO_API.md](docs/analise/CENARIOS_TESTE_BOLETO_API.md). Detalhes em [/tests/README.md](tests/README.md).
 
 ---
 
@@ -328,8 +350,8 @@ python manage.py createsuperuser
 
 <div align="center">
 
-**Versão 3.2** · 1683 testes · Última atualização: 2026-07-06
+**Versão 3.2** · 1842 testes · Última atualização: 2026-07-17
 
-Cobrança Registrada C6/Sicoob (Boleto-API) · Hub Cobrança do Mês · Conciliação & Saúde · Índices com número-índice/acumulados
+Cobrança Registrada multi-método C6/Sicoob (épico Boleto-API BAPI-01..41) · Painel de Conciliação · Hub Cobrança do Mês · Índices com número-índice/acumulados
 
 </div>

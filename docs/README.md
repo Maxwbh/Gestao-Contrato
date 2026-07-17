@@ -34,6 +34,8 @@ Desenvolvido por **Maxwell da Silva Oliveira** (maxwbh@gmail.com) — M&S do Bra
 - **[Testes](../tests/README.md)** — Estrutura de testes e como executar
 
 ### APIs e Integrações
+- **[Boleto-API — HUs da Cobrança Registrada (BAPI-01..41)](api/BOLETO_API_HUS.md)** — épico multi-método C6/Sicoob: credenciais cifradas, webhook, estados, Pix Automático, painel de conciliação
+- **[Boleto-API — Cenários de Teste (boleto fake)](analise/CENARIOS_TESTE_BOLETO_API.md)** — massa de dados e ciclo de vida sem API de banco
 - **[BRCobrança](api/BRCOBRANCA.md)** — Guia completo de integração com boletos
 - **[BRCobrança — Campos de Referência](api/BRCOBRANCA_CAMPOS_REFERENCIA.md)** — Campos por banco
 - **[Validação API Customizada](api/VALIDACAO_API_CUSTOMIZADA.md)** — Detalhes da validação
