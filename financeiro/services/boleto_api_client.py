@@ -448,6 +448,47 @@ class BoletoApiClient:
                     'status': str(data.get('status', ''))}
         return self._classificar_erro(resp, 'devolver_pix')
 
+    def consultar_conciliacao(self, inicio: str, fim: str, tenant_id: str,
+                              provider: str, bapi_token=None) -> dict:
+        """
+        GET /conciliacao — recebíveis liquidados no período segundo o banco
+        (BAPI-32). Retorna itens com cobranca_id/txid/valor/pago_em.
+        """
+        params = {'inicio': inicio, 'fim': fim,
+                  'tenant_id': tenant_id, 'provider': provider}
+        try:
+            resp = self._request('GET', '/conciliacao', params=params,
+                                 headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': str(exc)}
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+            except ValueError:
+                return {'sucesso': False, 'erro': 'Resposta não-JSON do Boleto-API'}
+            itens = data if isinstance(data, list) else (data.get('itens') or [])
+            return {'sucesso': True, 'itens': itens}
+        return self._classificar_erro(resp, 'consultar_conciliacao')
+
+    def consultar_extrato(self, inicio: str, fim: str, tenant_id: str,
+                          provider: str, bapi_token=None) -> dict:
+        """GET /extrato — lançamentos da conta no período (BAPI-32)."""
+        params = {'inicio': inicio, 'fim': fim,
+                  'tenant_id': tenant_id, 'provider': provider}
+        try:
+            resp = self._request('GET', '/extrato', params=params,
+                                 headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': str(exc)}
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+            except ValueError:
+                return {'sucesso': False, 'erro': 'Resposta não-JSON do Boleto-API'}
+            lancamentos = data if isinstance(data, list) else (data.get('lancamentos') or [])
+            return {'sucesso': True, 'lancamentos': lancamentos}
+        return self._classificar_erro(resp, 'consultar_extrato')
+
     def gerar_carne(
         self,
         tenant_id: str,
@@ -455,6 +496,7 @@ class BoletoApiClient:
         account_config: dict,
         bank: str,
         parcelas: list[dict],
+        bapi_token=None,
     ) -> dict:
         """
         POST /carne — registra N cobranças e devolve PDF de carnê + lista de CobrancaOut.
@@ -474,7 +516,8 @@ class BoletoApiClient:
             tenant_id, provider, len(parcelas),
         )
         try:
-            resp = self._request('POST', '/carne', json=payload)
+            resp = self._request('POST', '/carne', json=payload,
+                                 headers=self._headers(bapi_token))
         except requests.RequestException as exc:
             return {'sucesso': False, 'erro': str(exc)}
 

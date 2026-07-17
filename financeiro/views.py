@@ -9417,6 +9417,64 @@ def painel_conciliacao_boleto_api(request):
     return render(request, 'financeiro/conciliacao/painel_boleto_api.html', context)
 
 
+@login_required
+@require_POST
+def emitir_pix_parcela(request, parcela_id):
+    """
+    BAPI-14/15 — emite Pix avulso (2ª via / quitação) para a parcela via
+    Boleto-API: POST com `modalidade` = 'cobv' (com vencimento, default) ou
+    'cob' (imediato). Retorna txid + copia-e-cola.
+    """
+    imobs = list(_imobs_para_usuario(request.user).values_list('id', flat=True))
+    parcela = get_object_or_404(
+        Parcela, pk=parcela_id, contrato__imobiliaria_id__in=imobs)
+
+    modalidade = request.POST.get('modalidade', 'cobv')
+    if modalidade not in ('cobv', 'cob'):
+        return JsonResponse({'sucesso': False, 'erro': 'Modalidade inválida.'}, status=400)
+
+    r = parcela.emitir_pix_avulso(modalidade=modalidade)
+    status = 200 if r.get('sucesso') else 422
+    return JsonResponse(r, status=status)
+
+
+@login_required
+def relatorio_conciliacao_financeira(request):
+    """
+    BAPI-32 — relatório de conciliação financeira: cruza os recebíveis do
+    gateway (GET /conciliacao) com as parcelas liquidadas no sistema no
+    período, classificando conferidos / divergentes / pendências.
+    """
+    from datetime import datetime as _dt, timedelta as _td
+    from .services.boleto_api_conciliacao import conciliacao_financeira
+
+    imobs_qs = _imobs_para_usuario(request.user)
+    imob_id = request.GET.get('imobiliaria') or ''
+    imobiliaria = imobs_qs.filter(id=imob_id).first() if imob_id.isdigit() else None
+
+    hoje = timezone.localdate()
+    try:
+        inicio = _dt.strptime(request.GET.get('inicio', ''), '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        inicio = hoje - _td(days=30)
+    try:
+        fim = _dt.strptime(request.GET.get('fim', ''), '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        fim = hoje
+
+    resultado = None
+    if imobiliaria:
+        resultado = conciliacao_financeira(imobiliaria, inicio, fim)
+
+    return render(request, 'financeiro/conciliacao/relatorio_financeiro.html', {
+        'imobiliarias': imobs_qs,
+        'imobiliaria': imobiliaria,
+        'inicio': inicio,
+        'fim': fim,
+        'resultado': resultado,
+    })
+
+
 # =============================================================================
 # 34.5 P3 — Relatórios Agendados e Exportação para BI
 # =============================================================================
