@@ -467,23 +467,38 @@ def setup(request):
         }, status=500)
 
 
+def _bloqueia_dados_teste(request):
+    """
+    Ferramentas de dados de teste: liberadas apenas em DEBUG (dev/homologação)
+    ou para superuser/staff autenticado. Bloqueia acesso anônimo em produção
+    (evita popular/expor o banco). Retorna JsonResponse 403 quando bloqueia.
+    """
+    from django.conf import settings as _s
+    if getattr(_s, 'DEBUG', False):
+        return None
+    if request.user.is_authenticated and (request.user.is_superuser or request.user.is_staff):
+        return None
+    return JsonResponse({
+        'status': 'error',
+        'message': 'Disponível apenas em ambiente de teste ou para administradores.',
+    }, status=403)
+
+
 @require_http_methods(["GET", "POST"])
 def gerar_dados_teste(request):
     """
-    Endpoint para gerar dados de teste (ACESSÍVEL SEM LOGIN para ambiente de teste)
+    Endpoint para gerar dados de teste (só DEBUG ou superuser/staff — ver
+    _bloqueia_dados_teste).
 
     GET: Retorna status do sistema
     POST: Gera dados de teste
 
     Parâmetros POST (form-data ou JSON):
         limpar (bool): Se deve limpar dados antes (default: False)
-
-    Exemplo de uso:
-        curl -X POST http://localhost:8000/api/gerar-dados-teste/ -d "limpar=true"
-        curl -X POST http://localhost:8000/api/gerar-dados-teste/ -H "Content-Type: application/json" -d '{"limpar": true}'
     """
-    # NOTA: Endpoint liberado para facilitar setup em ambiente Render Free
-    # Em produção real, adicionar verificação de token ou IP
+    _bloq = _bloqueia_dados_teste(request)
+    if _bloq is not None:
+        return _bloq
     # Importar modelos adicionais
     from contratos.models import Contrato, IndiceReajuste
     from financeiro.models import Parcela
@@ -729,6 +744,9 @@ def gerar_boletos_teste(request):
     Parâmetros POST (JSON):
         banco (str): Banco para os boletos (001, 756, 237, 336 ou null para round-robin).
     """
+    _bloq = _bloqueia_dados_teste(request)
+    if _bloq is not None:
+        return _bloq
     if request.method == 'GET':
         return JsonResponse({'status': 'ok', 'geracao': _job_boletos_get()})
 

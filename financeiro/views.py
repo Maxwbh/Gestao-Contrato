@@ -7693,9 +7693,16 @@ def api_brcobranca_solicitar(request):
     return JsonResponse({'status': 'acordando', 'wait': wait})
 
 
+@login_required
 def api_contas_bancarias(request):
-    """API para listar contas bancárias. GET /api/contas-bancarias/"""
-    qs = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
+    """API para listar contas bancárias. GET /api/contas-bancarias/
+
+    Requer login e é limitada às imobiliárias do usuário (dados sensíveis:
+    agência/conta/convênio).
+    """
+    imobs = _imobs_para_usuario(request.user)
+    qs = (ContaBancaria.objects.filter(ativo=True, imobiliaria__in=imobs)
+          .select_related('imobiliaria'))
 
     if request.GET.get('imobiliaria_id'):
         qs = qs.filter(imobiliaria_id=request.GET['imobiliaria_id'])
