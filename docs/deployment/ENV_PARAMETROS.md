@@ -168,6 +168,8 @@ A tabela abaixo documenta todos os parâmetros com seus grupos, tipos e defaults
 |-------|------|--------|-----------|
 | `CHATBOT_IA_ATIVO` | bool | `True` | Liga/desliga o chatbot com IA. Quando `False`, o sistema usa apenas o despachante de regras sem nenhuma chamada de API |
 | `CHATBOT_MODELO` | str | `claude-haiku-4-5-20251001` | Modelo Claude utilizado em ambos os estágios do chatbot (classificador de intent e humanizador de resposta) |
+| `IA_TIERS_CLAUDE` | str | `claude-haiku-4-5-20251001,claude-sonnet-5,claude-opus-4-8` | Cascade de modelos Claude da importação de PDF (CSV, ordem barato→caro). Um `WorkflowIA` ativo no Admin tem precedência. IDs vigentes na doc da API; `claude-sonnet-4-6` é legado (migrado automaticamente para `claude-sonnet-5`) |
+| `IA_GEMINI_MODELO` | str | `gemini-2.0-flash` | Modelo Google Gemini do Tier 0 gratuito da importação de PDF |
 | `CHATBOT_MAX_TOKENS_POR_RESPOSTA` | int | `300` | Limite de tokens gerados por resposta do chatbot. Controla custo e comprimento das mensagens enviadas ao comprador |
 | `CHATBOT_SYSTEM_PROMPT_CLASSIFIER` | str | *(prompt interno)* | System prompt completo do classificador de intent (estágio `tool_use`). O valor padrão é gerenciado pelo código; só altere para customizar o comportamento de classificação |
 | `CHATBOT_SYSTEM_PROMPT` | str | *(prompt interno)* | System prompt completo do humanizador de resposta. O valor padrão é gerenciado pelo código; só altere para ajustar tom ou formato das respostas |

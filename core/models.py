@@ -1851,8 +1851,10 @@ class WorkflowIATier(models.Model):
 
     MODELO_CHOICES = [
         ('claude-haiku-4-5-20251001', 'Claude Haiku 4.5'),
-        ('claude-sonnet-4-6',         'Claude Sonnet 4.6'),
+        ('claude-sonnet-5',           'Claude Sonnet 5'),
         ('claude-opus-4-8',           'Claude Opus 4.8'),
+        # Legado: ainda disponível na API, mas a doc recomenda migrar.
+        ('claude-sonnet-4-6',         'Claude Sonnet 4.6 (legado)'),
     ]
 
     workflow   = models.ForeignKey(WorkflowIA, on_delete=models.CASCADE, related_name='tiers')

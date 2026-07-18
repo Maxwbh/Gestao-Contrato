@@ -140,6 +140,14 @@ PARAMETROS = [
      'H-08: prompt de sistema para humanizador. Deixe vazio para usar o padrão embutido.'),
     ('CHATBOT_SYSTEM_PROMPT_CLASSIFIER', 'chatbot_ia', 'str', '',
      'H-08: prompt para classificador de intent. Deixe vazio para usar o padrão embutido.'),
+
+    # ── IA — modelos configuráveis (importação de PDF) ───────────────────────
+    ('IA_TIERS_CLAUDE', 'chatbot_ia', 'str',
+     'claude-haiku-4-5-20251001,claude-sonnet-5,claude-opus-4-8',
+     'Cascade de modelos Claude da importação de PDF (CSV, ordem barato→caro). '
+     'Um WorkflowIA ativo no Admin tem precedência sobre este parâmetro.'),
+    ('IA_GEMINI_MODELO', 'chatbot_ia', 'str', 'gemini-2.0-flash',
+     'Modelo Google Gemini do Tier 0 gratuito da importação de PDF.'),
 ]
 
 

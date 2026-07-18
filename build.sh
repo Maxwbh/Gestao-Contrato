@@ -15,16 +15,37 @@ pip install -r requirements.txt
 # ============================================================================
 echo "==> Gravando .build_info (versão)..."
 python - <<'BUILDINFOEOF'
-import json, subprocess, pathlib
+import json, os, subprocess, pathlib
 def g(*a):
     try:
         return subprocess.run(['git', *a], capture_output=True, text=True, timeout=5).stdout.strip()
     except Exception:
         return ''
+# Versão oficial só na main: deploy de outra branch (ex.: hml) é marcado com
+# o canal, e a versão exibida ganha sufixo (3.2.N-hml). Render expõe a branch
+# em RENDER_GIT_BRANCH; fallback para o git local.
+branch = (os.environ.get('RENDER_GIT_BRANCH')
+          or g('rev-parse', '--abbrev-ref', 'HEAD') or '')
+canal = 'oficial' if branch in ('master', 'main') else 'hml'
+# PATCH conta só commits de FONTE: commit que toca apenas documentação/infra
+# não altera a versão. Manter esta lista em sincronia com core/version.py
+# (_EXCLUIR_NAO_FONTE) e com o NONCODE do ci.yml.
+excluir = [
+    'docs', '*.md', 'LICENSE', 'VERSION', '.gitignore', '.dockerignore',
+    '.editorconfig', '.gitattributes', '.env.example', '.githooks', '.github',
+    'static', 'staticfiles', 'media', 'render.yaml', 'Dockerfile*',
+    'docker-compose.yml', 'docker-entrypoint.sh', 'build.sh',
+    '*.png', '*.jpg', '*.jpeg', '*.gif', '*.svg', '*.ico', '*.webp', '*.pdf',
+    '*.woff', '*.woff2', '*.ttf', '*.eot',
+]
+patch = g('rev-list', '--count', 'HEAD', '--', '.',
+          *[f':(exclude){p}' for p in excluir])
 info = {
-    'patch': g('rev-list', '--count', 'HEAD') or '0',
+    'patch': patch or g('rev-list', '--count', 'HEAD') or '0',
     'commit': g('rev-parse', '--short', 'HEAD') or 'unknown',
     'date': (g('log', '-1', '--format=%ci') or '')[:19],
+    'branch': branch,
+    'canal': canal,
 }
 pathlib.Path('.build_info').write_text(json.dumps(info))
 print('    .build_info =', info)
