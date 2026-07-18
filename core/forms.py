@@ -1159,12 +1159,24 @@ class AcessoUsuarioForm(forms.ModelForm):
             'imobiliaria': forms.Select(attrs={'class': 'form-select'}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, cadastrador=None, **kwargs):
         super().__init__(*args, **kwargs)
         User = get_user_model()
+        self.cadastrador = cadastrador
         self.fields['usuario'].queryset = User.objects.filter(is_active=True).order_by('username')
-        self.fields['contabilidade'].queryset = Contabilidade.objects.filter(ativo=True).order_by('nome')
-        self.fields['imobiliaria'].queryset = Imobiliaria.objects.filter(ativo=True).order_by('nome')
+        # HU-28 RN-2: um gestor só concede acesso ao que ele mesmo acessa.
+        # Superuser/staff seguem vendo tudo (usuario_tem_permissao_total).
+        from .models import (usuario_tem_permissao_total,
+                             get_contabilidades_usuario, get_imobiliarias_usuario)
+        if cadastrador is not None and not usuario_tem_permissao_total(cadastrador):
+            self._conts = get_contabilidades_usuario(cadastrador)
+            self._imobs = get_imobiliarias_usuario(cadastrador)
+            self.fields['contabilidade'].queryset = self._conts.order_by('nome')
+            self.fields['imobiliaria'].queryset = self._imobs.order_by('nome')
+        else:
+            self._conts = self._imobs = None
+            self.fields['contabilidade'].queryset = Contabilidade.objects.filter(ativo=True).order_by('nome')
+            self.fields['imobiliaria'].queryset = Imobiliaria.objects.filter(ativo=True).order_by('nome')
 
         for field_name, field in self.fields.items():
             if 'class' not in field.widget.attrs:
@@ -1216,3 +1228,135 @@ class AcessoUsuarioForm(forms.ModelForm):
                 </div>
             ''')
         )
+
+    def clean(self):
+        cleaned = super().clean()
+        # RN-2 (defesa em profundidade): mesmo com a UI limitada, revalida o
+        # escopo no servidor — não confia no que veio no POST.
+        if self._conts is not None:
+            cont = cleaned.get('contabilidade')
+            imob = cleaned.get('imobiliaria')
+            if cont is not None and not self._conts.filter(pk=cont.pk).exists():
+                self.add_error('contabilidade', 'Fora do seu escopo de acesso.')
+            if imob is not None and not self._imobs.filter(pk=imob.pk).exists():
+                self.add_error('imobiliaria', 'Fora do seu escopo de acesso.')
+        return cleaned
+
+
+# =============================================================================
+# HU-28 — Cadastro de Usuário do Sistema (com acessos, no escopo do gestor)
+# =============================================================================
+
+class NovoUsuarioForm(forms.Form):
+    """
+    Cria um usuário interno + seus acessos em um único formulário.
+
+    O escopo (contabilidades/imobiliárias disponíveis) e a validação de
+    concessão são limitados ao `cadastrador` (RN-2). Credencial: por padrão a
+    senha é definida aqui (troca obrigatória no 1º login); com `enviar_convite`
+    o usuário define a própria senha por link de e-mail.
+    """
+    first_name = forms.CharField(label='Nome', max_length=30)
+    last_name = forms.CharField(label='Sobrenome', max_length=30)
+    email = forms.EmailField(label='E-mail (login)')
+    is_admin = forms.BooleanField(label='Administrador', required=False)
+    enviar_convite = forms.BooleanField(label='Enviar convite por e-mail', required=False)
+    senha1 = forms.CharField(label='Senha inicial', required=False,
+                             widget=forms.PasswordInput, strip=False)
+    senha2 = forms.CharField(label='Confirmar senha', required=False,
+                             widget=forms.PasswordInput, strip=False)
+
+    def __init__(self, *args, cadastrador=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cadastrador = cadastrador
+        # Escopo do cadastrador: (contabilidade, [imobiliárias]) — RN-2.
+        from .models import get_contabilidades_usuario, get_imobiliarias_usuario
+        self.escopo = []
+        self._imob_ids = set()
+        if cadastrador is not None:
+            for cont in get_contabilidades_usuario(cadastrador).order_by('nome'):
+                imobs = list(get_imobiliarias_usuario(cadastrador, cont).order_by('nome'))
+                if imobs:
+                    self.escopo.append((cont, imobs))
+                for im in imobs:
+                    self._imob_ids.add(im.id)
+                    self.fields[f'imob_{im.id}'] = forms.BooleanField(required=False)
+                    self.fields[f'edit_{im.id}'] = forms.BooleanField(required=False, initial=True)
+                    self.fields[f'excl_{im.id}'] = forms.BooleanField(required=False)
+        for name, field in self.fields.items():
+            w = field.widget
+            if isinstance(w, forms.CheckboxInput):
+                w.attrs.setdefault('class', 'form-check-input')
+            else:
+                w.attrs.setdefault('class', 'form-control')
+
+    def clean_email(self):
+        email = (self.cleaned_data.get('email') or '').strip().lower()
+        if get_user_model().objects.filter(email__iexact=email).exists() or \
+           get_user_model().objects.filter(username__iexact=email).exists():
+            raise ValidationError('Já existe um usuário com este e-mail.')
+        return email
+
+    def clean(self):
+        cleaned = super().clean()
+        convite = cleaned.get('enviar_convite')
+
+        # Credencial: senha obrigatória e válida quando NÃO é convite.
+        if not convite:
+            s1, s2 = cleaned.get('senha1'), cleaned.get('senha2')
+            if not s1:
+                self.add_error('senha1', 'Defina a senha inicial ou marque "Enviar convite por e-mail".')
+            elif s1 != s2:
+                self.add_error('senha2', 'As senhas não conferem.')
+            else:
+                from django.contrib.auth.password_validation import validate_password
+                try:
+                    validate_password(s1)
+                except ValidationError as e:
+                    self.add_error('senha1', e)
+
+        # Acessos selecionados — dentro do escopo (RN-2), ao menos 1 (RN-3).
+        self.acessos = []
+        for im_id in self._imob_ids:
+            if cleaned.get(f'imob_{im_id}'):
+                self.acessos.append({
+                    'imobiliaria_id': im_id,
+                    'pode_editar': bool(cleaned.get(f'edit_{im_id}')),
+                    'pode_excluir': bool(cleaned.get(f'excl_{im_id}')),
+                })
+        if not self.acessos:
+            raise ValidationError('Selecione pelo menos uma imobiliária de acesso.')
+        return cleaned
+
+    def save(self):
+        """Cria usuário + perfil + acessos atomicamente. Retorna o User."""
+        from django.db import transaction
+        from .models import (PerfilUsuario, AcessoUsuario, Imobiliaria)
+        User = get_user_model()
+        cd = self.cleaned_data
+        email = cd['email']
+
+        with transaction.atomic():
+            user = User(username=email, email=email,
+                        first_name=cd['first_name'], last_name=cd['last_name'])
+            if cd.get('enviar_convite'):
+                user.set_unusable_password()
+            else:
+                user.set_password(cd['senha1'])
+            user.save()  # signal cria o PerfilUsuario
+
+            perfil = user.perfil
+            perfil.papel = PerfilUsuario.PAPEL_ADMIN if cd.get('is_admin') else PerfilUsuario.PAPEL_COMUM
+            # Senha inicial definida pelo gestor ⇒ troca obrigatória no 1º acesso.
+            perfil.deve_trocar_senha = not cd.get('enviar_convite')
+            perfil.save(update_fields=['papel', 'deve_trocar_senha'])
+
+            for ac in self.acessos:
+                # Defesa em profundidade (RN-2): revalida escopo no servidor.
+                if ac['imobiliaria_id'] not in self._imob_ids:
+                    continue
+                imob = Imobiliaria.objects.get(pk=ac['imobiliaria_id'])
+                AcessoUsuario.objects.create(
+                    usuario=user, contabilidade=imob.contabilidade, imobiliaria=imob,
+                    pode_editar=ac['pode_editar'], pode_excluir=ac['pode_excluir'])
+        return user

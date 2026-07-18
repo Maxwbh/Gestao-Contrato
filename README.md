@@ -86,6 +86,7 @@ O isolamento por tenant (`get_imobiliarias_usuario()`) garante que cada usuário
 - Cadastro de Contabilidades, Imobiliárias/Beneficiários, Imóveis e Compradores (PF/PJ)
 - Contas bancárias por imobiliária com **provedor de cobrança selecionável** (BRCobrança/CNAB, C6, Sicoob)
 - CNPJ alfanumérico 2026 (IN RFB 2229/2024)
+- **Usuários do sistema** (HU-28): cadastro **restrito a administradores**, com perfil (Administrador × comum), credencial por **senha inicial** (troca obrigatória no 1º acesso) ou **convite por e-mail**, e acessos multi-tenant **limitados ao escopo do cadastrador**. Comprador é separado (entra só pelo portal). Ver [Manual de Usuários](docs/manual_usuarios.md)
 
 ### 2. Contratos
 - Parcelas geradas automaticamente; dia de vencimento e nº de parcelas configuráveis
@@ -141,6 +142,10 @@ Upload de PDF/imagens → extração estruturada com nível de confiança por ca
 | Wizard de Contrato (4 etapas) | Painel de Conciliação Boleto-API |
 |---|---|
 | ![Wizard de contrato — etapa 4 com projeção de parcelas](docs/screenshots/wizard-contrato.png) | ![Painel de conciliação](docs/screenshots/painel-conciliacao.png) |
+
+| Cadastro de Usuário do Sistema | Gestão de Usuários |
+|---|---|
+| ![Cadastro de usuário — perfil, credencial e acessos por escopo](docs/screenshots/cadastro-usuario.png) | ![Lista de usuários com perfil e situação](docs/screenshots/usuarios-lista.png) |
 
 ---
 

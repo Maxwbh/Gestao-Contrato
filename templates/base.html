@@ -62,6 +62,9 @@
         <li><a href="{% url 'core:listar_imobiliarias' %}"><i class="fas fa-building left"></i> Imobiliárias</a></li>
         <li><a href="{% url 'core:listar_imoveis' %}"><i class="fas fa-home left"></i> Imóveis</a></li>
         <li><a href="{% url 'core:listar_compradores' %}"><i class="fas fa-user-tie left"></i> Compradores</a></li>
+        {% if user.is_staff or user.is_superuser or user.perfil.is_admin %}
+        <li><a href="{% url 'core:listar_usuarios' %}"><i class="fas fa-users left"></i> Usuários</a></li>
+        {% endif %}
         <li><div class="divider"></div></li>
         <!-- Notificações -->
         <li><span class="subheader menu-section-label">Notificações</span></li>
@@ -213,6 +216,9 @@
         <li><a href="{% url 'core:listar_imoveis' %}"><i class="fas fa-home"></i> Imóveis</a></li>
         <li><span class="dropdown-header-item"><i class="fas fa-users"></i> Pessoas</span></li>
         <li><a href="{% url 'core:listar_compradores' %}"><i class="fas fa-user-tie"></i> Compradores</a></li>
+        {% if user.is_staff or user.is_superuser or user.perfil.is_admin %}
+        <li><a href="{% url 'core:listar_usuarios' %}"><i class="fas fa-user-shield"></i> Usuários</a></li>
+        {% endif %}
     </ul>
 
     <ul id="dd-notificacoes" class="dropdown-content app-dropdown">

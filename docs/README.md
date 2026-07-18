@@ -19,6 +19,7 @@ Desenvolvido por **Maxwell da Silva Oliveira** (maxwbh@gmail.com) — M&S do Bra
 - **[Manual do Contador (Administrador)](manual_contador.md)** — Acesso completo: contratos, financeiro, relatórios, administração
 - **[Manual da Imobiliária / Vendedor](manual_imobiliaria.md)** — Acesso filtrado por imobiliária: contratos, boletos, reajustes
 - **[Manual do Comprador](manual_comprador.md)** — Portal do comprador: boletos, histórico, simulador
+- **[Manual de Usuários (Administrador)](manual_usuarios.md)** — Cadastro e gestão de usuários do sistema (perfil, credencial, acessos)
 
 ### Deploy e Infraestrutura
 - **[Guia Completo de Deploy](deployment/DEPLOY.md)** — Render, Docker, VPS

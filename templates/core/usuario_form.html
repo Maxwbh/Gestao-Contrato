@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+{% block title %}Novo Usuário — Gestão de Contratos{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:920px">
+  <div class="d-flex align-items-start gap-3 mb-3">
+    <div>
+      <h3 class="mb-1"><i class="fas fa-users me-2 text-primary"></i>Novo Usuário do Sistema</h3>
+      <p class="text-muted mb-1">Cadastre um funcionário e conceda os acessos — dentro do seu escopo.</p>
+      <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+        <i class="fas fa-shield-alt me-1"></i>Somente administradores cadastram usuários</span>
+    </div>
+  </div>
+
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <!-- Seção 1: Dados -->
+    <div class="card mb-3">
+      <div class="card-header"><strong>1 · Dados do usuário</strong></div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Nome <span class="text-danger">*</span></label>
+            {{ form.first_name }}
+            {% for e in form.first_name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Sobrenome <span class="text-danger">*</span></label>
+            {{ form.last_name }}
+            {% for e in form.last_name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="col-12">
+            <label class="form-label">E-mail <span class="text-danger">*</span>
+              <span class="text-muted fw-normal">— será o login</span></label>
+            {{ form.email }}
+            {% for e in form.email.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Perfil de acesso <span class="text-danger">*</span></label>
+            <div class="form-check form-switch">
+              {{ form.is_admin }}
+              <label class="form-check-label" for="{{ form.is_admin.id_for_label }}">Administrador</label>
+            </div>
+            <div class="form-text">Desligado = usuário comum (só opera). Ligado = pode cadastrar e gerenciar usuários, no próprio escopo.</div>
+          </div>
+
+          <!-- Credencial -->
+          <div class="col-12">
+            <label class="form-label">Credencial de acesso <span class="text-danger">*</span></label>
+            <div class="border rounded p-3 bg-light">
+              <div class="row g-3" id="senha-fields">
+                <div class="col-md-6">
+                  <label class="form-label small">Senha inicial</label>
+                  {{ form.senha1 }}
+                  {% for e in form.senha1.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small">Confirmar senha</label>
+                  {{ form.senha2 }}
+                  {% for e in form.senha2.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                </div>
+              </div>
+              <div class="small text-warning mt-2"><i class="fas fa-shield-alt me-1"></i>Troca obrigatória no primeiro acesso.</div>
+              <div class="form-check form-switch mt-3 pt-3 border-top">
+                {{ form.enviar_convite }}
+                <label class="form-check-label" for="{{ form.enviar_convite.id_for_label }}">
+                  Enviar convite por e-mail em vez de senha</label>
+                <div class="form-text">Deixe desligado para cadastrar já com a senha inicial acima.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seção 2: Acessos -->
+    <div class="card mb-3">
+      <div class="card-header"><strong>2 · Acessos</strong>
+        <span class="text-muted small ms-2">contabilidades × imobiliárias</span></div>
+      <div class="card-body">
+        <div class="alert alert-light border small">
+          <i class="fas fa-shield-alt text-primary me-1"></i>
+          Só aparecem as contabilidades e imobiliárias a que <strong>você</strong> tem acesso.
+          As permissões (<strong>Editar</strong> / <strong>Excluir</strong>) valem por imobiliária.
+        </div>
+
+        {% for cont, imobs in form.escopo %}
+        <div class="border rounded mb-3">
+          <div class="px-3 py-2 bg-light border-bottom fw-semibold">
+            <i class="fas fa-university text-muted me-1"></i>{{ cont.nome }}</div>
+          {% for im in imobs %}
+          <div class="d-flex align-items-center gap-3 px-3 py-2 border-bottom">
+            <div class="form-check flex-grow-1 mb-0">
+              <input type="checkbox" class="form-check-input imob-sel" name="imob_{{ im.id }}" id="imob_{{ im.id }}">
+              <label class="form-check-label" for="imob_{{ im.id }}">
+                <i class="fas fa-home text-muted me-1"></i>{{ im.nome }}</label>
+            </div>
+            <div class="form-check mb-0">
+              <input type="checkbox" class="form-check-input" name="edit_{{ im.id }}" id="edit_{{ im.id }}" checked>
+              <label class="form-check-label small" for="edit_{{ im.id }}">Editar</label>
+            </div>
+            <div class="form-check mb-0">
+              <input type="checkbox" class="form-check-input" name="excl_{{ im.id }}" id="excl_{{ im.id }}">
+              <label class="form-check-label small" for="excl_{{ im.id }}">Excluir</label>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% empty %}
+        <div class="text-muted">Você não tem imobiliárias no seu escopo para conceder acesso.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-end gap-2">
+      <a href="{% url 'core:listar_usuarios' %}" class="btn btn-outline-secondary">Cancelar</a>
+      <button type="submit" class="btn btn-primary"><i class="fas fa-check me-1"></i>Criar usuário</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function(){
+  // convite ⇄ senha
+  var conv = document.getElementById('{{ form.enviar_convite.id_for_label }}');
+  var box = document.getElementById('senha-fields');
+  function toggle(){ box.style.opacity = conv.checked ? .4 : 1;
+    box.querySelectorAll('input').forEach(function(i){ i.disabled = conv.checked; }); }
+  if(conv){ conv.addEventListener('change', toggle); toggle(); }
+  // habilita permissões só quando a imobiliária está marcada
+  document.querySelectorAll('.imob-sel').forEach(function(cb){
+    function sync(){ var row=cb.closest('.d-flex');
+      row.querySelectorAll('input[name^=edit_],input[name^=excl_]').forEach(function(p){p.disabled=!cb.checked;}); }
+    cb.addEventListener('change', sync); sync();
+  });
+})();
+</script>
+{% endblock %}
