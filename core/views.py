@@ -2578,7 +2578,8 @@ def ia_tokens_config(request):
     precos_map = {
         'gemini-2.0-flash':          (0.0,    0.0),
         'claude-haiku-4-5-20251001': (1.00,   5.00),
-        'claude-sonnet-4-6':         (3.00,  15.00),
+        'claude-sonnet-5':           (3.00,  15.00),
+        'claude-sonnet-4-6':         (3.00,  15.00),  # legado
         'claude-opus-4-8':           (5.00,  25.00),
     }
 
@@ -2586,6 +2587,7 @@ def ia_tokens_config(request):
     estilo_map = {
         'gemini-2.0-flash':          ('card-gemini', 'badge-free',  'GRATUITO',      'fas fa-leaf'),
         'claude-haiku-4-5-20251001': ('card-haiku',  'badge-cheap', 'ECONÔMICO',     'fas fa-bolt'),
+        'claude-sonnet-5':           ('card-sonnet', 'badge-mid',   'INTERMEDIÁRIO', 'fas fa-star'),
         'claude-sonnet-4-6':         ('card-sonnet', 'badge-mid',   'INTERMEDIÁRIO', 'fas fa-star'),
         'claude-opus-4-8':           ('card-opus',   'badge-prem',  'PREMIUM',       'fas fa-crown'),
     }

@@ -4,12 +4,17 @@
 
 **Sistema Django para gestão de contratos de venda de imóveis** — parcelas, reajustes automáticos, cobrança bancária (CNAB + cobrança registrada), notificações multicanal, portal do comprador e relatórios/BI.
 
+[![CI](https://github.com/Maxwbh/Gestao-Contrato/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Maxwbh/Gestao-Contrato/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
 ![Django](https://img.shields.io/badge/Django-6.0-092E20?logo=django&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-4169E1?logo=postgresql&logoColor=white)
 ![Testes](https://img.shields.io/badge/testes-1842-2ea44f)
 ![Versão](https://img.shields.io/badge/vers%C3%A3o-3.2-0058be)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-Proprietary-lightgrey)
+
+<img src="docs/screenshots/painel-conciliacao.png" alt="Painel de Conciliação da Cobrança Registrada (Boleto-API)" width="85%">
+
+*Painel de Conciliação da cobrança registrada — % conciliado, origem da baixa e Pix Automático*
 
 </div>
 
@@ -128,6 +133,14 @@ Endpoints `POST /api/tasks/...` autenticados com `X-Task-Token`: relatório sema
 
 ### 9. Importação de Contratos via IA
 Upload de PDF/imagens → extração estruturada com nível de confiança por campo → match de entidades existentes → **revisão humana** → criação atômica e idempotente.
+
+---
+
+## 📸 Telas
+
+| Wizard de Contrato (4 etapas) | Painel de Conciliação Boleto-API |
+|---|---|
+| ![Wizard de contrato — etapa 4 com projeção de parcelas](docs/screenshots/wizard-contrato.png) | ![Painel de conciliação](docs/screenshots/painel-conciliacao.png) |
 
 ---
 
@@ -254,6 +267,17 @@ VAPID_CLAIMS_EMAIL=admin@empresa.com
 ---
 
 ## 🚀 Deploy no Render
+
+> **Fluxo de branches e versão:**
+> 1. **Qualquer branch** abre PR para **`hml`** (homologação — CI valida; o
+>    deploy de `hml` exibe a versão com sufixo `-hml`). O CI bloqueia PR
+>    para `master` que não parta de `hml`.
+> 2. A promoção **`hml` → `master`** é feita por **squash (1 commit)** e é o
+>    que gera a **versão oficial** (`MAJOR.MINOR.PATCH`, bakeada pelo
+>    `build.sh` no deploy da main).
+> 3. Na main, o **PATCH só avança quando o commit altera código-fonte** —
+>    commit apenas de documentação/infra **não mexe na versão** (lista de
+>    caminhos em `core/version.py::_EXCLUIR_NAO_FONTE`).
 
 > **Plano Gratuito** — sem Celery. Tarefas agendadas via **cron-job.org** (HTTP POST autenticado).
 >
