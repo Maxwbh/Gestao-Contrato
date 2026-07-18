@@ -77,8 +77,12 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.TrocaSenhaObrigatoriaMiddleware',  # HU-28: senha inicial → troca no 1º acesso
     'core.middleware.AntiEnumeracaoMiddleware',  # D-01: anti-enumeration
 ]
+
+# HU-28.4: auto-registro aberto desativado — só administradores cadastram usuários.
+PERMITIR_AUTO_REGISTRO = config('PERMITIR_AUTO_REGISTRO', default=False, cast=bool)
 
 # D-03: Security headers — sempre ativos (não apenas em produção)
 SECURE_CONTENT_TYPE_NOSNIFF = True

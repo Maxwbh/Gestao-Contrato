@@ -1351,7 +1351,7 @@ class AcessoUsuario(TimeStampedModel):
         return f"{self.usuario.username} → {self.contabilidade.nome} → {self.imobiliaria.nome}"
 
     def clean(self):
-        """Valida que a imobiliária pertence à contabilidade"""
+        """Valida imobiliária↔contabilidade e a exclusividade Comprador × Usuário."""
         from django.core.exceptions import ValidationError
 
         if self.imobiliaria and self.contabilidade:
@@ -1359,10 +1359,55 @@ class AcessoUsuario(TimeStampedModel):
                 raise ValidationError({
                     'imobiliaria': 'A imobiliária deve pertencer à contabilidade selecionada'
                 })
+        # HU-28 RN-5: quem é comprador do portal não pode ser usuário interno.
+        if self.usuario_id and hasattr(self.usuario, 'acesso_comprador'):
+            raise ValidationError(
+                'Este usuário é um comprador do portal e não pode receber acesso interno.')
 
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class PerfilUsuario(TimeStampedModel):
+    """
+    Perfil estendido do usuário interno (HU-28).
+
+    - `papel`: ADMIN (pode cadastrar/gerenciar usuários no próprio escopo) ou
+      COMUM (só opera os módulos a que tem acesso).
+    - `deve_trocar_senha`: quando o usuário foi criado com senha inicial pelo
+      gestor, obriga a troca no primeiro acesso.
+
+    Papel é independente das permissões por imobiliária (`AcessoUsuario`):
+    `papel` diz *se administra usuários*; `pode_editar`/`pode_excluir` dizem
+    *o que faz nos dados de cada imobiliária*.
+    """
+    PAPEL_ADMIN = 'ADMIN'
+    PAPEL_COMUM = 'COMUM'
+    PAPEL_CHOICES = [
+        (PAPEL_ADMIN, 'Administrador'),
+        (PAPEL_COMUM, 'Usuário comum'),
+    ]
+
+    usuario = models.OneToOneField(
+        'auth.User', on_delete=models.CASCADE, related_name='perfil',
+        verbose_name='Usuário')
+    papel = models.CharField(
+        max_length=6, choices=PAPEL_CHOICES, default=PAPEL_COMUM,
+        verbose_name='Perfil de acesso')
+    deve_trocar_senha = models.BooleanField(
+        default=False, verbose_name='Deve trocar senha no próximo acesso')
+
+    class Meta:
+        verbose_name = 'Perfil de Usuário'
+        verbose_name_plural = 'Perfis de Usuários'
+
+    def __str__(self):
+        return f'{self.usuario.get_username()} — {self.get_papel_display()}'
+
+    @property
+    def is_admin(self) -> bool:
+        return self.papel == self.PAPEL_ADMIN
 
 
 # =============================================================================
@@ -1377,6 +1422,26 @@ def usuario_tem_permissao_total(user):
     if not user.is_authenticated:
         return False
     return user.is_superuser or user.is_staff
+
+
+def pode_gerenciar_usuarios(user) -> bool:
+    """
+    HU-28 RN-1: só administradores cadastram/gerenciam usuários — perfil ADMIN
+    ou permissão total (superuser/staff). O escopo do que ele concede continua
+    limitado às suas próprias contabilidades/imobiliárias (RN-2).
+    """
+    if not getattr(user, 'is_authenticated', False):
+        return False
+    if usuario_tem_permissao_total(user):
+        return True
+    perfil = getattr(user, 'perfil', None)
+    return bool(perfil and perfil.papel == PerfilUsuario.PAPEL_ADMIN)
+
+
+def usuario_deve_trocar_senha(user) -> bool:
+    """True se o usuário tem perfil com o flag de troca obrigatória ligado."""
+    perfil = getattr(user, 'perfil', None)
+    return bool(perfil and perfil.deve_trocar_senha)
 
 
 def get_contabilidades_usuario(user):
@@ -1652,6 +1717,10 @@ class LogAuditoria(models.Model):
         ('EXPORTACAO',          'Exportação de relatório'),
         ('BLOQUEIO_CREDITO',    'Bloqueio de crédito ativado'),
         ('DESBLOQUEIO_CREDITO', 'Bloqueio de crédito removido'),
+        ('USUARIO_CRIADO',      'Usuário criado'),
+        ('USUARIO_DESATIVADO',  'Usuário desativado'),
+        ('ACESSO_CONCEDIDO',    'Acesso concedido'),
+        ('ACESSO_NEGADO_ESCOPO', 'Acesso negado (fora do escopo)'),
     ]
 
     usuario = models.ForeignKey(

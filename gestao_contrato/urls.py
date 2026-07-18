@@ -13,6 +13,9 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, Sp
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include('accounts.urls')),
+    # HU-28: fluxo de definição/reset de senha (convite por e-mail e "esqueci a senha").
+    # Depois de accounts.urls para não sobrescrever accounts:login/logout.
+    path('accounts/', include('django.contrib.auth.urls')),
     path('', include('core.urls')),
     path('contratos/', include('contratos.urls')),
     path('financeiro/', include('financeiro.urls')),

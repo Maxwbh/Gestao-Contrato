@@ -47,6 +47,7 @@
 | [HU-25](HU-25.md) | `HU-25.md` | Hub "Cobrança do Mês" — assistente de ciclo mensal (passo a passo) | `financeiro` | ✅ |
 | [HU-26](HU-26.md) | `HU-26.md` | Painel de Conciliação & Saúde da Cobrança | `financeiro` | ✅ |
 | [HU-27](HU-27.md) | `HU-27.md` | Reorganização do Menu (navegação orientada à rotina da Contadora) | `core` (base.html) | ✅ |
+| [HU-28](HU-28.md) | `HU-28.md` | Cadastro e Gestão de Usuários do Sistema (Comprador × Usuário Interno) | `accounts` · `core` (AcessoUsuario) · `portal_comprador` | ⬜ |
 
 ---
 
