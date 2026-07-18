@@ -14,8 +14,8 @@ from django.core.management import call_command
 from django.db import connection
 from django.contrib.auth import get_user_model
 from django.db.models import Count, Sum, Q
-from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from django.urls import reverse_lazy
+from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
+from django.urls import reverse_lazy, reverse
 from django.contrib import messages
 from datetime import datetime, timedelta
 from django.utils import timezone
@@ -26,8 +26,10 @@ from .models import (
     get_contabilidades_usuario, get_imobiliarias_usuario,
     usuario_tem_acesso_imobiliaria, usuario_tem_acesso_contabilidade,
     usuario_tem_permissao_total, registrar_auditoria, LogAuditoria,
+    PerfilUsuario, pode_gerenciar_usuarios,
 )
-from .forms import ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm, AcessoUsuarioForm
+from .forms import (ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm,
+                    AcessoUsuarioForm, NovoUsuarioForm)
 from django.core.cache import cache
 import io
 import json
@@ -1861,7 +1863,131 @@ def api_listar_bancos(request):
 # CRUD VIEWS - ACESSO USUÁRIO
 # =============================================================================
 
-class AcessoUsuarioListView(LoginRequiredMixin, PaginacaoMixin, ListView):
+class GerenciaUsuariosMixin(LoginRequiredMixin):
+    """
+    HU-28 RN-1: só administradores (perfil ADMIN ou superuser/staff) acessam a
+    gestão de usuários e acessos. Não-admin autenticado → 403 + auditoria.
+    """
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and not pode_gerenciar_usuarios(request.user):
+            registrar_auditoria(request, 'ACESSO_NEGADO_ESCOPO', entidade='GestaoUsuarios',
+                                descricao=f'Tentativa de acessar {request.path} sem perfil admin')
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied('Apenas administradores podem gerenciar usuários.')
+        return super().dispatch(request, *args, **kwargs)
+
+
+class UsuarioListView(GerenciaUsuariosMixin, PaginacaoMixin, ListView):
+    """Lista os usuários internos do escopo do administrador (HU-28.6)."""
+    template_name = 'core/usuario_list.html'
+    context_object_name = 'usuarios'
+    paginate_by = 25
+
+    def get_queryset(self):
+        User = get_user_model()
+        qs = User.objects.select_related('perfil').order_by('is_active', 'first_name', 'username')
+        # Só usuários internos (exclui compradores do portal).
+        qs = qs.filter(acesso_comprador__isnull=True)
+        if not usuario_tem_permissao_total(self.request.user):
+            # Escopo: usuários que têm acesso a alguma imobiliária do gestor.
+            imob_ids = list(get_imobiliarias_usuario(self.request.user).values_list('id', flat=True))
+            qs = qs.filter(acessos__imobiliaria_id__in=imob_ids, acessos__ativo=True).distinct()
+        search = self.request.GET.get('search')
+        if search:
+            qs = qs.filter(Q(first_name__icontains=search) | Q(last_name__icontains=search) |
+                           Q(email__icontains=search) | Q(username__icontains=search))
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['search'] = self.request.GET.get('search', '')
+        return ctx
+
+
+class UsuarioCreateView(GerenciaUsuariosMixin, View):
+    """Cadastra um usuário interno + acessos, no escopo do administrador (HU-28.1/2/3/7)."""
+    template_name = 'core/usuario_form.html'
+
+    def get(self, request):
+        form = NovoUsuarioForm(cadastrador=request.user)
+        return render(request, self.template_name, {'form': form})
+
+    def post(self, request):
+        form = NovoUsuarioForm(request.POST, cadastrador=request.user)
+        if form.is_valid():
+            user = form.save()
+            registrar_auditoria(
+                request, 'USUARIO_CRIADO', entidade='User', entidade_pk=user.pk,
+                descricao=f'{user.get_username()} · perfil={user.perfil.get_papel_display()} · '
+                          f'{len(form.acessos)} acesso(s)')
+            for ac in form.acessos:
+                registrar_auditoria(request, 'ACESSO_CONCEDIDO', entidade='Imobiliaria',
+                                    entidade_pk=ac['imobiliaria_id'],
+                                    descricao=f'para {user.get_username()}')
+            if form.cleaned_data.get('enviar_convite'):
+                _enviar_convite_definir_senha(request, user)
+                messages.success(request, f'Usuário criado. Convite enviado para {user.email}.')
+            else:
+                messages.success(request, f'Usuário {user.get_full_name() or user.email} criado. '
+                                          'A senha deve ser trocada no primeiro acesso.')
+            return redirect('core:listar_usuarios')
+        messages.error(request, 'Corrija os erros abaixo.')
+        return render(request, self.template_name, {'form': form})
+
+
+class UsuarioDesativarView(GerenciaUsuariosMixin, View):
+    """Desativa (soft) um usuário interno (HU-28.6)."""
+    def post(self, request, pk):
+        User = get_user_model()
+        user = get_object_or_404(User, pk=pk, acesso_comprador__isnull=True)
+        if user == request.user:
+            messages.error(request, 'Você não pode desativar a própria conta.')
+            return redirect('core:listar_usuarios')
+        user.is_active = False
+        user.save(update_fields=['is_active'])
+        registrar_auditoria(request, 'USUARIO_DESATIVADO', entidade='User', entidade_pk=user.pk,
+                            descricao=user.get_username())
+        messages.success(request, f'Usuário {user.get_username()} desativado.')
+        return redirect('core:listar_usuarios')
+
+
+class UsuarioReenviarConviteView(GerenciaUsuariosMixin, View):
+    """Reenvia o link de definição de senha (HU-28.2/28.6)."""
+    def post(self, request, pk):
+        User = get_user_model()
+        user = get_object_or_404(User, pk=pk, acesso_comprador__isnull=True)
+        _enviar_convite_definir_senha(request, user)
+        messages.success(request, f'Convite reenviado para {user.email}.')
+        return redirect('core:listar_usuarios')
+
+
+def _enviar_convite_definir_senha(request, user):
+    """Envia e-mail com link do fluxo de reset (definição de senha) — HU-28.2."""
+    from django.contrib.auth.tokens import default_token_generator
+    from django.utils.http import urlsafe_base64_encode
+    from django.utils.encoding import force_bytes
+    from django.core.mail import send_mail
+    from django.conf import settings as _s
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    try:
+        link = request.build_absolute_uri(
+            reverse('password_reset_confirm', kwargs={'uidb64': uid, 'token': token}))
+    except Exception:
+        link = f'/accounts/reset/{uid}/{token}/'
+    try:
+        send_mail(
+            subject='Bem-vindo ao Gestão de Contratos — defina sua senha',
+            message=(f'Olá {user.first_name or user.get_username()},\n\n'
+                     f'Uma conta foi criada para você. Defina sua senha pelo link '
+                     f'(válido por 72h):\n\n{link}\n'),
+            from_email=getattr(_s, 'DEFAULT_FROM_EMAIL', None),
+            recipient_list=[user.email], fail_silently=True)
+    except Exception:
+        pass
+
+
+class AcessoUsuarioListView(GerenciaUsuariosMixin, PaginacaoMixin, ListView):
     """Lista todos os acessos de usuários"""
     model = AcessoUsuario
     template_name = 'core/acesso_list.html'
@@ -1902,12 +2028,17 @@ class AcessoUsuarioListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         return context
 
 
-class AcessoUsuarioCreateView(LoginRequiredMixin, CreateView):
+class AcessoUsuarioCreateView(GerenciaUsuariosMixin, CreateView):
     """Cria um novo acesso de usuário"""
     model = AcessoUsuario
     form_class = AcessoUsuarioForm
     template_name = 'core/acesso_form.html'
     success_url = reverse_lazy('core:listar_acessos')
+
+    def get_form_kwargs(self):
+        kw = super().get_form_kwargs()
+        kw['cadastrador'] = self.request.user
+        return kw
 
     def form_valid(self, form):
         messages.success(
@@ -1921,12 +2052,17 @@ class AcessoUsuarioCreateView(LoginRequiredMixin, CreateView):
         return super().form_invalid(form)
 
 
-class AcessoUsuarioUpdateView(LoginRequiredMixin, UpdateView):
+class AcessoUsuarioUpdateView(GerenciaUsuariosMixin, UpdateView):
     """Atualiza um acesso de usuário existente"""
     model = AcessoUsuario
     form_class = AcessoUsuarioForm
     template_name = 'core/acesso_form.html'
     success_url = reverse_lazy('core:listar_acessos')
+
+    def get_form_kwargs(self):
+        kw = super().get_form_kwargs()
+        kw['cadastrador'] = self.request.user
+        return kw
 
     def get_queryset(self):
         return AcessoUsuario.objects.filter(ativo=True)
@@ -1940,7 +2076,7 @@ class AcessoUsuarioUpdateView(LoginRequiredMixin, UpdateView):
         return super().form_invalid(form)
 
 
-class AcessoUsuarioDeleteView(LoginRequiredMixin, DeleteView):
+class AcessoUsuarioDeleteView(GerenciaUsuariosMixin, DeleteView):
     """Desativa um acesso de usuário (soft delete)"""
     model = AcessoUsuario
     success_url = reverse_lazy('core:listar_acessos')

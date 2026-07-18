@@ -244,7 +244,8 @@ class TestAcessoUsuarioDeleteView:
         assert response.status_code == 302
 
     def test_post_authenticated_soft_deletes(self):
-        user = UserFactory.create()
+        # HU-28: gerir acessos passou a exigir administrador.
+        user = UserFactory.create(is_staff=True)
         acesso = AcessoUsuarioFactory.create()
         client = make_client(user)
         response = client.post(reverse('core:excluir_acesso', args=[acesso.pk]))

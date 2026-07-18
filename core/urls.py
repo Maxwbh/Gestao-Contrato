@@ -82,6 +82,12 @@ urlpatterns = [
     path('api/contas/<int:conta_id>/atualizar/', views.api_atualizar_conta_bancaria, name='api_atualizar_conta'),
     path('api/contas/<int:conta_id>/excluir/', views.api_excluir_conta_bancaria, name='api_excluir_conta'),
 
+    # HU-28 — Gestão de Usuários do Sistema (só administradores)
+    path('usuarios/', views.UsuarioListView.as_view(), name='listar_usuarios'),
+    path('usuarios/novo/', views.UsuarioCreateView.as_view(), name='criar_usuario'),
+    path('usuarios/<int:pk>/desativar/', views.UsuarioDesativarView.as_view(), name='desativar_usuario'),
+    path('usuarios/<int:pk>/reenviar-convite/', views.UsuarioReenviarConviteView.as_view(), name='reenviar_convite_usuario'),
+
     # CRUD Acesso de Usuários
     path('acessos/', views.AcessoUsuarioListView.as_view(), name='listar_acessos'),
     path('acessos/novo/', views.AcessoUsuarioCreateView.as_view(), name='criar_acesso'),
