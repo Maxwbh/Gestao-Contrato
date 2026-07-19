@@ -1575,16 +1575,27 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
                     conta_dv = conta_data.get('conta_dv', '')
                     conta_completa = f"{conta}-{conta_dv}" if conta and conta_dv else conta
 
-                    novas_contas.append(ContaBancaria(
+                    _prov = (conta_data.get('provider') or 'brcobranca').strip() or 'brcobranca'
+                    _tenant = (conta_data.get('tenant_id') or '').strip()
+                    if _prov != 'brcobranca' and not _tenant:
+                        _tenant = f'imob{self.object.id}-{_prov}'
+                    _conta = ContaBancaria(
                         imobiliaria=self.object,
                         banco=conta_data.get('banco', ''),
                         descricao=conta_data.get('descricao', ''),
+                        provider=_prov,
+                        tenant_id=_tenant if _prov != 'brcobranca' else '',
+                        account_config=conta_data.get('account_config'),
                         agencia=agencia_completa,
                         conta=conta_completa,
                         convenio=conta_data.get('convenio', ''),
                         carteira=conta_data.get('carteira', ''),
                         principal=conta_data.get('principal', False),
-                    ))
+                    )
+                    _cred = conta_data.get('credenciais')
+                    if isinstance(_cred, dict) and any((v or '').strip() for v in _cred.values()):
+                        _conta.credenciais = {k: v for k, v in _cred.items() if (v or '').strip()}
+                    novas_contas.append(_conta)
                 if novas_contas:
                     ContaBancaria.objects.bulk_create(novas_contas)
             except (json.JSONDecodeError, Exception) as e:
@@ -1712,6 +1723,9 @@ def api_obter_conta_bancaria(request, conta_id):
             'provider': conta.provider,
             'tenant_id': conta.tenant_id,
             'account_config': conta.account_config,
+            # Segredos nunca voltam ao cliente — só a indicação de que existem.
+            'tem_credenciais': bool(conta.credenciais_cifradas),
+            'tem_bapi_token': bool(conta.bapi_token_cifrado),
             'agencia': conta.agencia,
             'conta': conta.conta,
             'convenio': conta.convenio,
@@ -1739,6 +1753,17 @@ def api_obter_conta_bancaria(request, conta_id):
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
+def _derivar_account_config(provider, account_config, conta):
+    """Para o Sicoob, a conta corrente (numeroContaCorrente) é o próprio campo
+    "conta" da conta bancária — não se repete no formulário. Preenche o
+    account_config a partir dela quando ausente, mantendo o resto intacto."""
+    if provider == 'sicoob' and isinstance(account_config, dict):
+        cc = (conta or '').strip()
+        if cc and not (account_config.get('numeroContaCorrente') or '').strip():
+            return {**account_config, 'numeroContaCorrente': cc}
+    return account_config
+
+
 @login_required
 @require_http_methods(["POST"])
 def api_criar_conta_bancaria(request):
@@ -1750,14 +1775,23 @@ def api_criar_conta_bancaria(request):
 
         # Provider vazio = BRCobrança (fluxo CNAB padrão)
         provider = (data.get('provider') or 'brcobranca').strip() or 'brcobranca'
+        # tenant_id é identificador interno (não é credencial do provedor):
+        # gerado automaticamente para C6/Sicoob quando não informado.
+        tenant_id = (data.get('tenant_id') or '').strip()
+        if provider != 'brcobranca' and not tenant_id:
+            tenant_id = f'imob{imobiliaria.id}-{provider}'
+
+        # Sicoob: a conta corrente é o próprio campo "conta" (não se duplica no form).
+        account_config = _derivar_account_config(provider, data.get('account_config'),
+                                                  data.get('conta', ''))
 
         conta = ContaBancaria.objects.create(
             imobiliaria=imobiliaria,
             banco=data.get('banco', ''),
             descricao=data.get('descricao', ''),
             provider=provider,
-            tenant_id=(data.get('tenant_id') or '').strip(),
-            account_config=data.get('account_config'),
+            tenant_id=tenant_id,
+            account_config=account_config,
             agencia=data.get('agencia', ''),
             conta=data.get('conta', ''),
             convenio=data.get('convenio', ''),
@@ -1777,6 +1811,12 @@ def api_criar_conta_bancaria(request):
             layout_cnab=data.get('layout_cnab', 'CNAB_240'),
             numero_remessa_cnab_atual=data.get('numero_remessa_cnab_atual', 0),
         )
+
+        # Credenciais do banco (cifradas) — só para C6/Sicoob.
+        _cred = data.get('credenciais')
+        if isinstance(_cred, dict) and any((v or '').strip() for v in _cred.values()):
+            conta.credenciais = {k: v for k, v in _cred.items() if (v or '').strip()}
+            conta.save(update_fields=['credenciais_cifradas'])
 
         return JsonResponse({
             'status': 'success',
@@ -1802,9 +1842,21 @@ def api_atualizar_conta_bancaria(request, conta_id):
         # Provider vazio = BRCobrança (fluxo CNAB padrão)
         _provider = (data.get('provider') or '').strip()
         conta.provider = _provider or 'brcobranca'
-        conta.tenant_id = (data.get('tenant_id', conta.tenant_id) or '').strip()
+        # tenant_id interno: gera para C6/Sicoob quando ausente (não é credencial).
+        _tenant = (data.get('tenant_id', conta.tenant_id) or '').strip()
+        if conta.provider != 'brcobranca' and not _tenant:
+            _tenant = f'imob{conta.imobiliaria_id}-{conta.provider}'
+        conta.tenant_id = _tenant if conta.provider != 'brcobranca' else ''
         if 'account_config' in data:
-            conta.account_config = data.get('account_config')
+            # Sicoob: a conta corrente vem do campo "conta" (não se duplica no form).
+            _cc = data.get('conta', conta.conta)
+            conta.account_config = _derivar_account_config(
+                conta.provider, data.get('account_config'), _cc)
+        # Credenciais (cifradas): só grava quando enviadas e não-vazias — no
+        # edit, deixar em branco preserva as credenciais já cadastradas.
+        _cred = data.get('credenciais')
+        if isinstance(_cred, dict) and any((v or '').strip() for v in _cred.values()):
+            conta.credenciais = {k: v for k, v in _cred.items() if (v or '').strip()}
         conta.agencia = data.get('agencia', conta.agencia)
         conta.conta = data.get('conta', conta.conta)
         conta.convenio = data.get('convenio', conta.convenio)

@@ -540,12 +540,74 @@
                                 (integração ainda em validação).
                             </small>
                         </div>
-                        <div class="col-md-6 mb-3" id="tenant_id_wrap" style="display:none;">
-                            <label class="form-label">Tenant ID (Boleto-API)</label>
-                            <input type="text" class="form-control" id="tenant_id" name="tenant_id"
-                                   placeholder="Ex: imob1-756" maxlength="100">
-                            <small class="text-muted">Obrigatório para C6/Sicoob.</small>
+                        <!-- tenant_id é identificador interno do gateway (não é
+                             credencial do provedor): gerado automaticamente. -->
+                        <input type="hidden" id="tenant_id" name="tenant_id" value="">
+                    </div>
+
+                    <!-- Cobrança Registrada via Boleto-API (C6/Sicoob) -->
+                    <div id="boletoapi_section" style="display:none;">
+                        <div class="alert alert-info py-2 small">
+                            <i class="fas fa-shield-alt me-1"></i>
+                            As credenciais são guardadas <strong>cifradas</strong> e enviadas ao gateway
+                            Boleto-API. Deixe em branco no modo de edição para manter as já cadastradas.
                         </div>
+
+                        <h6 class="text-muted mb-2"><i class="fas fa-key me-2"></i>Credenciais de autenticação do banco</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Client ID</label>
+                                <input type="text" class="form-control cred-field" data-cred="client_id"
+                                       id="cred_client_id" autocomplete="off" placeholder="client_id da API do banco">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Client Secret</label>
+                                <input type="password" class="form-control cred-field" data-cred="client_secret"
+                                       id="cred_client_secret" autocomplete="new-password" placeholder="client_secret / chave">
+                            </div>
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">Certificado (mTLS) <span class="text-muted">— opcional</span></label>
+                                <input type="file" class="form-control mb-2" id="cred_certificado_file"
+                                       accept=".pfx,.p12,.pem,.crt,.cer,.key"
+                                       onchange="_lerCertificadoArquivo(this)">
+                                <textarea class="form-control cred-field" data-cred="certificado" id="cred_certificado"
+                                          rows="2" placeholder="Envie o arquivo (.pfx/.p12/.pem) acima ou cole o conteúdo em base64"></textarea>
+                                <small class="text-muted">Aceita <strong>upload do arquivo</strong> (.pfx, .p12, .pem, .crt) — convertido em base64 automaticamente — ou colar o base64 manualmente.</small>
+                            </div>
+                        </div>
+                        <div class="small text-success mb-3" id="cred_status" style="display:none;">
+                            <i class="fas fa-check-circle me-1"></i>Credenciais já cadastradas — preencha para substituir.
+                        </div>
+
+                        <h6 class="text-muted mb-2"><i class="fas fa-sliders-h me-2"></i>Parâmetros da conta (account_config)</h6>
+                        <!-- C6 -->
+                        <div class="row acfg-group" data-provider="c6" style="display:none;">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Billing scheme <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control acfg-field" data-acfg="billing_scheme"
+                                       placeholder="Ex: BILL_20949">
+                            </div>
+                        </div>
+                        <!-- Sicoob (a conta corrente vem do campo "Conta *" acima, não se repete) -->
+                        <div class="row acfg-group" data-provider="sicoob" style="display:none;">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Número do cliente <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control acfg-field" data-acfg="numeroCliente"
+                                       placeholder="Ex: 123456789">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Código da modalidade <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control acfg-field" data-acfg="codigoModalidade"
+                                       placeholder="Ex: 1">
+                            </div>
+                            <div class="col-12">
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>A <strong>conta corrente</strong> usada na
+                                    cobrança é o campo <strong>“Conta *”</strong> informado acima.
+                                </small>
+                            </div>
+                        </div>
+                        <hr class="my-3">
                     </div>
 
                     <div class="row">
@@ -576,6 +638,7 @@
                         <label class="form-check-label" for="cobranca_registrada">Cobrança Registrada</label>
                     </div>
 
+                    <div id="cnab_section">
                     <hr class="my-3">
                     <h6 class="text-muted mb-3"><i class="fas fa-file-archive me-2"></i>Configurações CNAB</h6>
 
@@ -594,6 +657,7 @@
                                    value="0" min="0" max="9999999">
                             <small class="text-muted">Número sequencial da remessa CNAB</small>
                         </div>
+                    </div>
                     </div>
                 </form>
             </div>
@@ -896,17 +960,71 @@ function abrirModalConta() {
     document.getElementById('cobranca_registrada').checked = true;
     document.getElementById('provider').value = 'brcobranca';
     document.getElementById('tenant_id').value = '';
+    const cs = document.getElementById('cred_status');
+    if (cs) cs.style.display = 'none';
     atualizarVisibilidadeProvider();
     editandoIndex = -1;
     atualizarCamposBanco('');
     _getModalContaBancaria()?.open();
 }
 
-// Mostra o campo Tenant ID apenas quando o provedor é Boleto-API (C6/Sicoob)
+// Alterna as seções conforme o provedor: C6/Sicoob mostram a cobrança
+// registrada (Boleto-API) e escondem o CNAB; BRCobrança faz o inverso.
 function atualizarVisibilidadeProvider() {
     const prov = document.getElementById('provider').value || 'brcobranca';
-    const wrap = document.getElementById('tenant_id_wrap');
-    if (wrap) wrap.style.display = (prov === 'c6' || prov === 'sicoob') ? '' : 'none';
+    const isApi = (prov === 'c6' || prov === 'sicoob');
+    const boletoApi = document.getElementById('boletoapi_section');
+    const cnab = document.getElementById('cnab_section');
+    if (boletoApi) boletoApi.style.display = isApi ? '' : 'none';
+    if (cnab) cnab.style.display = isApi ? 'none' : '';
+    // Mostra só os campos de account_config do provedor selecionado.
+    document.querySelectorAll('.acfg-group').forEach(function (g) {
+        g.style.display = (isApi && g.dataset.provider === prov) ? '' : 'none';
+    });
+}
+
+// Monta o dict account_config a partir dos campos visíveis do provedor.
+function _coletarAccountConfig(prov) {
+    const cfg = {};
+    const g = document.querySelector('.acfg-group[data-provider="' + prov + '"]');
+    if (g) g.querySelectorAll('.acfg-field').forEach(function (inp) {
+        const v = (inp.value || '').trim();
+        if (v) cfg[inp.dataset.acfg] = v;
+    });
+    // Sicoob: a conta corrente é o próprio campo "Conta" (não se duplica no form).
+    if (prov === 'sicoob') {
+        const cc = (document.getElementById('conta')?.value || '').trim();
+        if (cc) cfg.numeroContaCorrente = cc;
+    }
+    return cfg;
+}
+
+// Lê o arquivo de certificado escolhido e converte para base64 no textarea.
+function _lerCertificadoArquivo(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function () {
+        // result vem como "data:...;base64,XXXX" — guardamos só o payload base64.
+        const res = String(reader.result || '');
+        const b64 = res.includes(',') ? res.split(',')[1] : res;
+        const ta = document.getElementById('cred_certificado');
+        if (ta) ta.value = b64;
+    };
+    reader.onerror = function () {
+        window.showErrorModal('Não foi possível ler o arquivo de certificado.');
+    };
+    reader.readAsDataURL(file);
+}
+
+// Monta o dict de credenciais (só o que foi preenchido).
+function _coletarCredenciais() {
+    const cred = {};
+    document.querySelectorAll('.cred-field').forEach(function (inp) {
+        const v = (inp.value || '').trim();
+        if (v) cred[inp.dataset.cred] = v;
+    });
+    return cred;
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -948,10 +1066,11 @@ function excluirContaLocal(index) {
 
 function salvarContaLocal() {
     const banco = document.getElementById('banco').value;
+    const _prov = document.getElementById('provider').value || 'brcobranca';
     const contaData = {
         banco: banco,
         descricao: document.getElementById('descricao').value,
-        provider: document.getElementById('provider').value || 'brcobranca',
+        provider: _prov,
         tenant_id: document.getElementById('tenant_id').value,
         agencia: document.getElementById('agencia').value,
         conta: document.getElementById('conta').value,
@@ -963,6 +1082,10 @@ function salvarContaLocal() {
         emissao: document.getElementById('emissao').value,
         codigo_beneficiario: document.getElementById('codigo_beneficiario').value,
     };
+    if (_prov === 'c6' || _prov === 'sicoob') {
+        contaData.account_config = _coletarAccountConfig(_prov);
+        contaData.credenciais = _coletarCredenciais();
+    }
 
     // Validação básica
     if (!contaData.banco || !contaData.descricao || !contaData.agencia || !contaData.conta) {
@@ -1046,6 +1169,18 @@ async function editarConta(contaId) {
             document.getElementById('codigo_beneficiario').value = conta.codigo_beneficiario || '';
             atualizarCamposBanco(conta.banco);
 
+            // Cobrança registrada: carrega account_config; segredos nunca voltam,
+            // então limpa os campos de credencial e mostra o status.
+            document.querySelectorAll('.acfg-field').forEach(function (inp) {
+                const cfg = conta.account_config || {};
+                inp.value = cfg[inp.dataset.acfg] || '';
+            });
+            document.querySelectorAll('.cred-field').forEach(function (inp) { inp.value = ''; });
+            const cf = document.getElementById('cred_certificado_file');
+            if (cf) cf.value = '';
+            const cs = document.getElementById('cred_status');
+            if (cs) cs.style.display = conta.tem_credenciais ? '' : 'none';
+
             document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-edit me-2"></i>Editar Conta Bancária';
             _getModalContaBancaria()?.open();
         }
@@ -1088,17 +1223,41 @@ async function salvarConta() {
         codigo_beneficiario: document.getElementById('codigo_beneficiario').value,
     };
 
+    // Cobrança registrada (C6/Sicoob): account_config + credenciais cifradas.
+    const prov = formData.provider;
+    if (prov === 'c6' || prov === 'sicoob') {
+        formData.account_config = _coletarAccountConfig(prov);
+        formData.credenciais = _coletarCredenciais();
+    }
+
     // Validação básica
     if (!formData.banco || !formData.descricao || !formData.agencia || !formData.conta) {
         window.showErrorModal('Preencha os campos obrigatórios: Banco, Descrição, Agência e Conta');
         return;
     }
 
-    // Validação por banco
-    const erros = validarCamposBanco(formData);
-    if (erros.length > 0) {
-        window.showErrorModal(erros.join('\n'));
-        return;
+    // Validação da cobrança registrada
+    if (prov === 'c6' || prov === 'sicoob') {
+        // numeroContaCorrente do Sicoob vem do campo "Conta" (já validado acima).
+        const obrig = { c6: ['billing_scheme'],
+                        sicoob: ['numeroCliente', 'codigoModalidade'] }[prov];
+        const faltando = obrig.filter(k => !(formData.account_config || {})[k]);
+        if (faltando.length) {
+            window.showErrorModal('Preencha os parâmetros da conta: ' + faltando.join(', '));
+            return;
+        }
+        // No cadastro (sem conta_id) as credenciais são obrigatórias.
+        if (!contaId && Object.keys(formData.credenciais).length === 0) {
+            window.showErrorModal('Informe as credenciais de autenticação do banco.');
+            return;
+        }
+    } else {
+        // Validação por banco (fluxo CNAB) só quando não é cobrança registrada.
+        const erros = validarCamposBanco(formData);
+        if (erros.length > 0) {
+            window.showErrorModal(erros.join('\n'));
+            return;
+        }
     }
 
     try {

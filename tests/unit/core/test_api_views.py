@@ -138,7 +138,11 @@ class TestApiContasBancarias:
         conta = ContaBancaria.objects.get(pk=response.json()['conta_id'])
         assert conta.provider == 'sicoob'
         assert conta.tenant_id == 'imob1-756'
-        assert conta.account_config == {'cooperativa': '3073', 'conta': '12345678'}
+        # numeroContaCorrente é derivado do campo "conta" (não se duplica no form).
+        assert conta.account_config == {
+            'cooperativa': '3073', 'conta': '12345678',
+            'numeroContaCorrente': '12345678',
+        }
 
     def test_obter_conta_inclui_provider(self, client_logado, contrato):
         """GET da conta deve serializar provider/tenant_id."""
