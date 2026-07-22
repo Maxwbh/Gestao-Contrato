@@ -24,7 +24,9 @@ def baixar_por_conciliacao(parcela, valor=None, paid_at=None, origem='polling') 
         valor_pago=float(valor if valor is not None
                          else (parcela.valor_boleto or parcela.valor_atual or 0)),
         data_pagamento=paid_at or timezone.now(),
-        banco_pagador=f'boleto-api/{origem}', agencia_pagadora='', validar_minimo=False,
+        # banco_pagador é varchar(10): usar o marcador fixo (como na baixa manual);
+        # a origem (polling/pix/…) fica registrada no EventoCobrancaApi abaixo.
+        banco_pagador='boleto-api', agencia_pagadora='', validar_minimo=False,
     )
     EventoCobrancaApi.objects.create(
         cobranca_id=parcela.cobranca_id or '', event=f'conciliacao.{origem}',
