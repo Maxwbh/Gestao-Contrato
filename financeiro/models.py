@@ -910,14 +910,25 @@ class Parcela(TimeStampedModel):
         # Dispatch pelo método de cobrança do contrato (Fase 3): BoletoPix usa
         # /bolepix; os demais caem no boleto registrado (/cobranca).
         metodo_contrato = getattr(contrato, 'metodo_cobranca', '') or MetodoCobranca.BOLETO
-        if metodo_contrato == MetodoCobranca.BOLETO_PIX:
-            resultado = client.emitir_bolepix(
-                tenant_id, provider, account_config, cobranca_payload, bapi_token=bapi_token)
-            metodo_emitido = MetodoCobranca.BOLETO_PIX
+        usa_bolepix = (metodo_contrato == MetodoCobranca.BOLETO_PIX)
+        metodo_emitido = MetodoCobranca.BOLETO_PIX if usa_bolepix else MetodoCobranca.BOLETO
+
+        def _emitir(token):
+            if usa_bolepix:
+                return client.emitir_bolepix(
+                    tenant_id, provider, account_config, cobranca_payload, bapi_token=token)
+            return client.registrar_cobranca(
+                tenant_id, provider, account_config, cobranca_payload, bapi_token=token)
+
+        # Conta cadastrada com credenciais do banco (novo cadastro C6/Sicoob):
+        # garante o onboarding (POST /credenciais → bapi_token) antes de emitir e
+        # recadastra automaticamente em 401/424. Sem credenciais no sistema,
+        # mantém o comportamento anterior (gateway resolve pelo tenant_id).
+        if getattr(conta_bancaria, 'credenciais', None):
+            from financeiro.services.boleto_api_onboarding import com_retry_credencial
+            resultado = com_retry_credencial(conta_bancaria, _emitir)
         else:
-            resultado = client.registrar_cobranca(
-                tenant_id, provider, account_config, cobranca_payload, bapi_token=bapi_token)
-            metodo_emitido = MetodoCobranca.BOLETO
+            resultado = _emitir(bapi_token)
 
         if not resultado.get('sucesso'):
             # 409 (CIP): registro em processamento — marca AGUARDANDO_CIP para
