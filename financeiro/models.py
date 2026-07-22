@@ -2226,6 +2226,7 @@ class HistoricoPagamento(TimeStampedModel):
         ('OFX',           'Extrato OFX'),
         ('ANTECIPACAO',   'Antecipação'),
         ('PIX_WEBHOOK',   'PIX Webhook'),
+        ('BOLETO_API',    'Cobrança Registrada (Boleto-API)'),
         ('PORTAL_UPLOAD', 'Upload pelo Portal do Comprador'),
         ('SISTEMA',       'Sistema'),
     ]

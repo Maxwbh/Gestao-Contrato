@@ -2948,7 +2948,12 @@ def _cobranca_estado(request):
     )
     if imobiliaria_id:
         qs_conc = qs_conc.filter(contrato__imobiliaria_id=imobiliaria_id)
-    a_conciliar_boletos = qs_conc.count()
+    # Cobrança registrada (C6/Sicoob) não passa por retorno CNAB — concilia por
+    # webhook/polling. Sai do contador do Passo 3 e vira um contador próprio.
+    from .services.cnab_service import PROVIDERS_BOLETO_API
+    qs_conc_api = qs_conc.filter(conta_bancaria__provider__in=PROVIDERS_BOLETO_API)
+    a_conciliar_api = qs_conc_api.count()
+    a_conciliar_boletos = qs_conc.count() - a_conciliar_api
 
     # Estados derivados (cascata). Um passo só é "concluído" quando os anteriores
     # também estão; se não há o que fazer porque o passo anterior ainda não terminou,
@@ -2976,6 +2981,7 @@ def _cobranca_estado(request):
         'bloqueados': bloqueados, 'contratos_pend': contratos_pend,
         'a_enviar_boletos': a_enviar_boletos, 'a_enviar_contas': a_enviar_contas,
         'a_conciliar_arquivos': a_conciliar_arquivos, 'a_conciliar_boletos': a_conciliar_boletos,
+        'a_conciliar_api': a_conciliar_api,
     }
 
 
@@ -3032,8 +3038,10 @@ def _conciliacao_saude(request):
     recebido_valor = rec_agg['valor'] or Decimal('0.00')
     recebido_qtd = rec_agg['total'] or 0
 
-    # Recebido por origem (PIX = PIX_WEBHOOK; MANUAL agrega manual/antecipação/portal/sistema)
+    # Recebido por origem (PIX = PIX_WEBHOOK; BOLETO_API = cobrança registrada
+    # C6/Sicoob; MANUAL agrega manual/antecipação/portal/sistema)
     origem = {'CNAB': Decimal('0.00'), 'PIX': Decimal('0.00'),
+              'BOLETO_API': Decimal('0.00'),
               'OFX': Decimal('0.00'), 'MANUAL': Decimal('0.00')}
     for row in hist.values('origem_pagamento').annotate(v=Sum('valor_pago')):
         v = row['v'] or Decimal('0.00')
@@ -3042,6 +3050,8 @@ def _conciliacao_saude(request):
             origem['CNAB'] += v
         elif o == 'PIX_WEBHOOK':
             origem['PIX'] += v
+        elif o == 'BOLETO_API':
+            origem['BOLETO_API'] += v
         elif o == 'OFX':
             origem['OFX'] += v
         else:
@@ -3141,6 +3151,7 @@ def painel_conciliacao_saude(request):
     origem_rows = [
         ('CNAB (retorno)', s['origem']['CNAB'], '#0058be'),
         ('PIX (webhook)', s['origem']['PIX'], '#22c55e'),
+        ('Boleto-API (C6/Sicoob)', s['origem']['BOLETO_API'], '#C9A961'),
         ('OFX (extrato)', s['origem']['OFX'], '#f59e0b'),
         ('Manual', s['origem']['MANUAL'], '#091426'),
     ]
@@ -9280,6 +9291,11 @@ def _processar_evento_cobranca(
                 valor_pago=float(valor or 0), data_pagamento=paid_at,
                 banco_pagador='boleto-api', agencia_pagadora='', validar_minimo=False,
             )
+            # HU-26: registra o recebimento com origem BOLETO_API para o painel
+            # de Conciliação & Saúde (que agrega por HistoricoPagamento).
+            from financeiro.services.boleto_api_conciliacao import registrar_historico_boleto_api
+            registrar_historico_boleto_api(
+                parcela, float(valor or 0), paid_at or timezone.now(), 'webhook')
             evt.status = 'baixado'
             evt.save(update_fields=['status'])
             logger.info('[BoletoAPI webhook] parcela pk=%s baixada cobranca_id=%s', parcela.pk, cobranca_id)

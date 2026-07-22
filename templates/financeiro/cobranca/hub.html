@@ -105,6 +105,7 @@
         {% elif estado.passo3 == 'aguardando' %}<span class="badge bg-light text-dark border badge-estado">AGUARDANDO</span>
         {% else %}<span class="badge bg-secondary badge-estado">PENDENTE</span>{% endif %}
         <div class="small text-muted mt-1">{{ estado.a_conciliar_boletos }} a conciliar</div>
+        {% if estado.a_conciliar_api %}<div class="small mt-1" style="color:#a5842e"><i class="fas fa-bolt me-1"></i>{{ estado.a_conciliar_api }} via Boleto-API (webhook)</div>{% endif %}
       </a>
       <div class="step-line {% if estado.passo3 == 'concluido' %}done{% endif %}"></div>
       {% comment %}Passo 4 — fechamento do ciclo (HU-26){% endcomment %}

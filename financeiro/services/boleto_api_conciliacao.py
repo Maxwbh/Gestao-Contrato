@@ -9,6 +9,29 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
+def registrar_historico_boleto_api(parcela, valor_pago, data_pagamento, origem_desc):
+    """
+    HU-26 com cobrança registrada: toda baixa vinda do Boleto-API (webhook,
+    polling Sicoob, conciliação Pix) grava um HistoricoPagamento com origem
+    BOLETO_API — sem isso o valor recebido não entraria no painel de
+    Conciliação & Saúde (que agrega por HistoricoPagamento).
+    """
+    from financeiro.models import HistoricoPagamento
+    if hasattr(data_pagamento, 'date'):
+        data_pagamento = data_pagamento.date()
+    return HistoricoPagamento.objects.create(
+        parcela=parcela,
+        data_pagamento=data_pagamento,
+        valor_pago=valor_pago,
+        valor_parcela=parcela.valor_atual,
+        valor_juros=parcela.valor_juros,
+        valor_multa=parcela.valor_multa,
+        forma_pagamento='BOLETO',
+        observacoes=f'Baixa via Boleto-API ({origem_desc}).',
+        origem_pagamento='BOLETO_API',
+    )
+
+
 def baixar_por_conciliacao(parcela, valor=None, paid_at=None, origem='polling') -> dict:
     """
     Baixa a parcela a partir de uma conciliação (polling / Pix recebido).
@@ -20,14 +43,17 @@ def baixar_por_conciliacao(parcela, valor=None, paid_at=None, origem='polling') 
         return {'status': 'duplicado', 'parcela_id': parcela.pk}
 
     parcela.transicionar_cobranca(StatusCobranca.LIQUIDADA)
+    valor_baixa = float(valor if valor is not None
+                        else (parcela.valor_boleto or parcela.valor_atual or 0))
+    data_baixa = paid_at or timezone.now()
     parcela.registrar_pagamento_boleto(
-        valor_pago=float(valor if valor is not None
-                         else (parcela.valor_boleto or parcela.valor_atual or 0)),
-        data_pagamento=paid_at or timezone.now(),
+        valor_pago=valor_baixa,
+        data_pagamento=data_baixa,
         # banco_pagador é varchar(10): usar o marcador fixo (como na baixa manual);
         # a origem (polling/pix/…) fica registrada no EventoCobrancaApi abaixo.
         banco_pagador='boleto-api', agencia_pagadora='', validar_minimo=False,
     )
+    registrar_historico_boleto_api(parcela, valor_baixa, data_baixa, origem)
     EventoCobrancaApi.objects.create(
         cobranca_id=parcela.cobranca_id or '', event=f'conciliacao.{origem}',
         status_cobranca='liquidado', parcela=parcela, valor=valor,
