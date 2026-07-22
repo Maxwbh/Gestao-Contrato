@@ -12,9 +12,11 @@
 ![Versão](https://img.shields.io/badge/vers%C3%A3o-3.2-0058be)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-Proprietary-lightgrey)
 
-<img src="docs/screenshots/painel-conciliacao.png" alt="Painel de Conciliação da Cobrança Registrada (Boleto-API)" width="85%">
+<img src="docs/screenshots/home.png" alt="Gestão de Contratos — plataforma de contratos, cobrança e reajustes" width="88%">
 
-*Painel de Conciliação da cobrança registrada — % conciliado, origem da baixa e Pix Automático*
+<br>
+
+**Do contrato à baixa, num só lugar.** &nbsp;•&nbsp; Parcelas e reajustes automáticos &nbsp;•&nbsp; Cobrança registrada Pix / BoletoPix / CNAB &nbsp;•&nbsp; Portal do comprador &nbsp;•&nbsp; BI
 
 </div>
 
@@ -139,13 +141,17 @@ Upload de PDF/imagens → extração estruturada com nível de confiança por ca
 
 ## 📸 Telas
 
-| Wizard de Contrato (4 etapas) | Painel de Conciliação Boleto-API |
+| Página de Apresentação | Painel de Conciliação Boleto-API |
 |---|---|
-| ![Wizard de contrato — etapa 4 com projeção de parcelas](docs/screenshots/wizard-contrato.png) | ![Painel de conciliação](docs/screenshots/painel-conciliacao.png) |
+| ![Página inicial — hero, indicadores e módulos](docs/screenshots/home.png) | ![Painel de conciliação — % conciliado, origem da baixa e Pix Automático](docs/screenshots/painel-conciliacao.png) |
 
-| Cadastro de Usuário do Sistema | Gestão de Usuários |
+| Wizard de Contrato (4 etapas) | Cadastro de Usuário do Sistema |
 |---|---|
-| ![Cadastro de usuário — perfil, credencial e acessos por escopo](docs/screenshots/cadastro-usuario.png) | ![Lista de usuários com perfil e situação](docs/screenshots/usuarios-lista.png) |
+| ![Wizard de contrato — etapa 4 com projeção de parcelas](docs/screenshots/wizard-contrato.png) | ![Cadastro de usuário — perfil, credencial e acessos por escopo](docs/screenshots/cadastro-usuario.png) |
+
+| Gestão de Usuários | |
+|---|---|
+| ![Lista de usuários com perfil e situação](docs/screenshots/usuarios-lista.png) | |
 
 ---
 
