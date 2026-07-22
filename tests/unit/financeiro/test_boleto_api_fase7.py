@@ -59,6 +59,9 @@ class TestPollingSicoob:
         assert m.call_args.kwargs.get('bapi_token') == 'bapi_s'
         p.refresh_from_db()
         assert p.pago and p.status_cobranca == S.LIQUIDADA
+        # banco_pagador é varchar(10): o marcador da baixa não pode estourar
+        # (regressão que o CI em SQLite mascara — falha só em PostgreSQL).
+        assert p.banco_pagador == 'boleto-api' and len(p.banco_pagador) <= 10
 
     def test_nao_liquidado_nao_baixa(self, contrato_sicoob):
         _, contrato = contrato_sicoob
@@ -85,6 +88,7 @@ class TestConciliacaoPix:
         assert r['baixadas'] == 1
         p.refresh_from_db()
         assert p.pago and p.status_cobranca == S.LIQUIDADA
+        assert p.banco_pagador == 'boleto-api' and len(p.banco_pagador) <= 10
 
     def test_txid_sem_parcela_nao_quebra(self):
         from tests.fixtures.factories import ContaBancariaApiFactory
