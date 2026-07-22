@@ -137,6 +137,7 @@
             <td class="text-end" style="width:70px">
               {% if h.origem_pagamento == 'PIX_WEBHOOK' %}<span class="badge bg-success">PIX</span>
               {% elif h.origem_pagamento == 'CNAB' %}<span class="badge" style="background:#0058be">CNAB</span>
+              {% elif h.origem_pagamento == 'BOLETO_API' %}<span class="badge" style="background:#C9A961;color:#23303f">BOLETO-API</span>
               {% elif h.origem_pagamento == 'OFX' %}<span class="badge bg-warning text-dark">OFX</span>
               {% else %}<span class="badge bg-dark">MANUAL</span>{% endif %}
             </td>
