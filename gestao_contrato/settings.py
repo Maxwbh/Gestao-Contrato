@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'django_celery_beat',
     'rest_framework',
     'drf_spectacular',
+    'drf_spectacular_sidecar',  # Serve os assets do Swagger/Redoc localmente (sem CDN)
 
     # Local apps
     'accounts',
@@ -322,16 +323,23 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Gestão de Contratos API',
+    'TITLE': 'Gestão de Contratos — API',
     'DESCRIPTION': (
-        'API REST para o sistema de Gestão de Contratos Imobiliários.\n\n'
+        'Referência da API interna do sistema de **Gestão de Contratos '
+        'Imobiliários**.\n\n'
         '## Autenticação\n'
-        'Todas as rotas requerem autenticação via sessão Django (`/accounts/login/`).\n\n'
-        '## Módulos\n'
-        '- **Financeiro**: parcelas, boletos, CNAB, reajustes, dashboards\n'
-        '- **Core**: contabilidades, imobiliárias, compradores, CEP/CNPJ\n'
-        '- **Portal Comprador**: contratos, boletos e segunda via\n'
-        '- **Tasks**: cron jobs para reajustes, notificações e relatórios\n'
+        'Os endpoints exigem **sessão autenticada do Django** (cookie `sessionid`); '
+        'faça login em `/accounts/login/`. Clique em **Authorize** e mantenha a '
+        'sessão ativa para testar as rotas pela própria página.\n\n'
+        '## Sobre esta documentação\n'
+        'A aplicação usa *views* Django tradicionais (respostas `JsonResponse`), '
+        'e não *viewsets* do DRF. Por isso, os endpoints abaixo são um '
+        '**catálogo curado** dos fluxos mais estáveis, descrito manualmente — '
+        'não uma varredura automática de todas as ~100 rotas `api/`.\n\n'
+        '## Grupos\n'
+        '- **Utilidades** — consultas de CEP e CNPJ\n'
+        '- **Contas Bancárias** — CRUD das contas (credenciais cifradas)\n'
+        '- **Conciliação** — indicadores da cobrança registrada\n'
     ),
     'VERSION': ((BASE_DIR / 'VERSION').read_text().strip() if (BASE_DIR / 'VERSION').exists() else '3.2'),
     'SERVE_INCLUDE_SCHEMA': False,
@@ -340,11 +348,23 @@ SPECTACULAR_SETTINGS = {
         'email': 'maxwbh@gmail.com',
     },
     'LICENSE': {'name': 'Proprietário — M&S do Brasil LTDA'},
+    # Assets servidos localmente (sem CDN) via drf-spectacular-sidecar.
+    'SWAGGER_UI_DIST': 'SIDECAR',
+    'SWAGGER_UI_FAVICON_HREF': 'SIDECAR',
+    'REDOC_DIST': 'SIDECAR',
     'SWAGGER_UI_SETTINGS': {
         'deepLinking': True,
         'persistAuthorization': True,
         'displayOperationId': False,
+        'docExpansion': 'list',
+        'defaultModelsExpandDepth': -1,
     },
+    # Mantém o hook padrão de enums e injeta o catálogo curado de endpoints
+    # (a API usa views Django puras, não introspectáveis pelo DRF).
+    'POSTPROCESSING_HOOKS': [
+        'drf_spectacular.hooks.postprocess_schema_enums',
+        'gestao_contrato.api_docs.add_curated_paths',
+    ],
     'COMPONENT_SPLIT_REQUEST': True,
     'SORT_OPERATIONS': False,
 }
