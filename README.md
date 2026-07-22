@@ -42,7 +42,17 @@
 
 ## 📋 Sobre o Sistema
 
-Plataforma multi-tenant para **contabilidades** que administram múltiplos loteamentos e imobiliárias, com controle completo do ciclo de venda parcelada:
+O **Gestão de Contratos** é uma plataforma **multi-tenant** que cobre todo o ciclo da **venda parcelada de imóveis** — do cadastro do contrato à baixa da cobrança. Foi pensado para **contabilidades** que administram múltiplos loteamentos e imobiliárias, centralizando contratos, parcelas, reajustes, emissão bancária e relacionamento com o comprador em um só lugar.
+
+**Para quem é:** contabilidades, loteadoras e imobiliárias que vendem imóveis em parcelas e precisam controlar reajustes, cobrança registrada (Pix/Boleto/CNAB) e inadimplência com rastreabilidade.
+
+**O que resolve:**
+- 🔁 **Reajuste automático** de parcelas por índices oficiais (IPCA/IGP-M/SELIC), com histórico auditável.
+- 💳 **Cobrança de ponta a ponta** — CNAB (remessa/retorno) e cobrança registrada C6/Sicoob (Pix, BoletoPix, Pix Automático), com **conciliação** automática.
+- 🔔 **Comunicação com o comprador** — notificações por e-mail/SMS/WhatsApp e **portal do comprador** para 2ª via e acompanhamento.
+- 📊 **Visão gerencial** — dashboards, aging de inadimplência e relatórios/BI por contabilidade.
+
+Modelo de hierarquia (isolamento por tenant via `get_imobiliarias_usuario()` — cada usuário só enxerga as imobiliárias a que tem acesso):
 
 | Entidade | Papel |
 |----------|-------|
@@ -51,8 +61,6 @@ Plataforma multi-tenant para **contabilidades** que administram múltiplos lotea
 | **Imóvel** | Lote, terreno, casa, apartamento ou comercial |
 | **Comprador** | Cliente (PF ou PJ) que adquire o imóvel |
 | **Contrato** | Parcelas, reajustes, intermediárias, boletos e notificações |
-
-O isolamento por tenant (`get_imobiliarias_usuario()`) garante que cada usuário só enxergue os dados das imobiliárias a que tem acesso.
 
 ---
 
@@ -278,17 +286,6 @@ VAPID_CLAIMS_EMAIL=admin@empresa.com
 ---
 
 ## 🚀 Deploy no Render
-
-> **Fluxo de branches e versão:**
-> 1. **Qualquer branch** abre PR para **`hml`** (homologação — CI valida; o
->    deploy de `hml` exibe a versão com sufixo `-hml`). O CI bloqueia PR
->    para `master` que não parta de `hml`.
-> 2. A promoção **`hml` → `master`** é feita por **squash (1 commit)** e é o
->    que gera a **versão oficial** (`MAJOR.MINOR.PATCH`, bakeada pelo
->    `build.sh` no deploy da main).
-> 3. Na main, o **PATCH só avança quando o commit altera código-fonte** —
->    commit apenas de documentação/infra **não mexe na versão** (lista de
->    caminhos em `core/version.py::_EXCLUIR_NAO_FONTE`).
 
 > **Plano Gratuito** — sem Celery. Tarefas agendadas via **cron-job.org** (HTTP POST autenticado).
 >
