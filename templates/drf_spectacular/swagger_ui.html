@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <title>{{ title|default:"Gestão de Contratos — API" }}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% if favicon_href %}<link rel="icon" href="{{ favicon_href }}">{% endif %}
+    <link rel="stylesheet" href="{{ swagger_ui_css }}">
+    <style>
+      /* ===== Tema "Ocean Depths" para o Swagger UI ===== */
+      :root {
+        --api-navy: #0F2A47;
+        --api-navy-2: #163A5F;
+        --api-steel: #3B5A7C;
+        --api-gold: #C9A961;
+        --api-surface: #F4F6F9;
+      }
+      html { box-sizing: border-box; overflow-y: scroll; }
+      *, *:after, *:before { box-sizing: inherit; }
+      body { background: var(--api-surface); margin: 0;
+             font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+
+      /* Barra de marca própria (substitui o topbar padrão do Swagger) */
+      .api-brandbar {
+        background: radial-gradient(900px 300px at 90% -40%, rgba(201,169,97,.20), transparent 60%),
+                    linear-gradient(135deg, var(--api-navy), var(--api-navy-2));
+        color: #fff; padding: 16px 28px; display: flex; align-items: center; gap: 14px;
+        box-shadow: 0 8px 24px -14px rgba(15,42,71,.6);
+      }
+      .api-brandbar .api-logo {
+        width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center;
+        background: rgba(201,169,97,.18); border: 1px solid rgba(201,169,97,.4);
+        color: var(--api-gold); font-size: 18px; font-weight: 700;
+      }
+      .api-brandbar h1 { font-size: 1.12rem; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+      .api-brandbar small { color: #C6D2E0; font-size: .82rem; }
+      .api-brandbar .api-badge {
+        margin-left: auto; font-size: .72rem; font-weight: 700; letter-spacing: .08em;
+        text-transform: uppercase; color: var(--api-gold);
+        border: 1px solid rgba(201,169,97,.4); border-radius: 999px; padding: 4px 12px;
+      }
+
+      /* Esconde o topbar nativo (barra de URL do explorer) */
+      .swagger-ui .topbar { display: none; }
+
+      /* Bloco de informações */
+      .swagger-ui .info { margin: 26px 0; }
+      .swagger-ui .info .title { color: var(--api-navy); font-weight: 800; }
+      .swagger-ui .info .title small.version-stamp { background: var(--api-navy); }
+      .swagger-ui .info a { color: var(--api-steel); }
+
+      /* Botão Authorize e botões de ação em dourado/navy */
+      .swagger-ui .btn.authorize { color: var(--api-navy); border-color: var(--api-gold); }
+      .swagger-ui .btn.authorize svg { fill: var(--api-navy); }
+      .swagger-ui .btn.authorize:hover { background: var(--api-gold); color: #23303f; }
+      .swagger-ui .btn.execute {
+        background: var(--api-navy); border-color: var(--api-navy); color: #fff;
+      }
+      .swagger-ui .btn.execute:hover { background: var(--api-navy-2); }
+
+      /* Cabeçalhos de grupo (tags) */
+      .swagger-ui .opblock-tag { color: var(--api-navy); border-bottom: 1px solid #e2e8f0; }
+      .swagger-ui .opblock-tag:hover { background: rgba(15,42,71,.02); }
+
+      /* Blocos de operação — realce sutil por método mantendo a paleta */
+      .swagger-ui .opblock.opblock-get { border-color: var(--api-steel); background: rgba(59,90,124,.04); }
+      .swagger-ui .opblock.opblock-get .opblock-summary-method { background: var(--api-steel); }
+      .swagger-ui .opblock.opblock-post { border-color: #2f8a5b; background: rgba(47,138,91,.05); }
+      .swagger-ui .opblock.opblock-post .opblock-summary-method { background: #2f8a5b; }
+      .swagger-ui .opblock.opblock-delete { border-color: #b3452f; background: rgba(179,69,47,.05); }
+      .swagger-ui .opblock.opblock-delete .opblock-summary-method { background: #b3452f; }
+
+      .swagger-ui .opblock .opblock-summary-path { color: var(--api-navy); }
+    </style>
+  </head>
+  <body>
+    <div class="api-brandbar">
+      <span class="api-logo">GC</span>
+      <div>
+        <h1>Gestão de Contratos — API</h1>
+        <small>Documentação de referência • autenticação por sessão Django</small>
+      </div>
+      <span class="api-badge">REST</span>
+    </div>
+
+    <div id="swagger-ui"></div>
+    <script src="{{ swagger_ui_bundle }}"></script>
+    <script src="{{ swagger_ui_standalone }}"></script>
+    {% if script_url %}
+    <script src="{{ script_url }}"></script>
+    {% else %}
+    <script>
+    {% include template_name_js %}
+    </script>
+    {% endif %}
+  </body>
+</html>
