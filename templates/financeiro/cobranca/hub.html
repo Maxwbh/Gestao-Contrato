@@ -5,13 +5,29 @@
 
 {% block extra_css %}
 <style>
-  .step-circle { width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; }
-  .step-line { flex:1; height:3px; background:#e2e8f0; margin:0 .5rem; }
+  /* Stepper: colunas rígidas (sem quebra de texto em volta dos badges),
+     conectores alinhados ao centro dos círculos e scroll horizontal no mobile. */
+  .stepper { display:flex; align-items:flex-start; overflow-x:auto; padding:.25rem 0;
+             -webkit-overflow-scrolling:touch; }
+  .step { display:flex; flex-direction:column; align-items:center; gap:.3rem;
+          flex:0 0 auto; width:172px; text-align:center;
+          text-decoration:none; color:inherit; }
+  .step:hover .step-circle { transform:scale(1.06); }
+  .step-circle { width:48px; height:48px; border-radius:50%; display:flex;
+                 align-items:center; justify-content:center; font-weight:700;
+                 transition:transform .15s ease; }
+  .step-title { font-weight:700; font-size:.85rem; white-space:nowrap; }
+  .step-count { font-size:.78rem; color:#64748b; white-space:nowrap; }
+  .step-count-api { font-size:.75rem; color:#a5842e; white-space:nowrap; }
+  .step-line { flex:1 1 auto; min-width:26px; height:3px; background:#e2e8f0;
+               border-radius:2px; margin-top:23px; }
   .step-line.done { background:#0058be; }
   .kpi-card { border:1px solid #e2e8f0; border-radius:.5rem; box-shadow:0 4px 12px rgba(30,41,59,.05); }
   .kpi-value { font-size:1.6rem; font-weight:700; line-height:1.1; }
   .kpi-label { font-size:.72rem; letter-spacing:.05em; text-transform:uppercase; color:#64748b; font-weight:600; }
-  .badge-estado { font-size:.68rem; font-weight:700; letter-spacing:.03em; }
+  .kpi-ico { width:34px; height:34px; border-radius:9px; display:grid; place-items:center;
+             background:#f1f5f9; color:#3B5A7C; font-size:.95rem; }
+  .badge-estado { font-size:.68rem; font-weight:700; letter-spacing:.03em; white-space:nowrap; }
 </style>
 {% endblock %}
 
@@ -64,58 +80,58 @@
 
   <!-- Resumo do ciclo -->
   <div class="row g-3 mb-4">
-    <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100"><span class="kpi-label">A Gerar</span><div class="kpi-value">{{ estado.a_gerar }}</div><div class="small text-muted">boletos elegíveis</div></div></div>
-    <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100"><span class="kpi-label">A Enviar</span><div class="kpi-value">{{ estado.a_enviar_contas }}</div><div class="small text-muted">contas / arquivos</div></div></div>
-    <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100"><span class="kpi-label">A Conciliar</span><div class="kpi-value">{{ estado.a_conciliar_boletos }}</div><div class="small text-muted">boletos enviados</div></div></div>
+    <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100 d-flex justify-content-between align-items-start"><div><span class="kpi-label">A Gerar</span><div class="kpi-value">{{ estado.a_gerar }}</div><div class="small text-muted">boletos elegíveis</div></div><span class="kpi-ico"><i class="fas fa-bolt"></i></span></div></div>
+    <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100 d-flex justify-content-between align-items-start"><div><span class="kpi-label">A Enviar</span><div class="kpi-value">{{ estado.a_enviar_contas }}</div><div class="small text-muted">contas / arquivos</div></div><span class="kpi-ico"><i class="fas fa-paper-plane"></i></span></div></div>
+    <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100 d-flex justify-content-between align-items-start"><div><span class="kpi-label">A Conciliar</span><div class="kpi-value">{{ estado.a_conciliar_boletos }}</div><div class="small text-muted">boletos enviados{% if estado.a_conciliar_api %} <span style="color:#a5842e">· +{{ estado.a_conciliar_api }} via API</span>{% endif %}</div></div><span class="kpi-ico"><i class="fas fa-university"></i></span></div></div>
     <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100" style="background:rgba(0,88,190,.06);border-color:rgba(0,88,190,.3)"><span class="kpi-label" style="color:#0058be">Ciclo Concluído</span><div class="kpi-value" style="color:#0058be">{{ estado.percentual }}%</div><div class="progress mt-2" style="height:6px"><div class="progress-bar" style="width:{{ estado.percentual }}%"></div></div></div></div>
   </div>
 
   {% with q="?imobiliaria="|add:filtro_imobiliaria %}
   <!-- Stepper (passos clicáveis) -->
   <div class="card mb-4"><div class="card-body">
-    <div class="d-flex align-items-center">
+    <div class="stepper">
       {% comment %}Passo 1{% endcomment %}
-      <a href="{% url 'financeiro:boletos_painel' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="text-center text-decoration-none text-reset" style="width:180px" title="Abrir Geração de Boletos">
-        <div class="step-circle mx-auto {% if estado.passo1 == 'concluido' %}bg-success text-white{% elif estado.recomendado == 1 %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-bolt"></i></div>
-        <div class="mt-2 fw-bold small">1. Gerar Boletos</div>
+      <a href="{% url 'financeiro:boletos_painel' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="step" title="Abrir Geração de Boletos">
+        <div class="step-circle {% if estado.passo1 == 'concluido' %}bg-success text-white{% elif estado.recomendado == 1 %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-bolt"></i></div>
+        <div class="step-title">1. Gerar Boletos</div>
         {% if estado.passo1 == 'concluido' %}<span class="badge bg-success badge-estado">CONCLUÍDO</span>
         {% elif estado.recomendado == 1 %}<span class="badge bg-warning text-dark badge-estado">EM ANDAMENTO</span>
         {% elif estado.passo1 == 'aguardando' %}<span class="badge bg-light text-dark border badge-estado">AGUARDANDO</span>
         {% else %}<span class="badge bg-secondary badge-estado">PENDENTE</span>{% endif %}
-        <div class="small text-muted mt-1">{{ estado.a_gerar }} a gerar</div>
+        <div class="step-count">{{ estado.a_gerar }} a gerar</div>
       </a>
       <div class="step-line {% if estado.passo1 == 'concluido' %}done{% endif %}"></div>
       {% comment %}Passo 2{% endcomment %}
-      <a href="{% url 'financeiro:remessa_painel' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="text-center text-decoration-none text-reset" style="width:180px" title="Abrir Geração de Remessa">
-        <div class="step-circle mx-auto {% if estado.passo2 == 'concluido' %}bg-success text-white{% elif estado.recomendado == 2 %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-paper-plane"></i></div>
-        <div class="mt-2 fw-bold small">2. Gerar Remessa</div>
+      <a href="{% url 'financeiro:remessa_painel' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="step" title="Abrir Geração de Remessa">
+        <div class="step-circle {% if estado.passo2 == 'concluido' %}bg-success text-white{% elif estado.recomendado == 2 %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-paper-plane"></i></div>
+        <div class="step-title">2. Gerar Remessa</div>
         {% if estado.passo2 == 'concluido' %}<span class="badge bg-success badge-estado">CONCLUÍDO</span>
         {% elif estado.recomendado == 2 %}<span class="badge bg-warning text-dark badge-estado">EM ANDAMENTO</span>
         {% elif estado.passo2 == 'aguardando' %}<span class="badge bg-light text-dark border badge-estado">AGUARDANDO</span>
         {% else %}<span class="badge bg-secondary badge-estado">PENDENTE</span>{% endif %}
-        <div class="small text-muted mt-1">{{ estado.a_enviar_contas }} contas</div>
+        <div class="step-count">{{ estado.a_enviar_contas }} contas</div>
       </a>
       <div class="step-line {% if estado.passo2 == 'concluido' %}done{% endif %}"></div>
       {% comment %}Passo 3{% endcomment %}
-      <a href="{% url 'financeiro:retorno_painel' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="text-center text-decoration-none text-reset" style="width:180px" title="Abrir Recebimento de Retorno">
-        <div class="step-circle mx-auto {% if estado.passo3 == 'concluido' %}bg-success text-white{% elif estado.recomendado == 3 %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-university"></i></div>
-        <div class="mt-2 fw-bold small">3. Receber Retorno</div>
+      <a href="{% url 'financeiro:retorno_painel' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="step" title="Abrir Recebimento de Retorno">
+        <div class="step-circle {% if estado.passo3 == 'concluido' %}bg-success text-white{% elif estado.recomendado == 3 %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-university"></i></div>
+        <div class="step-title">3. Receber Retorno</div>
         {% if estado.passo3 == 'concluido' %}<span class="badge bg-success badge-estado">CONCLUÍDO</span>
         {% elif estado.recomendado == 3 %}<span class="badge bg-warning text-dark badge-estado">EM ANDAMENTO</span>
         {% elif estado.passo3 == 'aguardando' %}<span class="badge bg-light text-dark border badge-estado">AGUARDANDO</span>
         {% else %}<span class="badge bg-secondary badge-estado">PENDENTE</span>{% endif %}
-        <div class="small text-muted mt-1">{{ estado.a_conciliar_boletos }} a conciliar</div>
-        {% if estado.a_conciliar_api %}<div class="small mt-1" style="color:#a5842e"><i class="fas fa-bolt me-1"></i>{{ estado.a_conciliar_api }} via Boleto-API (webhook)</div>{% endif %}
+        <div class="step-count">{{ estado.a_conciliar_boletos }} a conciliar</div>
+        {% if estado.a_conciliar_api %}<div class="step-count-api" title="Cobrança registrada C6/Sicoob — concilia por webhook, sem arquivo de retorno"><i class="fas fa-bolt me-1"></i>{{ estado.a_conciliar_api }} via Boleto-API</div>{% endif %}
       </a>
       <div class="step-line {% if estado.passo3 == 'concluido' %}done{% endif %}"></div>
       {% comment %}Passo 4 — fechamento do ciclo (HU-26){% endcomment %}
-      <a href="{% url 'financeiro:painel_conciliacao_saude' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="text-center text-decoration-none text-reset" style="width:180px" title="Abrir Conciliação &amp; Saúde">
-        <div class="step-circle mx-auto {% if estado.passo3 == 'concluido' and not estado.a_conciliar_boletos %}bg-success text-white{% elif estado.passo3 == 'concluido' %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-heart-pulse"></i></div>
-        <div class="mt-2 fw-bold small">4. Conciliar &amp; Fechar</div>
+      <a href="{% url 'financeiro:painel_conciliacao_saude' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="step" title="Abrir Conciliação &amp; Saúde">
+        <div class="step-circle {% if estado.passo3 == 'concluido' and not estado.a_conciliar_boletos %}bg-success text-white{% elif estado.passo3 == 'concluido' %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-heart-pulse"></i></div>
+        <div class="step-title">4. Conciliar &amp; Fechar</div>
         {% if estado.passo3 == 'concluido' and not estado.a_conciliar_boletos %}<span class="badge bg-success badge-estado">CONCLUÍDO</span>
         {% elif estado.passo3 == 'concluido' %}<span class="badge bg-warning text-dark badge-estado">EM ANDAMENTO</span>
         {% else %}<span class="badge bg-light text-dark border badge-estado">AGUARDANDO</span>{% endif %}
-        <div class="small text-muted mt-1">saúde da cobrança</div>
+        <div class="step-count">saúde da cobrança</div>
       </a>
     </div>
   </div></div>
