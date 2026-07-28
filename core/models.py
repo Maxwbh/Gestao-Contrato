@@ -100,8 +100,24 @@ class LayoutCNAB(models.TextChoices):
 
 
 class ProviderBoleto(models.TextChoices):
-    """Provedor de emissão de boletos / cobrança registrada."""
-    BRCOBRANCA = 'brcobranca', 'BRCobrança (CNAB local/Docker)'
+    """
+    Provedor de emissão de boletos / cobrança registrada.
+
+    Os bancos C6 (336) e Sicoob (756) existem nos DOIS modos do gateway:
+
+      • **offline** — motor **pyCobrança** (boleto/CNAB, sem credencial de
+        banco; sucessor do BRCobrança/Ruby). No sistema, é a conta com
+        `provider='brcobranca'` — valor mantido por compatibilidade com os
+        dados já gravados; a emissão em massa usa POST /api/boleto/multi.
+      • **próprio** — REST registrado no banco (OAuth2 + mTLS), exige
+        credenciais e `*_REGISTERED_READY=true` no gateway. No sistema, é a
+        conta com `provider='c6'|'sicoob'`; a emissão é individual (POST
+        /cobranca), pois cada boleto é registrado no banco.
+
+    Ou seja: escolher C6/Sicoob aqui significa **cobrança registrada**; para
+    usar esses bancos apenas no fluxo offline/CNAB, mantenha `brcobranca`.
+    """
+    BRCOBRANCA = 'brcobranca', 'pyCobrança (motor offline — boleto/CNAB)'
     C6 = 'c6', 'C6 Bank (cobrança registrada)'
     SICOOB = 'sicoob', 'Sicoob (cobrança registrada)'
 
