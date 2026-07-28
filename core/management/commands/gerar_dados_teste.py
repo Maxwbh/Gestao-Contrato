@@ -1122,10 +1122,14 @@ class Command(BaseCommand):
         if pares_api:
             providers = sorted({getattr(c, 'provider', '?') for _, c in pares_api})
             if api_disponivel:
-                # Feature "multi boletos" do gateway (POST /api/boleto/multi):
-                # o motor offline também renderiza Sicoob/C6, então os boletos
-                # visuais saem REAIS em lote (até 200 por chamada); os metadados
-                # de cobrança registrada (cobranca_id/txid/status) seguem simulados.
+                # C6/Sicoob têm DOIS modos no gateway: offline (pycobranca —
+                # padrão, sem credenciais) e próprio (REST registrado, exige
+                # client_id/secret/pfx e *_REGISTERED_READY=true). Na geração de
+                # dados de teste não há credenciais de banco, então usa-se o modo
+                # OFFLINE via /api/boleto/multi (lotes de até 200): boletos
+                # visuais reais. Os metadados de cobrança registrada
+                # (cobranca_id/txid/status) são carimbados por cima para manter
+                # os painéis BAPI e os cenários de conciliação populados.
                 self.stdout.write(
                     f'   → Boleto-API ({", ".join(providers)}) — {len(pares_api)} boletos '
                     f'visuais via /api/boleto/multi (lotes de até 200) '

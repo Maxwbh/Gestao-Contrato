@@ -74,6 +74,64 @@ class TipoParcela(models.TextChoices):
     ENTRADA = 'ENTRADA', 'Entrada'
 
 
+def _encargos_para_gateway(contrato, data_vencimento) -> dict:
+    """
+    Traduz a configuração de encargos do contrato (Contrato.get_config_boleto —
+    a mesma do fluxo CNAB) para os dicts que o gateway repassa à API do banco:
+
+        multa    = {'tipo': 'PERCENTUAL'|'FIXO', 'valor': x, 'data_inicio': 'YYYY-MM-DD'}
+        juros    = {'tipo': 'PERCENTUAL'|'FIXO', 'valor': x, 'data_inicio': 'YYYY-MM-DD'}
+        desconto = {'tipo': 'PERCENTUAL'|'FIXO', 'valor': x, 'data_limite': 'YYYY-MM-DD'}
+
+    Regras:
+      • `tipo` do sistema é PERCENTUAL/REAL; o gateway usa PERCENTUAL/FIXO.
+      • multa e juros incidem após o vencimento + dias de carência (data_inicio).
+      • desconto vale até `dias_desconto` ANTES do vencimento (data_limite);
+        sem dias configurados, o limite é o próprio vencimento.
+      • valores zerados/ausentes não são enviados (o banco aplica o padrão dele).
+    """
+    from datetime import timedelta
+
+    def _tipo(valor_tipo):
+        return 'PERCENTUAL' if (valor_tipo or 'PERCENTUAL') == 'PERCENTUAL' else 'FIXO'
+
+    def _num(v):
+        try:
+            return float(v or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    try:
+        cfg = contrato.get_config_boleto() or {}
+    except Exception:  # contrato sem config utilizável — não envia encargos
+        return {}
+
+    out: dict = {}
+    if not data_vencimento:
+        return out
+
+    carencia = int(cfg.get('dias_carencia') or 0)
+    inicio_encargos = (data_vencimento + timedelta(days=carencia + 1)).strftime('%Y-%m-%d')
+
+    multa = _num(cfg.get('valor_multa'))
+    if multa > 0:
+        out['multa'] = {'tipo': _tipo(cfg.get('tipo_valor_multa')),
+                        'valor': multa, 'data_inicio': inicio_encargos}
+
+    juros = _num(cfg.get('valor_juros'))
+    if juros > 0:
+        out['juros'] = {'tipo': _tipo(cfg.get('tipo_valor_juros')),
+                        'valor': juros, 'data_inicio': inicio_encargos}
+
+    desconto = _num(cfg.get('valor_desconto'))
+    if desconto > 0:
+        dias = int(cfg.get('dias_desconto') or 0)
+        limite = data_vencimento - timedelta(days=dias) if dias > 0 else data_vencimento
+        out['desconto'] = {'tipo': _tipo(cfg.get('tipo_valor_desconto')),
+                           'valor': desconto, 'data_limite': limite.strftime('%Y-%m-%d')}
+    return out
+
+
 class Parcela(TimeStampedModel):
     """Modelo para representar uma parcela do contrato"""
 
@@ -896,12 +954,11 @@ class Parcela(TimeStampedModel):
             },
         }
 
-        # Multa / juros da imobiliária (se configurados)
-        imob = contrato.imobiliaria
-        if getattr(imob, 'percentual_multa_padrao', None):
-            cobranca_payload['multa'] = float(imob.percentual_multa_padrao)
-        if getattr(imob, 'percentual_juros_padrao', None):
-            cobranca_payload['juros'] = float(imob.percentual_juros_padrao)
+        # Encargos e desconto no formato do gateway (dicts tipados), a partir da
+        # mesma configuração usada no fluxo CNAB (contrato ou imobiliária —
+        # Contrato.get_config_boleto), para que boleto registrado e boleto
+        # offline cobrem exatamente os mesmos valores e datas.
+        cobranca_payload.update(_encargos_para_gateway(contrato, self.data_vencimento))
 
         client = BoletoApiClient()
         # Token stateless (Bearer) quando a conta já foi onboarded; None mantém
