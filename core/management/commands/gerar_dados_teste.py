@@ -436,7 +436,7 @@ class Command(BaseCommand):
         """
         Cria Contas Bancárias para cada imobiliária.
 
-        BB e Bradesco: fluxo CNAB/BRCobrança (provider=brcobranca).
+        BB e Bradesco: fluxo CNAB offline (provider=pycobranca).
         Sicoob e C6:   cobrança registrada via Boleto-API (provider=sicoob/c6),
                        com account_config e tenant_id de demonstração.
         """
@@ -445,7 +445,7 @@ class Command(BaseCommand):
         # layout_cnab: BB → 240/400 | Sicoob → 240 | Bradesco → 400 | C6 → 400
         bancos_config = [
             {
-                'banco': '001',  # Banco do Brasil — CNAB/BRCobrança
+                'banco': '001',  # Banco do Brasil — CNAB offline (pyCobrança)
                 'descricao': 'Conta Principal BB',
                 'agencia': '3073',
                 'agencia_dv': '0',
@@ -455,7 +455,7 @@ class Command(BaseCommand):
                 'carteira': '18',
                 'layout_cnab': 'CNAB_240',
                 'nosso_numero_atual': 1,
-                'provider': 'brcobranca',
+                'provider': 'pycobranca',
                 'account_config': None,
             },
             {
@@ -478,7 +478,7 @@ class Command(BaseCommand):
                 },
             },
             {
-                'banco': '237',  # Bradesco — CNAB/BRCobrança (CNAB 400)
+                'banco': '237',  # Bradesco — CNAB offline (CNAB 400)
                 'descricao': 'Conta Bradesco',
                 'agencia': '1234',
                 'agencia_dv': '5',
@@ -488,7 +488,7 @@ class Command(BaseCommand):
                 'carteira': '06',
                 'layout_cnab': 'CNAB_400',
                 'nosso_numero_atual': 1,
-                'provider': 'brcobranca',
+                'provider': 'pycobranca',
                 'account_config': None,
             },
             {
@@ -517,10 +517,10 @@ class Command(BaseCommand):
         for imob_idx, imobiliaria in enumerate(imobiliarias):
             for config in bancos_config:
                 eh_principal = (config['banco'] == banco_principal)
-                provider = config.get('provider', 'brcobranca')
+                provider = config.get('provider', 'pycobranca')
 
                 # tenant_id único por imobiliária + banco (Boleto-API precisa; CNAB fica vazio)
-                tenant_id = f'imob{imob_idx + 1}-{config["banco"]}' if provider != 'brcobranca' else ''
+                tenant_id = f'imob{imob_idx + 1}-{config["banco"]}' if provider != 'pycobranca' else ''
 
                 agencia = config.get('agencia', '')
                 agencia_dv = config.get('agencia_dv', '')
@@ -1038,7 +1038,7 @@ class Command(BaseCommand):
         as contas bancárias disponíveis (BB, Sicoob, Bradesco) de cada imobiliária.
 
         Estratégia:
-          • API BRCobrança disponível → boletos REAIS via /api/boleto/multi em lotes
+          • Motor offline disponível → boletos REAIS via /api/boleto/multi em lotes
             de 10-20 registros (1 chamada à API por lote → PDFs reais armazenados).
           • API indisponível → fallback: popula campos sem PDF (dados suficientes
             para remessa CNAB e testes).
@@ -1094,9 +1094,9 @@ class Command(BaseCommand):
         # ── Fase 2: Separar por provedor ─────────────────────────────────────
         # Boleto-API (Sicoob/C6): sempre simulado em modo setup — gateway real
         # não está disponível durante a geração de dados de demonstração.
-        # BRCobrança (BB/Bradesco): usa API real se disponível, fallback simulado.
-        pares_cnab = [(p, c) for p, c in pares if getattr(c, 'provider', 'brcobranca') == 'brcobranca']
-        pares_api  = [(p, c) for p, c in pares if getattr(c, 'provider', 'brcobranca') != 'brcobranca']
+        # Offline pyCobrança (BB/Bradesco): usa API real se disponível, fallback simulado.
+        pares_cnab = [(p, c) for p, c in pares if getattr(c, 'provider', 'pycobranca') == 'pycobranca']
+        pares_api  = [(p, c) for p, c in pares if getattr(c, 'provider', 'pycobranca') != 'pycobranca']
 
         from financeiro.services.boleto_service import BoletoService
         service = BoletoService()
@@ -1106,7 +1106,7 @@ class Command(BaseCommand):
         if pares_cnab:
             if api_disponivel:
                 self.stdout.write(
-                    f'   → BRCobrança disponível — {len(pares_cnab)} boletos CNAB '
+                    f'   → Motor offline disponível — {len(pares_cnab)} boletos CNAB '
                     f'via /api/boleto/multi (lotes de até 200)...'
                 )
                 resultado = service.gerar_boletos_lote(pares_cnab)
@@ -1115,7 +1115,7 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
             else:
                 self.stdout.write(
-                    f'   → BRCobrança indisponível — simulando {len(pares_cnab)} boletos CNAB...'
+                    f'   → Motor offline indisponível — simulando {len(pares_cnab)} boletos CNAB...'
                 )
                 count += self._gerar_boletos_simulados(pares_cnab)
 
@@ -1155,8 +1155,8 @@ class Command(BaseCommand):
                 status_boleto__in=[SB.GERADO, SB.REGISTRADO],
             ).count()
             if qtd > 0:
-                provider = getattr(cb, 'provider', 'brcobranca')
-                if provider != 'brcobranca':
+                provider = getattr(cb, 'provider', 'pycobranca')
+                if provider != 'pycobranca':
                     label = f'boletos simulados ({provider})'
                 elif api_disponivel:
                     label = 'boletos reais'
@@ -1186,7 +1186,7 @@ class Command(BaseCommand):
             parcela.refresh_from_db()
             if parcela.status_boleto != StatusBoleto.GERADO:
                 continue  # lote falhou para esta parcela — fica como está
-            provider = getattr(conta, 'provider', 'brcobranca')
+            provider = getattr(conta, 'provider', 'pycobranca')
             if provider == 'c6':
                 if parcela.contrato_id not in metodo_por_contrato:
                     proximo_e_bolepix = len(metodo_por_contrato) % 2 == 0
@@ -1231,7 +1231,7 @@ class Command(BaseCommand):
         """
         Simula campos de boleto sem chamar APIs externas.
 
-        - BRCobrança (provider=brcobranca): popula nosso_numero no formato CNAB.
+        - Offline (provider=pycobranca): popula nosso_numero no formato CNAB.
         - Boleto-API (provider=sicoob/c6): monta um BOLETO FAKE completo via
           financeiro.services.boleto_fake (linha digitável e código de barras
           com DVs reais, Pix copia-e-cola EMV, PDF de demonstração) e registra
@@ -1255,11 +1255,11 @@ class Command(BaseCommand):
             if parcela.pago:
                 continue
 
-            provider = getattr(conta, 'provider', 'brcobranca')
+            provider = getattr(conta, 'provider', 'pycobranca')
             conta.nosso_numero_atual += 1
             seq_str = str(conta.nosso_numero_atual).zfill(9)
 
-            if provider != 'brcobranca':
+            if provider != 'pycobranca':
                 # BoletoPix só no C6 (BAPI-11); alterna os contratos C6 entre
                 # boleto e bolepix para popular as telas com os dois métodos.
                 if provider == 'c6':
@@ -1318,7 +1318,7 @@ class Command(BaseCommand):
                 parcela.status_boleto = StatusBoleto.REGISTRADO
                 parcela.data_registro_boleto = hoje
             else:
-                # BRCobrança/CNAB: formato nosso_numero varia por banco
+                # Offline/CNAB: formato nosso_numero varia por banco
                 if conta.banco == '001' and conta.convenio:
                     nosso_numero_fmt = str(conta.convenio).zfill(8) + seq_str
                 else:
@@ -1552,7 +1552,7 @@ class Command(BaseCommand):
         from financeiro.models import Parcela, StatusBoleto, StatusCobranca
 
         contas_api = list(
-            ContaBancaria.objects.exclude(provider='brcobranca').filter(ativo=True)
+            ContaBancaria.objects.exclude(provider='pycobranca').filter(ativo=True)
         )
         marcadas = 0
         for conta in contas_api:
@@ -2274,7 +2274,7 @@ class Command(BaseCommand):
                 status_boleto=StatusBoleto.GERADO,
                 pago=False,
                 nosso_numero__gt='',
-                conta_bancaria__provider='brcobranca',
+                conta_bancaria__provider='pycobranca',
             ).exclude(
                 itens_remessa__isnull=False
             ).values_list('pk', flat=True)
@@ -2331,7 +2331,7 @@ class Command(BaseCommand):
 
         for conta in contas_bancarias:
             # Boleto-API (Sicoob/C6): conciliação via webhook push, não CNAB retorno
-            if getattr(conta, 'provider', 'brcobranca') != 'brcobranca':
+            if getattr(conta, 'provider', 'pycobranca') != 'pycobranca':
                 continue
 
             # Boletos GERADO com nosso_numero para simular retorno bancário CNAB
@@ -2463,7 +2463,7 @@ class Command(BaseCommand):
             status_boleto=StatusBoleto.GERADO,
             pago=False,
             nosso_numero__gt='',
-            conta_bancaria__provider='brcobranca',
+            conta_bancaria__provider='pycobranca',
         ).exclude(
             itens_remessa__isnull=False
         ).select_related('conta_bancaria').order_by('data_vencimento')
@@ -2564,7 +2564,7 @@ class Command(BaseCommand):
             status_boleto=StatusBoleto.REGISTRADO,
             pago=False,
             nosso_numero__gt='',
-            conta_bancaria__provider='brcobranca',
+            conta_bancaria__provider='pycobranca',
         ).select_related('conta_bancaria').order_by('conta_bancaria', 'data_vencimento'):
             parcelas_por_conta.setdefault(p.conta_bancaria_id, []).append(p)
 

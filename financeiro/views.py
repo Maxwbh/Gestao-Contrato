@@ -2804,8 +2804,8 @@ def boletos_painel_gerar(request):
                               'erro': f'Intermediária {it.pk}: {e}'})
 
         # Conta CNAB → acumula para o lote /api/boleto/multi (gera após o loop).
-        _provider_conta = getattr(conta_bancaria, 'provider', 'brcobranca') or 'brcobranca'
-        if _provider_conta == 'brcobranca':
+        _provider_conta = getattr(conta_bancaria, 'provider', 'pycobranca') or 'pycobranca'
+        if _provider_conta == 'pycobranca':
             for parcela in alvos:
                 pares_cnab_lote.append((parcela, conta_bancaria, contrato))
             continue

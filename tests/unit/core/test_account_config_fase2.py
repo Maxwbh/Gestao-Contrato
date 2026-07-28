@@ -35,6 +35,6 @@ class TestAccountConfigFaltando:
         assert ContaBancaria(banco='336', provider='c6',
                              account_config={'billing_scheme': 'x'}).account_config_faltando() == []
 
-    def test_brcobranca_nunca_falta(self):
-        assert ContaBancaria(banco='001', provider='brcobranca',
+    def test_pycobranca_nunca_falta(self):
+        assert ContaBancaria(banco='001', provider='pycobranca',
                              account_config=None).account_config_faltando() == []

@@ -107,8 +107,8 @@ class TestApiContasBancarias:
         response = client_logado.delete(url)
         assert response.status_code in (400, 404, 500)
 
-    def test_criar_conta_sem_provider_default_brcobranca(self, client_logado, contrato):
-        """Criar conta sem provider → persiste brcobranca (default seguro)."""
+    def test_criar_conta_sem_provider_default_pycobranca(self, client_logado, contrato):
+        """Criar conta sem provider → persiste pycobranca (default seguro)."""
         from core.models import ContaBancaria
         url = reverse('core:api_criar_conta')
         payload = {
@@ -120,7 +120,7 @@ class TestApiContasBancarias:
         assert response.status_code == 200, response.content
         conta_id = response.json()['conta_id']
         conta = ContaBancaria.objects.get(pk=conta_id)
-        assert conta.provider == 'brcobranca'
+        assert conta.provider == 'pycobranca'
 
     def test_criar_conta_com_provider_sicoob(self, client_logado, contrato):
         """Criar conta com provider=sicoob persiste provider e tenant_id."""
@@ -159,8 +159,8 @@ class TestApiContasBancarias:
         assert data['provider'] == 'c6'
         assert data['tenant_id'] == 'imob1-336'
 
-    def test_atualizar_conta_provider_vazio_vira_brcobranca(self, client_logado, contrato):
-        """Atualizar conta enviando provider vazio → brcobranca."""
+    def test_atualizar_conta_provider_vazio_vira_pycobranca(self, client_logado, contrato):
+        """Atualizar conta enviando provider vazio → pycobranca."""
         from core.models import ContaBancaria
         conta = ContaBancaria.objects.create(
             imobiliaria=contrato.imobiliaria, banco='756', descricao='Sicoob',
@@ -172,7 +172,7 @@ class TestApiContasBancarias:
         response = client_logado.post(url, payload, content_type='application/json')
         assert response.status_code == 200, response.content
         conta.refresh_from_db()
-        assert conta.provider == 'brcobranca'
+        assert conta.provider == 'pycobranca'
 
 
 @pytest.mark.django_db

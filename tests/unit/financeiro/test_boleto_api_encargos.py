@@ -109,7 +109,7 @@ class TestEncargosNoPayload:
 @pytest.mark.django_db
 class TestRoteamentoPorProvider:
     """C6/Sicoob (provider próprio) registram individualmente no banco; contas
-    offline (brcobranca) usam o multi. Os dois modos existem no gateway, e o
+    offline (pycobranca) usam o multi. Os dois modos existem no gateway, e o
     `provider` da conta é o que decide o caminho."""
 
     URL = 'financeiro:boletos_painel_gerar'
@@ -151,7 +151,7 @@ class TestRoteamentoPorProvider:
         from tests.fixtures.factories import SuperUserFactory
         from financeiro.models import StatusBoleto
         _, conta, contrato = cenario
-        conta.provider = 'brcobranca'
+        conta.provider = 'pycobranca'
         conta.save(update_fields=['provider'])
         client.force_login(SuperUserFactory())
 
@@ -188,7 +188,7 @@ class TestCnabSomenteOffline:
         p.nosso_numero = '99999999'
         p.provider = 'sicoob'          # emitido em cobrança registrada
         p.save(update_fields=['status_boleto', 'nosso_numero', 'provider'])
-        conta.provider = 'brcobranca'  # conta migrou para offline depois
+        conta.provider = 'pycobranca'  # conta migrou para offline depois
         conta.save(update_fields=['provider'])
 
         elegiveis = CNABService().obter_boletos_elegiveis_painel(
@@ -200,7 +200,7 @@ class TestCnabSomenteOffline:
         from financeiro.models import StatusBoleto
         from financeiro.services.cnab_service import CNABService
         imob, conta, contrato = cenario
-        conta.provider = 'brcobranca'
+        conta.provider = 'pycobranca'
         conta.save(update_fields=['provider'])
 
         p = contrato.parcelas.first()
@@ -220,7 +220,7 @@ class TestCnabSomenteOffline:
         from financeiro.models import StatusBoleto
         from financeiro.services.cnab_service import CNABService
         _, conta, contrato = cenario
-        conta.provider = 'brcobranca'
+        conta.provider = 'pycobranca'
         conta.save(update_fields=['provider'])
 
         p = contrato.parcelas.first()
@@ -232,6 +232,93 @@ class TestCnabSomenteOffline:
         r = CNABService().gerar_remessa([p], conta)
         assert r['sucesso'] is False
         assert 'Nenhuma parcela valida' in r['erro']
+
+
+@pytest.mark.django_db
+class TestValoresCalculados:
+    """Valida os VALORES efetivamente cobrados: o que vai ao gateway tem de
+    bater com o que o sistema calcula na tela (juros/multa pro rata die) e com
+    o desconto configurado."""
+
+    def test_multa_percentual_bate_com_o_calculo_do_sistema(self, cenario):
+        """2% de multa sobre a parcela = valor que o sistema calcula no atraso."""
+        _, conta, contrato = cenario
+        parcela = contrato.parcelas.first()
+        base = parcela.valor_atual
+        # Sistema: calcula multa/juros para um pagamento 10 dias após o vencimento
+        _juros, multa = parcela.calcular_juros_multa(
+            parcela.data_vencimento + timedelta(days=10))
+        esperado = (base * Decimal('2.00') / Decimal('100')).quantize(Decimal('0.01'))
+        assert multa.quantize(Decimal('0.01')) == esperado
+
+        # Gateway: recebe o percentual (o banco aplica sobre a mesma base)
+        with patch(CRED, return_value={'sucesso': True, 'bapi_token': 'b'}), \
+             patch(REG, return_value=_ok()) as reg:
+            parcela.gerar_boleto(conta_bancaria=conta, enviar_email=False)
+        cob = reg.call_args.args[3]
+        assert cob['multa']['valor'] == 2.0
+        assert cob['multa']['tipo'] == 'PERCENTUAL'
+        # base do gateway = valor enviado na cobrança
+        assert (Decimal(str(cob['valor'])) * Decimal('2.00') / Decimal('100')
+                ).quantize(Decimal('0.01')) == Decimal('166.67')
+
+    def test_juros_mensal_vai_como_percentual_ao_mes(self, cenario):
+        """1%/mês é enviado como 1.0 — o banco faz o pro rata die (1/30 ao dia)."""
+        _, conta, contrato = cenario
+        parcela = contrato.parcelas.first()
+        with patch(CRED, return_value={'sucesso': True, 'bapi_token': 'b'}), \
+             patch(REG, return_value=_ok()) as reg:
+            parcela.gerar_boleto(conta_bancaria=conta, enviar_email=False)
+        cob = reg.call_args.args[3]
+        assert cob['juros'] == {
+            'tipo': 'PERCENTUAL', 'valor': 1.0,
+            'data_inicio': (parcela.data_vencimento + timedelta(days=4)).strftime('%Y-%m-%d'),
+        }
+        # equivalente diário conferido: 1%/30 ≈ 0,0333%/dia
+        assert round(cob['juros']['valor'] / 30, 4) == 0.0333
+
+    def test_desconto_fixo_reduz_o_valor_ate_a_data(self, cenario):
+        """R$ 50 de desconto até 5 dias antes do vencimento."""
+        _, conta, contrato = cenario
+        parcela = contrato.parcelas.first()
+        valor_cheio = parcela.valor_boleto
+        with patch(CRED, return_value={'sucesso': True, 'bapi_token': 'b'}), \
+             patch(REG, return_value=_ok()) as reg:
+            parcela.gerar_boleto(conta_bancaria=conta, enviar_email=False)
+        cob = reg.call_args.args[3]
+        assert cob['desconto']['valor'] == 50.0 and cob['desconto']['tipo'] == 'FIXO'
+        # quem pagar dentro do prazo desembolsa valor - desconto
+        assert (valor_cheio - Decimal('50.00')) == Decimal('8283.33')
+        assert cob['desconto']['data_limite'] == (
+            parcela.data_vencimento - timedelta(days=5)).strftime('%Y-%m-%d')
+
+    def test_multa_em_valor_fixo(self, cenario):
+        """tipo VALOR (contrato) → FIXO no gateway, com o valor em reais."""
+        _, conta, contrato = cenario
+        contrato.tipo_valor_multa = 'VALOR'
+        contrato.valor_multa_boleto = Decimal('35.90')
+        contrato.save(update_fields=['tipo_valor_multa', 'valor_multa_boleto'])
+        parcela = contrato.parcelas.first()
+        with patch(CRED, return_value={'sucesso': True, 'bapi_token': 'b'}), \
+             patch(REG, return_value=_ok()) as reg:
+            parcela.gerar_boleto(conta_bancaria=conta, enviar_email=False)
+        assert reg.call_args.args[3]['multa'] == {
+            'tipo': 'FIXO', 'valor': 35.9,
+            'data_inicio': (parcela.data_vencimento + timedelta(days=4)).strftime('%Y-%m-%d'),
+        }
+
+    def test_carencia_zero_encargos_no_dia_seguinte(self, cenario):
+        """Sem carência, multa/juros valem a partir de D+1 do vencimento."""
+        _, conta, contrato = cenario
+        contrato.dias_carencia_boleto = 0
+        contrato.save(update_fields=['dias_carencia_boleto'])
+        parcela = contrato.parcelas.first()
+        with patch(CRED, return_value={'sucesso': True, 'bapi_token': 'b'}), \
+             patch(REG, return_value=_ok()) as reg:
+            parcela.gerar_boleto(conta_bancaria=conta, enviar_email=False)
+        cob = reg.call_args.args[3]
+        d1 = (parcela.data_vencimento + timedelta(days=1)).strftime('%Y-%m-%d')
+        assert cob['multa']['data_inicio'] == d1 and cob['juros']['data_inicio'] == d1
 
 
 @pytest.mark.django_db

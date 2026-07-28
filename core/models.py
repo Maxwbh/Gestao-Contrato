@@ -107,7 +107,7 @@ class ProviderBoleto(models.TextChoices):
 
       • **offline** — motor **pyCobrança** (boleto/CNAB, sem credencial de
         banco; sucessor do BRCobrança/Ruby). No sistema, é a conta com
-        `provider='brcobranca'` — valor mantido por compatibilidade com os
+        `provider='pycobranca'` — valor mantido por compatibilidade com os
         dados já gravados; a emissão em massa usa POST /api/boleto/multi.
       • **próprio** — REST registrado no banco (OAuth2 + mTLS), exige
         credenciais e `*_REGISTERED_READY=true` no gateway. No sistema, é a
@@ -117,9 +117,24 @@ class ProviderBoleto(models.TextChoices):
     Ou seja: escolher C6/Sicoob aqui significa **cobrança registrada**; para
     usar esses bancos apenas no fluxo offline/CNAB, mantenha `brcobranca`.
     """
-    BRCOBRANCA = 'brcobranca', 'pyCobrança (motor offline — boleto/CNAB)'
+    PYCOBRANCA = 'pycobranca', 'pyCobrança (motor offline — boleto/CNAB)'
     C6 = 'c6', 'C6 Bank (cobrança registrada)'
     SICOOB = 'sicoob', 'Sicoob (cobrança registrada)'
+
+
+# Valor legado do modo offline (antes do motor migrar de BRCobrança/Ruby para
+# pyCobrança/Python). Ainda aceito na entrada (APIs/forms/imports) e convertido
+# para `pycobranca`; os dados já gravados foram migrados em
+# core.migrations.0026 / financeiro.migrations.0026.
+PROVIDER_OFFLINE_LEGADO = 'brcobranca'
+
+
+def normalizar_provider(valor) -> str:
+    """Normaliza o provider recebido de fora: vazio ou legado → `pycobranca`."""
+    v = (valor or '').strip().lower()
+    if not v or v == PROVIDER_OFFLINE_LEGADO:
+        return ProviderBoleto.PYCOBRANCA
+    return v
 
 
 class MetodoCobranca(models.TextChoices):
@@ -138,8 +153,8 @@ def default_metodos_cobranca():
 # Bancos → provedores de cobrança compatíveis (para validação banco↔provider).
 # Bancos fora do mapa aceitam apenas BRCobrança (CNAB local).
 PROVIDERS_POR_BANCO = {
-    '336': {ProviderBoleto.C6, ProviderBoleto.BRCOBRANCA},      # C6 Bank
-    '756': {ProviderBoleto.SICOOB, ProviderBoleto.BRCOBRANCA},  # Sicoob / Bancoob
+    '336': {ProviderBoleto.C6, ProviderBoleto.PYCOBRANCA},      # C6 Bank
+    '756': {ProviderBoleto.SICOOB, ProviderBoleto.PYCOBRANCA},  # Sicoob / Bancoob
 }
 
 # account_config (sem segredos) por provider: chaves obrigatórias e opcionais.
@@ -154,7 +169,7 @@ ACCOUNT_CONFIG_SCHEMA = {
         'obrigatorias': ['numeroCliente', 'codigoModalidade', 'numeroContaCorrente'],
         'opcionais': ['chave_pix'],
     },
-    ProviderBoleto.BRCOBRANCA: {
+    ProviderBoleto.PYCOBRANCA: {
         'obrigatorias': [],
         'opcionais': [],
     },
@@ -606,12 +621,12 @@ class ContaBancaria(TimeStampedModel):
     )
 
     # Boleto-API: provedor de cobrança registrada (flag de feature por conta)
-    # 'brcobranca' (padrão) mantém o fluxo CNAB atual; 'c6'/'sicoob' ativam
+    # 'pycobranca' (padrão) mantém o fluxo CNAB atual; 'c6'/'sicoob' ativam
     # o fluxo de cobrança registrada via gateway Boleto-API.
     provider = models.CharField(
         max_length=20,
         choices=ProviderBoleto.choices,
-        default=ProviderBoleto.BRCOBRANCA,
+        default=ProviderBoleto.PYCOBRANCA,
         verbose_name='Provedor de Cobrança',
         help_text='BRCobrança = fluxo CNAB atual; C6/Sicoob = cobrança registrada via Boleto-API.',
     )
@@ -777,7 +792,7 @@ class ContaBancaria(TimeStampedModel):
         """Valida compatibilidade banco↔provider."""
         super().clean()
         from django.core.exceptions import ValidationError
-        permitidos = PROVIDERS_POR_BANCO.get(self.banco, {ProviderBoleto.BRCOBRANCA})
+        permitidos = PROVIDERS_POR_BANCO.get(self.banco, {ProviderBoleto.PYCOBRANCA})
         if self.provider and self.provider not in permitidos:
             nomes = ', '.join(sorted(permitidos))
             raise ValidationError({
@@ -1630,7 +1645,7 @@ class ParametroSistema(models.Model):
     GRUPO_TESTE = 'teste'
     GRUPO_NOTIFICACAO = 'notificacao'
     GRUPO_TAREFA = 'tarefa'
-    GRUPO_BRCOBRANCA = 'brcobranca'
+    GRUPO_PYCOBRANCA = 'pycobranca'
     GRUPO_PORTAL = 'portal'
     GRUPO_APLICACAO = 'aplicacao'
     GRUPO_BCB = 'bcb'
@@ -1641,7 +1656,7 @@ class ParametroSistema(models.Model):
         (GRUPO_TESTE, 'Modo de Teste'),
         (GRUPO_NOTIFICACAO, 'Notificações'),
         (GRUPO_TAREFA, 'Tarefas Agendadas'),
-        (GRUPO_BRCOBRANCA, 'BRCobrança'),
+        (GRUPO_PYCOBRANCA, 'pyCobrança (motor offline)'),
         (GRUPO_PORTAL, 'Portal do Comprador'),
         (GRUPO_APLICACAO, 'Aplicação'),
         (GRUPO_BCB, 'APIs BCB'),

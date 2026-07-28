@@ -920,7 +920,7 @@ class Parcela(TimeStampedModel):
         """
         Emite cobrança registrada via Boleto-API gateway (C6/Sicoob).
 
-        Chamado por gerar_boleto() quando conta_bancaria.provider != 'brcobranca'.
+        Chamado por gerar_boleto() quando conta_bancaria.provider != 'pycobranca'.
         Persiste cobranca_id para conciliação push (webhook).
         """
         from financeiro.services.boleto_api_client import BoletoApiClient
@@ -1082,10 +1082,10 @@ class Parcela(TimeStampedModel):
         if not conta_bancaria:
             raise ValueError("Nenhuma conta bancária disponível para gerar boleto")
 
-        # Feature flag por conta: provider != 'brcobranca' → cobrança registrada via Boleto-API.
+        # Feature flag por conta: provider != 'pycobranca' → cobrança registrada via Boleto-API.
         # Mantém fluxo CNAB intacto quando desligado (nenhuma mudança de comportamento).
-        provider = getattr(conta_bancaria, 'provider', 'brcobranca') or 'brcobranca'
-        if provider != 'brcobranca':
+        provider = getattr(conta_bancaria, 'provider', 'pycobranca') or 'pycobranca'
+        if provider != 'pycobranca':
             return self._gerar_via_boleto_api(conta_bancaria, provider, force, enviar_email)
 
         # Usar o serviço de boleto (fluxo CNAB/BRCobrança existente)
@@ -1145,7 +1145,7 @@ class Parcela(TimeStampedModel):
 
     def _e_boleto_api(self) -> bool:
         """True se esta parcela foi/será cobrada via gateway Boleto-API (C6/Sicoob)."""
-        return bool(self.provider and self.provider != ProviderBoleto.BRCOBRANCA)
+        return bool(self.provider and self.provider != ProviderBoleto.PYCOBRANCA)
 
     def _bapi_ctx(self):
         """(tenant_id, bapi_token) da conta bancária para chamadas ao gateway."""
@@ -1192,10 +1192,10 @@ class Parcela(TimeStampedModel):
             return {'sucesso': False, 'erro': 'Parcela já paga.'}
 
         conta = self.conta_bancaria
-        if not conta or getattr(conta, 'provider', '') in ('', ProviderBoleto.BRCOBRANCA):
+        if not conta or getattr(conta, 'provider', '') in ('', ProviderBoleto.PYCOBRANCA):
             imob = self.contrato.imobiliaria
             conta = imob.contas_bancarias.filter(ativo=True).exclude(
-                provider=ProviderBoleto.BRCOBRANCA).order_by('-principal').first()
+                provider=ProviderBoleto.PYCOBRANCA).order_by('-principal').first()
         if not conta:
             return {'sucesso': False,
                     'erro': 'Nenhuma conta bancária com provedor de API (C6/Sicoob) disponível.'}

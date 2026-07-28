@@ -53,7 +53,7 @@ class TestConfiguracoesSistemaView:
         staff = SuperUserFactory()
         r = make_client(staff).get(reverse('core:configuracoes_sistema'), secure=True)
         for key in ('configs_email', 'configs_whatsapp', 'params_twilio',
-                    'params_brcobranca', 'params_portal', 'params_notif',
+                    'params_pycobranca', 'params_portal', 'params_notif',
                     'parametros_por_grupo', 'regras_notificacao', 'brcobranca_url'):
             assert key in r.context, f"Chave '{key}' ausente no contexto"
 
@@ -78,7 +78,7 @@ class TestApiParametrosSalvarGrupo:
         staff = SuperUserFactory()
         url = reverse('core:api_parametros_salvar')
         payload = {
-            'grupo': 'brcobranca',
+            'grupo': 'pycobranca',
             'parametros': {
                 'BRCOBRANCA_URL': 'http://test-server:9292',
                 'BRCOBRANCA_TIMEOUT': '45',
@@ -96,9 +96,9 @@ class TestApiParametrosSalvarGrupo:
 
     def test_atualiza_parametro_existente(self):
         staff = SuperUserFactory()
-        ParametroSistema.objects.create(chave='BRCOBRANCA_URL', valor='http://old:9292', grupo='brcobranca')
+        ParametroSistema.objects.create(chave='BRCOBRANCA_URL', valor='http://old:9292', grupo='pycobranca')
         url = reverse('core:api_parametros_salvar')
-        payload = {'grupo': 'brcobranca', 'parametros': {'BRCOBRANCA_URL': 'http://new:9292'}}
+        payload = {'grupo': 'pycobranca', 'parametros': {'BRCOBRANCA_URL': 'http://new:9292'}}
         make_client(staff).post(url, data=json.dumps(payload), content_type='application/json', secure=True)
         assert ParametroSistema.objects.get(chave='BRCOBRANCA_URL').valor == 'http://new:9292'
 
@@ -206,7 +206,7 @@ class TestSyncParamsFromEnv:
         param = ParametroSistema.objects.create(
             chave='BRCOBRANCA_URL',
             valor='http://meu-servidor:9292',
-            grupo='brcobranca',
+            grupo='pycobranca',
             modificado_manualmente=True,
         )
         out = StringIO()
@@ -218,7 +218,7 @@ class TestSyncParamsFromEnv:
         ParametroSistema.objects.create(
             chave='BRCOBRANCA_URL',
             valor='http://meu-servidor:9292',
-            grupo='brcobranca',
+            grupo='pycobranca',
             modificado_manualmente=True,
         )
         out = StringIO()

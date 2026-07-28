@@ -90,7 +90,7 @@ def conciliacao_financeira(imobiliaria, inicio, fim):
     itens_gateway = []
     erros = []
     contas = imobiliaria.contas_bancarias.filter(ativo=True).exclude(
-        provider=ProviderBoleto.BRCOBRANCA)
+        provider=ProviderBoleto.PYCOBRANCA)
     for conta in contas:
         r = client.consultar_conciliacao(
             inicio.isoformat(), fim.isoformat(), conta.tenant_id, conta.provider,

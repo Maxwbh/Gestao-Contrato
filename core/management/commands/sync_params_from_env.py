@@ -82,13 +82,13 @@ PARAMETROS = [
      'Token Bearer para autenticar chamadas à API /api/tasks/run-all/'),
 
     # ── BRCobrança ───────────────────────────────────────────────────────────
-    ('BRCOBRANCA_URL',           'brcobranca', 'str', 'http://localhost:9292',
-     'URL base da API BRCobrança (docker run -p 9292:9292 kivanio/brcobranca)'),
-    ('BRCOBRANCA_TIMEOUT',       'brcobranca', 'int', '30',
+    ('BRCOBRANCA_URL',           'pycobranca', 'str', 'http://localhost:9292',
+     'URL base do motor offline pyCobrança (gateway cobranca-api)'),
+    ('BRCOBRANCA_TIMEOUT',       'pycobranca', 'int', '30',
      'Timeout para chamadas à API BRCobrança (segundos)'),
-    ('BRCOBRANCA_MAX_TENTATIVAS', 'brcobranca', 'int', '3',
+    ('BRCOBRANCA_MAX_TENTATIVAS', 'pycobranca', 'int', '3',
      'Número máximo de tentativas em caso de falha'),
-    ('BRCOBRANCA_DELAY_INICIAL', 'brcobranca', 'int', '2',
+    ('BRCOBRANCA_DELAY_INICIAL', 'pycobranca', 'int', '2',
      'Delay inicial de retry em segundos (dobra a cada tentativa)'),
 
     # ── Portal do Comprador ──────────────────────────────────────────────────

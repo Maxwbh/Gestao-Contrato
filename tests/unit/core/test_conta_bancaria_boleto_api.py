@@ -68,10 +68,10 @@ class TestCriarContaBoletoApi:
         conta = ContaBancaria.objects.get(pk=r.json()['conta_id'])
         assert conta.tenant_id == f'imob{imob.id}-c6'
 
-    def test_brcobranca_sem_tenant_nem_credenciais(self, admin_client, imob):
+    def test_pycobranca_sem_tenant_nem_credenciais(self, admin_client, imob):
         r = _post(admin_client, reverse('core:api_criar_conta'), {
             'imobiliaria_id': imob.id, 'banco': '001', 'descricao': 'BB',
-            'agencia': '1234', 'conta': '5678', 'provider': 'brcobranca',
+            'agencia': '1234', 'conta': '5678', 'provider': 'pycobranca',
         })
         conta = ContaBancaria.objects.get(pk=r.json()['conta_id'])
         assert conta.tenant_id == '' and conta.credenciais_cifradas == ''

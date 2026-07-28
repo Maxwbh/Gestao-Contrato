@@ -26,7 +26,7 @@ from .models import (
     get_contabilidades_usuario, get_imobiliarias_usuario,
     usuario_tem_acesso_imobiliaria, usuario_tem_acesso_contabilidade,
     usuario_tem_permissao_total, registrar_auditoria, LogAuditoria,
-    PerfilUsuario, pode_gerenciar_usuarios,
+    PerfilUsuario, pode_gerenciar_usuarios, ProviderBoleto, normalizar_provider,
 )
 from .forms import (ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm,
                     AcessoUsuarioForm, NovoUsuarioForm)
@@ -1575,16 +1575,16 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
                     conta_dv = conta_data.get('conta_dv', '')
                     conta_completa = f"{conta}-{conta_dv}" if conta and conta_dv else conta
 
-                    _prov = (conta_data.get('provider') or 'brcobranca').strip() or 'brcobranca'
+                    _prov = normalizar_provider(conta_data.get('provider'))
                     _tenant = (conta_data.get('tenant_id') or '').strip()
-                    if _prov != 'brcobranca' and not _tenant:
+                    if _prov != ProviderBoleto.PYCOBRANCA and not _tenant:
                         _tenant = f'imob{self.object.id}-{_prov}'
                     _conta = ContaBancaria(
                         imobiliaria=self.object,
                         banco=conta_data.get('banco', ''),
                         descricao=conta_data.get('descricao', ''),
                         provider=_prov,
-                        tenant_id=_tenant if _prov != 'brcobranca' else '',
+                        tenant_id=_tenant if _prov != ProviderBoleto.PYCOBRANCA else '',
                         account_config=conta_data.get('account_config'),
                         agencia=agencia_completa,
                         conta=conta_completa,
@@ -1773,12 +1773,12 @@ def api_criar_conta_bancaria(request):
 
         imobiliaria = get_object_or_404(Imobiliaria, pk=data.get('imobiliaria_id'), ativo=True)
 
-        # Provider vazio = BRCobrança (fluxo CNAB padrão)
-        provider = (data.get('provider') or 'brcobranca').strip() or 'brcobranca'
+        # Provider vazio (ou legado 'brcobranca') = pyCobrança, motor offline/CNAB
+        provider = normalizar_provider(data.get('provider'))
         # tenant_id é identificador interno (não é credencial do provedor):
         # gerado automaticamente para C6/Sicoob quando não informado.
         tenant_id = (data.get('tenant_id') or '').strip()
-        if provider != 'brcobranca' and not tenant_id:
+        if provider != ProviderBoleto.PYCOBRANCA and not tenant_id:
             tenant_id = f'imob{imobiliaria.id}-{provider}'
 
         # Sicoob: a conta corrente é o próprio campo "conta" (não se duplica no form).
@@ -1839,14 +1839,13 @@ def api_atualizar_conta_bancaria(request, conta_id):
 
         conta.banco = data.get('banco', conta.banco)
         conta.descricao = data.get('descricao', conta.descricao)
-        # Provider vazio = BRCobrança (fluxo CNAB padrão)
-        _provider = (data.get('provider') or '').strip()
-        conta.provider = _provider or 'brcobranca'
+        # Provider vazio (ou legado 'brcobranca') = pyCobrança, motor offline/CNAB
+        conta.provider = normalizar_provider(data.get('provider'))
         # tenant_id interno: gera para C6/Sicoob quando ausente (não é credencial).
         _tenant = (data.get('tenant_id', conta.tenant_id) or '').strip()
-        if conta.provider != 'brcobranca' and not _tenant:
+        if conta.provider != ProviderBoleto.PYCOBRANCA and not _tenant:
             _tenant = f'imob{conta.imobiliaria_id}-{conta.provider}'
-        conta.tenant_id = _tenant if conta.provider != 'brcobranca' else ''
+        conta.tenant_id = _tenant if conta.provider != ProviderBoleto.PYCOBRANCA else ''
         if 'account_config' in data:
             # Sicoob: a conta corrente vem do campo "conta" (não se duplica no form).
             _cc = data.get('conta', conta.conta)
@@ -2534,12 +2533,12 @@ def configuracoes_sistema(request):
         }
 
     params_twilio = _params_por_prefixo('TWILIO_')
-    params_brcobranca = _params_por_prefixo('BRCOBRANCA_')
+    params_pycobranca = _params_por_prefixo('BRCOBRANCA_')
     params_portal = _params_por_prefixo('PORTAL_')
     params_notif = _params_por_prefixo('NOTIFICACAO_')
 
     brcobranca_url = (
-        params_brcobranca.get('BRCOBRANCA_URL')
+        params_pycobranca.get('BRCOBRANCA_URL')
         or getattr(django_settings, 'BRCOBRANCA_URL', 'http://localhost:9292')
     )
 
@@ -2555,9 +2554,9 @@ def configuracoes_sistema(request):
         'config_email': ConfiguracaoEmail.objects.filter(ativo=True).first(),
         'config_whatsapp': ConfiguracaoWhatsApp.objects.filter(ativo=True).first(),
         'config_sms': ConfiguracaoSMS.objects.filter(ativo=True).first(),
-        'status_brcobranca': bool(params_brcobranca.get('BRCOBRANCA_URL')),
+        'status_pycobranca': bool(params_pycobranca.get('BRCOBRANCA_URL')),
         'params_twilio': params_twilio,
-        'params_brcobranca': params_brcobranca,
+        'params_pycobranca': params_pycobranca,
         'params_portal': params_portal,
         'params_notif': params_notif,
         'parametros_por_grupo': dict(parametros_por_grupo),

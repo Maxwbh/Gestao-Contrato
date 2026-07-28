@@ -674,7 +674,7 @@ class Contrato(TimeStampedModel):
         from financeiro.models import RecorrenciaPix, RecStatusPA
         from financeiro.services.boleto_api_client import BoletoApiClient
         conta = self.get_conta_bancaria()
-        if not conta or (conta.provider or 'brcobranca') == 'brcobranca':
+        if not conta or (conta.provider or 'pycobranca') == 'pycobranca':
             return {'sucesso': False, 'erro': 'Pix Automático exige conta C6/Sicoob.'}
         rec = getattr(self, 'recorrencia_pix', None)
         if rec and rec.status in (RecStatusPA.CRIADA, RecStatusPA.APROVADA):

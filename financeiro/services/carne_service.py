@@ -28,7 +28,7 @@ def gerar_carne_pdf(parcelas, contrato) -> bytes:
             'Configure uma conta bancária principal para a imobiliária.'
         )
 
-    if getattr(conta, 'provider', 'brcobranca') not in ('', 'brcobranca'):
+    if getattr(conta, 'provider', 'pycobranca') not in ('', 'pycobranca'):
         return _gerar_carne_via_boleto_api(parcelas_list, contrato, conta)
 
     service = BoletoService()

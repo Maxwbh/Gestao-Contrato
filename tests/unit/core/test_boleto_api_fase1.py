@@ -50,9 +50,9 @@ class TestContaBancariaCredenciais:
 
 class TestBancoProvider:
     @pytest.mark.parametrize('banco,provider', [
-        ('336', 'c6'), ('336', 'brcobranca'),
-        ('756', 'sicoob'), ('756', 'brcobranca'),
-        ('001', 'brcobranca'),
+        ('336', 'c6'), ('336', 'pycobranca'),
+        ('756', 'sicoob'), ('756', 'pycobranca'),
+        ('001', 'pycobranca'),
     ])
     def test_compativel_nao_levanta(self, banco, provider):
         ContaBancaria(banco=banco, provider=provider).clean()

@@ -382,7 +382,7 @@ class CNABService:
 
         # Boleto-API (C6/Sicoob): cobrança registrada não gera remessa CNAB.
         # A conciliação ocorre por evento push (webhook), não por arquivo.
-        if getattr(conta_bancaria, 'provider', 'brcobranca') in PROVIDERS_BOLETO_API:
+        if getattr(conta_bancaria, 'provider', 'pycobranca') in PROVIDERS_BOLETO_API:
             return {
                 'sucesso': False,
                 'erro': (
@@ -1312,7 +1312,7 @@ class CNABService:
                 return {'parcela_ids': [], 'erro': 'Boleto sem conta bancária associada.'}
             # CNAB é exclusivo do modo offline: barra tanto pelo provider atual
             # da conta quanto pelo provider que gerou o boleto (Parcela.provider).
-            if (getattr(p.conta_bancaria, 'provider', 'brcobranca') in PROVIDERS_BOLETO_API
+            if (getattr(p.conta_bancaria, 'provider', 'pycobranca') in PROVIDERS_BOLETO_API
                     or (p.provider or '') in PROVIDERS_BOLETO_API):
                 return {
                     'parcela_ids': [],

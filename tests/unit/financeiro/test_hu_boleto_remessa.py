@@ -1075,7 +1075,7 @@ class TestOFXBRCobranca:
         assert result is None
 
     def test_ofx_service_usa_brcobranca_quando_disponivel(self, contrato_com_parcelas):
-        """OFXService.processar usa BRCobrança quando disponível (parser='brcobranca')."""
+        """OFXService.processar usa BRCobrança quando disponível (parser='pycobranca')."""
         from unittest.mock import patch, MagicMock
         from financeiro.services.ofx_service import OFXService
 
@@ -1087,7 +1087,7 @@ class TestOFXBRCobranca:
             service = OFXService(contrato=contrato_com_parcelas)
             resultado = service.processar(OFX_SAMPLE)
 
-        assert resultado['parser'] == 'brcobranca'
+        assert resultado['parser'] == 'pycobranca'
         assert resultado['total_transacoes'] == 2
 
     def test_ofx_service_levanta_erro_quando_brcobranca_indisponivel(self, contrato_com_parcelas):

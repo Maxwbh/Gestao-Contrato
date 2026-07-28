@@ -1131,7 +1131,7 @@ class ContaBancariaForm(forms.ModelForm):
         from core.models import ProviderBoleto
         provider = (cleaned_data.get('provider') or '').strip()
         if not provider:
-            provider = ProviderBoleto.BRCOBRANCA
+            provider = ProviderBoleto.PYCOBRANCA
             cleaned_data['provider'] = provider
 
         # C6/Sicoob exigem tenant_id para resolver as credenciais no Boleto-API

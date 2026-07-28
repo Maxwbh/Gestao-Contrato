@@ -205,7 +205,7 @@ class TestGerarViaBoletoApi:
     def test_provider_brcobranca_usa_fluxo_cnab(self, base):
         """provider=brcobranca deve chamar BoletoService, não BoletoApiClient."""
         _, conta, contrato = base
-        conta.provider = 'brcobranca'
+        conta.provider = 'pycobranca'
         conta.save(update_fields=['provider'])
 
         parcela = contrato.parcelas.first()

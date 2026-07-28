@@ -531,7 +531,7 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Provedor de Cobrança</label>
                             <select id="provider" name="provider" class="form-select">
-                                <option value="brcobranca" selected>pyCobrança — motor offline (CNAB padrão)</option>
+                                <option value="pycobranca" selected>pyCobrança — motor offline (CNAB padrão)</option>
                                 <option value="c6">C6 Bank (cobrança registrada)</option>
                                 <option value="sicoob">Sicoob (cobrança registrada)</option>
                             </select>
@@ -958,7 +958,7 @@ function abrirModalConta() {
     document.getElementById('imobiliaria_id').value = IMOBILIARIA_ID || '';
     document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-university me-2"></i>Nova Conta Bancária';
     document.getElementById('cobranca_registrada').checked = true;
-    document.getElementById('provider').value = 'brcobranca';
+    document.getElementById('provider').value = 'pycobranca';
     document.getElementById('tenant_id').value = '';
     const cs = document.getElementById('cred_status');
     if (cs) cs.style.display = 'none';
@@ -971,7 +971,7 @@ function abrirModalConta() {
 // Alterna as seções conforme o provedor: C6/Sicoob mostram a cobrança
 // registrada (Boleto-API) e escondem o CNAB; BRCobrança faz o inverso.
 function atualizarVisibilidadeProvider() {
-    const prov = document.getElementById('provider').value || 'brcobranca';
+    const prov = document.getElementById('provider').value || 'pycobranca';
     const isApi = (prov === 'c6' || prov === 'sicoob');
     const boletoApi = document.getElementById('boletoapi_section');
     const cnab = document.getElementById('cnab_section');
@@ -1039,7 +1039,7 @@ function editarContaLocal(index) {
     document.getElementById('conta_id').value = '';
     document.getElementById('banco').value = conta.banco;
     document.getElementById('descricao').value = conta.descricao;
-    document.getElementById('provider').value = conta.provider || 'brcobranca';
+    document.getElementById('provider').value = conta.provider || 'pycobranca';
     document.getElementById('tenant_id').value = conta.tenant_id || '';
     atualizarVisibilidadeProvider();
     document.getElementById('agencia').value = conta.agencia;
@@ -1066,7 +1066,7 @@ function excluirContaLocal(index) {
 
 function salvarContaLocal() {
     const banco = document.getElementById('banco').value;
-    const _prov = document.getElementById('provider').value || 'brcobranca';
+    const _prov = document.getElementById('provider').value || 'pycobranca';
     const contaData = {
         banco: banco,
         descricao: document.getElementById('descricao').value,
@@ -1147,7 +1147,7 @@ async function editarConta(contaId) {
             document.getElementById('conta_id').value = conta.id;
             document.getElementById('banco').value = conta.banco;
             document.getElementById('descricao').value = conta.descricao;
-            document.getElementById('provider').value = conta.provider || 'brcobranca';
+            document.getElementById('provider').value = conta.provider || 'pycobranca';
             document.getElementById('tenant_id').value = conta.tenant_id || '';
             atualizarVisibilidadeProvider();
             document.getElementById('agencia').value = conta.agencia;
@@ -1202,7 +1202,7 @@ async function salvarConta() {
         imobiliaria_id: IMOBILIARIA_ID,
         banco: document.getElementById('banco').value,
         descricao: document.getElementById('descricao').value,
-        provider: document.getElementById('provider').value || 'brcobranca',
+        provider: document.getElementById('provider').value || 'pycobranca',
         tenant_id: document.getElementById('tenant_id').value,
         agencia: document.getElementById('agencia').value,
         conta: document.getElementById('conta').value,
