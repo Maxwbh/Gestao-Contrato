@@ -2767,6 +2767,11 @@ def boletos_painel_gerar(request):
     _inter_delay = getattr(_dj_settings, 'BRCOBRANCA_INTER_BOLETO_DELAY_MS', 100) / 1000
     _rate_limit_abort = False
     _total_boleto_calls = 0
+    # Feature "multi boletos" do gateway: contas CNAB acumulam aqui e geram em
+    # lote via POST /api/boleto/multi (1 chamada a cada 15 boletos) — menos
+    # requisições e sem estourar rate limit. C6/Sicoob (cobrança registrada)
+    # seguem no caminho individual (registro no banco via gateway).
+    pares_cnab_lote = []   # [(parcela, conta, contrato)]
 
     for contrato, parcelas, intermediarias in contratos_alvo:
         imob_nome = contrato.imobiliaria.nome
@@ -2797,6 +2802,13 @@ def boletos_painel_gerar(request):
                 por_imob[imob_nome]['erros'] += 1
                 erros.append({'parcela_id': None, 'contrato': contrato.numero_contrato,
                               'erro': f'Intermediária {it.pk}: {e}'})
+
+        # Conta CNAB → acumula para o lote /api/boleto/multi (gera após o loop).
+        _provider_conta = getattr(conta_bancaria, 'provider', 'brcobranca') or 'brcobranca'
+        if _provider_conta == 'brcobranca':
+            for parcela in alvos:
+                pares_cnab_lote.append((parcela, conta_bancaria, contrato))
+            continue
 
         for parcela in alvos:
             if _total_boleto_calls > 0 and _inter_delay > 0:
@@ -2859,6 +2871,58 @@ def boletos_painel_gerar(request):
             except Exception:
                 logger.exception('HU-24: falha ao notificar lote do contrato %s', contrato.pk)
             # Tipo carnê: expõe PDF consolidado por contrato (RN-13)
+            if tipo == 'carne':
+                carnes.append({
+                    'contrato': contrato.numero_contrato,
+                    'carne_url': reverse('financeiro:download_carne_pdf', kwargs={'contrato_id': contrato.id}),
+                })
+
+    # ----- Geração em massa CNAB via /api/boleto/multi (feature multi boletos) -----
+    if pares_cnab_lote and not _rate_limit_abort:
+        from .services.boleto_service import BoletoService
+        # tamanho do lote vem de BOLETO_MULTI_TAMANHO_LOTE (padrão 200 —
+        # mesmo teto LOTE_MAX_ITENS do gateway cobranca-api)
+        resultado_lote = BoletoService().gerar_boletos_lote(
+            [(p, c) for p, c, _ in pares_cnab_lote])
+        _erros_lote = resultado_lote.get('erros') or []
+
+        geradas_por_contrato: dict = {}
+        for parcela, conta, contrato in pares_cnab_lote:
+            imob_nome = contrato.imobiliaria.nome
+            parcela.refresh_from_db()
+            if parcela.status_boleto == StatusBoleto.GERADO:
+                total_gerados += 1
+                por_imob[imob_nome]['gerados'] += 1
+                parcela.renovar_token()
+                registrar_auditoria(
+                    request, 'BOLETO_GERADO', 'Parcela', parcela.pk,
+                    f'Nosso número: {parcela.nosso_numero} (lote multi)'
+                )
+                if hasattr(contrato, 'ultimo_mes_boleto_gerado') and \
+                        parcela.numero_parcela > contrato.ultimo_mes_boleto_gerado:
+                    contrato.ultimo_mes_boleto_gerado = parcela.numero_parcela
+                    contrato.save(update_fields=['ultimo_mes_boleto_gerado'])
+                boletos_gerados.append({
+                    'parcela_id': parcela.pk,
+                    'contrato': contrato.numero_contrato,
+                    'nosso_numero': parcela.nosso_numero,
+                    'token_publico': str(parcela.token_publico),
+                })
+                geradas_por_contrato.setdefault(contrato, []).append(parcela)
+            else:
+                total_erros += 1
+                por_imob[imob_nome]['erros'] += 1
+                erros.append({
+                    'parcela_id': parcela.pk, 'contrato': contrato.numero_contrato,
+                    'erro': _erros_lote[0] if _erros_lote else 'Falha no lote /api/boleto/multi',
+                })
+
+        # Notificação consolidada por contrato (RN-14) + carnê (RN-13)
+        for contrato, geradas in geradas_por_contrato.items():
+            try:
+                service.notificar_lote(contrato, geradas)
+            except Exception:
+                logger.exception('HU-24: falha ao notificar lote do contrato %s', contrato.pk)
             if tipo == 'carne':
                 carnes.append({
                     'contrato': contrato.numero_contrato,

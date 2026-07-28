@@ -212,6 +212,8 @@ class TestConciliacaoFinanceira:
         assert r.context['resultado'] is not None
 
     def test_client_consultar_conciliacao_e_extrato(self):
+        """Contrato do gateway cobranca-api: /conciliacao/recebiveis e /extrato
+        com start_date/end_date (não inicio/fim)."""
         from financeiro.services.boleto_api_client import BoletoApiClient
         client_api = BoletoApiClient()
 
@@ -220,11 +222,45 @@ class TestConciliacaoFinanceira:
             def json(self):
                 return {'itens': [{'cobranca_id': 'C1'}], 'lancamentos': [{'tipo': 'credito'}]}
 
-        with patch.object(BoletoApiClient, '_request', return_value=FakeResp()):
+        with patch.object(BoletoApiClient, '_request', return_value=FakeResp()) as req:
             r1 = client_api.consultar_conciliacao('2026-07-01', '2026-07-31', 't1', 'c6')
+            assert req.call_args.args[1] == '/conciliacao/recebiveis'
+            p = req.call_args.kwargs['params']
+            assert p['start_date'] == '2026-07-01' and p['end_date'] == '2026-07-31'
             r2 = client_api.consultar_extrato('2026-07-01', '2026-07-31', 't1', 'c6')
+            assert req.call_args.args[1] == '/extrato'
+            p = req.call_args.kwargs['params']
+            assert p['start_date'] == '2026-07-01' and p['end_date'] == '2026-07-31'
         assert r1['sucesso'] and r1['itens'][0]['cobranca_id'] == 'C1'
         assert r2['sucesso'] and r2['lancamentos'][0]['tipo'] == 'credito'
+
+    def test_client_gestao_usa_query_params(self):
+        """Endpoints de gestão: tenant_id/provider vão em query (não no body)."""
+        from financeiro.services.boleto_api_client import BoletoApiClient
+        client_api = BoletoApiClient()
+
+        class FakeResp:
+            status_code = 200
+            content = b'{}'
+            def json(self):
+                return {}
+
+        with patch.object(BoletoApiClient, '_request', return_value=FakeResp()) as req:
+            client_api.alterar_cobranca('c1', 't1', 'c6', {'valor': 10})
+            assert req.call_args.kwargs['params'] == {'tenant_id': 't1', 'provider': 'c6'}
+            assert req.call_args.kwargs['json'] == {'valor': 10}
+
+            client_api.devolver_pix('E2E', 'D1', 10, 't1', 'sicoob')
+            assert req.call_args.kwargs['params'] == {'tenant_id': 't1', 'provider': 'sicoob'}
+            assert req.call_args.kwargs['json'] == {'valor': '10.00'}
+
+            client_api.cancelar_recorrencia('R1', 't1', 'c6')
+            assert req.call_args.kwargs['params'] == {'tenant_id': 't1', 'provider': 'c6'}
+            assert req.call_args.kwargs['json'] == {'status': 'CANCELADA'}
+
+            client_api.retentar_cobranca_pa('TX', '2026-08-01', 't1', 'c6')
+            assert req.call_args.kwargs['params'] == {'tenant_id': 't1', 'provider': 'c6'}
+            assert 'json' not in req.call_args.kwargs
 
 
 # ---------------------------------------------------------------------------

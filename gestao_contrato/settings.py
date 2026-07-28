@@ -392,6 +392,9 @@ BRCOBRANCA_HEALTH_TIMEOUT = config('BRCOBRANCA_HEALTH_TIMEOUT', default=90, cast
 BRCOBRANCA_BACKOFF_COLD_START = [5, 10, 20, 30]
 # Pacing entre chamadas individuais de geração de boleto (ms) — reduz burst no Render free tier
 BRCOBRANCA_INTER_BOLETO_DELAY_MS = config('BRCOBRANCA_INTER_BOLETO_DELAY_MS', default=100, cast=int)
+# Boletos por chamada no lote POST /api/boleto/multi — o gateway cobranca-api
+# aceita até 200 por requisição (geração em massa da tela Boletos do Mês)
+BOLETO_MULTI_TAMANHO_LOTE = config('BOLETO_MULTI_TAMANHO_LOTE', default=200, cast=int)
 # Cooldown (s) entre o último burst de geração de boletos e o POST de remessa (0 desativa)
 BRCOBRANCA_REMESSA_COOLDOWN_S = config('BRCOBRANCA_REMESSA_COOLDOWN_S', default=5, cast=int)
 # Tempo médio (s) de resposta da API por boleto — usado só na estimativa visual de progresso

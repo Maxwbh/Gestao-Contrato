@@ -1105,18 +1105,14 @@ class Command(BaseCommand):
 
         if pares_cnab:
             if api_disponivel:
-                total_lotes = (len(pares_cnab) + 14) // 15
                 self.stdout.write(
                     f'   → BRCobrança disponível — {len(pares_cnab)} boletos CNAB '
-                    f'em lotes de 15 ({total_lotes} chamadas)...'
+                    f'via /api/boleto/multi (lotes de até 200)...'
                 )
-                for i in range(0, len(pares_cnab), 15):
-                    num_lote = i // 15 + 1
-                    self.stdout.write(f'Gerando boletos reais — lote {num_lote}/{total_lotes}...')
-                    resultado = service.gerar_boletos_lote(pares_cnab[i:i + 15], tamanho_lote=15)
-                    count += resultado['gerados']
-                    for e in resultado['erros']:
-                        self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
+                resultado = service.gerar_boletos_lote(pares_cnab)
+                count += resultado['gerados']
+                for e in resultado['erros']:
+                    self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
             else:
                 self.stdout.write(
                     f'   → BRCobrança indisponível — simulando {len(pares_cnab)} boletos CNAB...'
@@ -1125,11 +1121,27 @@ class Command(BaseCommand):
 
         if pares_api:
             providers = sorted({getattr(c, 'provider', '?') for _, c in pares_api})
-            self.stdout.write(
-                f'   → Boleto-API ({", ".join(providers)}) — simulando '
-                f'{len(pares_api)} boletos registrados...'
-            )
-            count += self._gerar_boletos_simulados(pares_api)
+            if api_disponivel:
+                # Feature "multi boletos" do gateway (POST /api/boleto/multi):
+                # o motor offline também renderiza Sicoob/C6, então os boletos
+                # visuais saem REAIS em lote (até 200 por chamada); os metadados
+                # de cobrança registrada (cobranca_id/txid/status) seguem simulados.
+                self.stdout.write(
+                    f'   → Boleto-API ({", ".join(providers)}) — {len(pares_api)} boletos '
+                    f'visuais via /api/boleto/multi (lotes de até 200) '
+                    f'+ metadados registrados simulados...'
+                )
+                resultado = service.gerar_boletos_lote(pares_api)
+                count += resultado['gerados']
+                for e in resultado['erros']:
+                    self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
+                self._carimbar_metadados_api(pares_api)
+            else:
+                self.stdout.write(
+                    f'   → Boleto-API ({", ".join(providers)}) — simulando '
+                    f'{len(pares_api)} boletos registrados...'
+                )
+                count += self._gerar_boletos_simulados(pares_api)
 
         # ── Fase 3: Estatísticas por banco ────────────────────────────────────
         from financeiro.models import Parcela, StatusBoleto as SB
@@ -1149,6 +1161,67 @@ class Command(BaseCommand):
                 self.stdout.write(f'   → {cb.get_banco_display()} ({cb.banco}): {qtd} {label}')
 
         return count
+
+    def _carimbar_metadados_api(self, pares):
+        """
+        Complemento da geração multi (/api/boleto/multi) para contas C6/Sicoob:
+        o motor offline gera o boleto visual (PDF/linha/barras), e aqui os
+        metadados de cobrança registrada são carimbados por cima — mesma
+        alternância boleto/bolepix e mesmos formatos de cobranca_id/txid do
+        caminho simulado, para popular painéis e conciliação sem gateway real.
+        """
+        from core.models import MetodoCobranca
+        from financeiro.models import Parcela, StatusBoleto, StatusCobranca
+        from financeiro.services.boleto_fake import gerar_pix_copia_cola_fake
+        from django.utils import timezone as tz
+
+        hoje = tz.now()
+        metodo_por_contrato: dict = {}
+        a_atualizar = []
+        for parcela, conta in pares:
+            parcela.refresh_from_db()
+            if parcela.status_boleto != StatusBoleto.GERADO:
+                continue  # lote falhou para esta parcela — fica como está
+            provider = getattr(conta, 'provider', 'brcobranca')
+            if provider == 'c6':
+                if parcela.contrato_id not in metodo_por_contrato:
+                    proximo_e_bolepix = len(metodo_por_contrato) % 2 == 0
+                    metodo_por_contrato[parcela.contrato_id] = (
+                        MetodoCobranca.BOLETO_PIX if proximo_e_bolepix
+                        else MetodoCobranca.BOLETO
+                    )
+                metodo = metodo_por_contrato[parcela.contrato_id]
+            else:
+                metodo = MetodoCobranca.BOLETO
+
+            seq = (parcela.nosso_numero or str(parcela.pk)).lstrip('0') or str(parcela.pk)
+            cobranca_id = f'sim-{conta.banco}-{conta.pk}-{seq}'
+            ext_ref = (f'bp-{conta.banco}-{conta.pk}-{seq}'
+                       if metodo == MetodoCobranca.BOLETO_PIX else '')
+            txid = f'GC{parcela.contrato_id:07d}P{parcela.numero_parcela:04d}'
+            if metodo == MetodoCobranca.BOLETO_PIX and not parcela.pix_copia_cola:
+                parcela.pix_copia_cola = gerar_pix_copia_cola_fake(
+                    chave=f'demo-{conta.banco}@teste.com.br',
+                    nome=parcela.contrato.comprador.nome,
+                    cidade='SETE LAGOAS',
+                    valor=parcela.valor_boleto or parcela.valor_atual,
+                    txid=txid,
+                )
+            parcela.registrar_emissao(
+                provider=provider, metodo=metodo, status=StatusCobranca.REGISTRADA,
+                cobranca_id=cobranca_id, ext_ref=ext_ref, txid=txid,
+            )
+            parcela.status_boleto = StatusBoleto.REGISTRADO
+            parcela.data_registro_boleto = hoje
+            a_atualizar.append(parcela)
+
+        Parcela.objects.bulk_update(a_atualizar, [
+            'status_boleto', 'data_registro_boleto', 'cobranca_id', 'ext_ref',
+            'pix_txid', 'pix_copia_cola', 'provider', 'metodo_cobranca',
+            'status_cobranca',
+        ], batch_size=200)
+        if a_atualizar:
+            self.stdout.write(f'   → {len(a_atualizar)} boletos multi carimbados como registrados (Boleto-API)')
 
     def _gerar_boletos_simulados(self, pares):
         """
