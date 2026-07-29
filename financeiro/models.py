@@ -686,6 +686,15 @@ class Parcela(TimeStampedModel):
                 status='baixado', payload_raw='',
             )
 
+        # Quitação automática: paga a última parcela em aberto, o contrato passa
+        # a QUITADO. Sem isso a listagem mostrava "100% pago" com status Ativo.
+        try:
+            self.contrato.sincronizar_quitacao()
+        except Exception:
+            import logging as _log
+            _log.getLogger(__name__).exception(
+                'Falha ao sincronizar quitação do contrato %s', self.contrato_id)
+
     def cancelar_pagamento(self):
         """Cancela o pagamento da parcela"""
         self.pago = False
@@ -694,6 +703,17 @@ class Parcela(TimeStampedModel):
         self.valor_juros = Decimal('0.00')
         self.valor_multa = Decimal('0.00')
         self.save()
+
+        # Reverte a quitação: com parcela em aberto o contrato volta a ATIVO.
+        try:
+            contrato = self.contrato
+            if contrato.status == 'QUITADO' and not contrato.esta_totalmente_pago:
+                contrato.status = 'ATIVO'
+                contrato.save(update_fields=['status'])
+        except Exception:
+            import logging as _log
+            _log.getLogger(__name__).exception(
+                'Falha ao reverter quitação do contrato %s', self.contrato_id)
 
     # =========================================================================
     # MÉTODOS RELACIONADOS AO BOLETO
