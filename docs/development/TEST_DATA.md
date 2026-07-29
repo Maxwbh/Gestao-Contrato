@@ -20,6 +20,12 @@ O sistema gera automaticamente:
 - ✅ **65 Contratos** - De 180 a 300 meses
 - ✅ **Compras dos últimos 24 meses**
 - ✅ **90% das parcelas pagas automaticamente**
+- ✅ **Boletos FAKE de cobrança registrada** (Sicoob/C6 via Boleto-API, sem
+  chamar a API do banco): linha digitável e código de barras com DVs reais,
+  Pix copia-e-cola EMV, PDF de demonstração, `cobranca_id`/`ext_ref`/`txid`
+- ✅ **Ciclo de vida das cobranças registradas** (HUs BAPI): LIQUIDADA,
+  BAIXADA, EXPIRADA, ESTORNADA, AGUARDANDO_CIP + log `EventoCobrancaApi`
+  com eventos `duplicado`/`ignorado`/`sem_parcela`
 
 ---
 
@@ -37,7 +43,16 @@ python manage.py gerar_dados_teste --limpar
 # Concentrar 100% dos boletos em um banco (vira a conta principal)
 # 001=Banco do Brasil | 756=Sicoob | 237=Bradesco | 336=C6 Bank
 python manage.py gerar_dados_teste --limpar --banco 756
+
+# Somente o ciclo de cobrança registrada (HUs BAPI) sobre dados existentes:
+# injeta eventos fake no pipeline real do webhook — NÃO chama a API do banco
+python manage.py gerar_dados_teste --so-cobranca-api
 ```
+
+> **Boleto Fake (Boleto-API):** para as contas Sicoob/C6 os boletos são
+> montados por `financeiro/services/boleto_fake.py` — nenhuma chamada à API
+> do banco ou ao gateway. Cenários completos e distribuição dos estados em
+> `docs/analise/CENARIOS_TESTE_BOLETO_API.md`.
 
 ### Opção 2: Via Endpoint HTTP (assíncrono)
 

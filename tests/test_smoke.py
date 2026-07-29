@@ -193,7 +193,8 @@ class TestSmokeAccounts:
         assert check(Client(), '/accounts/login/') == 200
 
     def test_registro_page(self, dados):
-        assert check(Client(), '/accounts/registro/') == 200
+        # HU-28.4: auto-registro fechado por padrão → redireciona para o login.
+        assert check(Client(), '/accounts/registro/', acceptable=(302,)) == 302
 
     def test_perfil(self, dados):
         check(staff(dados), '/accounts/perfil/')

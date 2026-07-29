@@ -168,7 +168,7 @@ class TestElegibilidade:
         from financeiro.services.cnab_service import CNABService
         imob, conta, contrato = base
         conta.banco = '336'
-        conta.provider = 'brcobranca'
+        conta.provider = 'pycobranca'
         conta.convenio = '123456789012'
         conta.layout_cnab = 'CNAB_400'
         conta.save(update_fields=['banco', 'provider', 'convenio', 'layout_cnab'])
@@ -180,7 +180,7 @@ class TestElegibilidade:
         from financeiro.services.cnab_service import CNABService
         imob, conta, contrato = base
         conta.banco = '756'
-        conta.provider = 'brcobranca'
+        conta.provider = 'pycobranca'
         conta.convenio = '123456789'
         conta.save(update_fields=['banco', 'provider', 'convenio'])
         elegiveis = CNABService().obter_boletos_elegiveis_painel()

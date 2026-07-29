@@ -15,7 +15,7 @@ from datetime import timedelta
 import logging
 import uuid
 
-from core.models import TimeStampedModel, ContaBancaria
+from core.models import TimeStampedModel, ContaBancaria, ProviderBoleto, MetodoCobranca
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +32,104 @@ class StatusBoleto(models.TextChoices):
     BAIXADO = 'BAIXADO', 'Baixado'
 
 
+class StatusCobranca(models.TextChoices):
+    """
+    Status NORMALIZADO da cobrança (Boleto-API), transversal a boleto/pix/
+    bolepix/pix_automatico. Complementa StatusBoleto (específico de boleto).
+    As transições formais (guardas) são da Fase 5; aqui é o campo de dados.
+    """
+    PENDENTE = 'pendente', 'Pendente'
+    REGISTRADA = 'registrada', 'Registrada'
+    AGUARDANDO_CIP = 'aguardando_cip', 'Aguardando CIP'
+    LIQUIDADA = 'liquidada', 'Liquidada'
+    BAIXADA = 'baixada', 'Baixada'
+    EXPIRADA = 'expirada', 'Expirada'
+    ESTORNADA = 'estornada', 'Estornada'
+
+
+# Máquina de estados de StatusCobranca (Fase 5): transições permitidas.
+# '' = estado inicial (ainda não emitida). Impede transições fora de ordem —
+# ex.: um evento tardio 'registrado' após LIQUIDADA/ESTORNADA é rejeitado.
+TRANSICOES_COBRANCA = {
+    # Inicial/desconhecido (boleto legado ou ainda não rastreado): permissivo —
+    # aceita qualquer status (inclusive liquidação direta por webhook).
+    '': set(StatusCobranca.values),
+    StatusCobranca.PENDENTE: {StatusCobranca.REGISTRADA, StatusCobranca.AGUARDANDO_CIP,
+                              StatusCobranca.EXPIRADA, StatusCobranca.BAIXADA},
+    StatusCobranca.AGUARDANDO_CIP: {StatusCobranca.REGISTRADA, StatusCobranca.EXPIRADA,
+                                    StatusCobranca.BAIXADA},
+    StatusCobranca.REGISTRADA: {StatusCobranca.LIQUIDADA, StatusCobranca.EXPIRADA,
+                                StatusCobranca.BAIXADA, StatusCobranca.AGUARDANDO_CIP},
+    StatusCobranca.LIQUIDADA: {StatusCobranca.ESTORNADA},
+    StatusCobranca.BAIXADA: {StatusCobranca.PENDENTE, StatusCobranca.REGISTRADA},   # reemissão
+    StatusCobranca.EXPIRADA: {StatusCobranca.PENDENTE, StatusCobranca.REGISTRADA},  # reemissão
+    StatusCobranca.ESTORNADA: set(),  # terminal
+}
+
+
 class TipoParcela(models.TextChoices):
     """Tipos de parcela"""
     NORMAL = 'NORMAL', 'Normal'
     INTERMEDIARIA = 'INTERMEDIARIA', 'Intermediária'
     ENTRADA = 'ENTRADA', 'Entrada'
+
+
+def _encargos_para_gateway(contrato, data_vencimento) -> dict:
+    """
+    Traduz a configuração de encargos do contrato (Contrato.get_config_boleto —
+    a mesma do fluxo CNAB) para os dicts que o gateway repassa à API do banco:
+
+        multa    = {'tipo': 'PERCENTUAL'|'FIXO', 'valor': x, 'data_inicio': 'YYYY-MM-DD'}
+        juros    = {'tipo': 'PERCENTUAL'|'FIXO', 'valor': x, 'data_inicio': 'YYYY-MM-DD'}
+        desconto = {'tipo': 'PERCENTUAL'|'FIXO', 'valor': x, 'data_limite': 'YYYY-MM-DD'}
+
+    Regras:
+      • `tipo` do sistema é PERCENTUAL/REAL; o gateway usa PERCENTUAL/FIXO.
+      • multa e juros incidem após o vencimento + dias de carência (data_inicio).
+      • desconto vale até `dias_desconto` ANTES do vencimento (data_limite);
+        sem dias configurados, o limite é o próprio vencimento.
+      • valores zerados/ausentes não são enviados (o banco aplica o padrão dele).
+    """
+    from datetime import timedelta
+
+    def _tipo(valor_tipo):
+        return 'PERCENTUAL' if (valor_tipo or 'PERCENTUAL') == 'PERCENTUAL' else 'FIXO'
+
+    def _num(v):
+        try:
+            return float(v or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    try:
+        cfg = contrato.get_config_boleto() or {}
+    except Exception:  # contrato sem config utilizável — não envia encargos
+        return {}
+
+    out: dict = {}
+    if not data_vencimento:
+        return out
+
+    carencia = int(cfg.get('dias_carencia') or 0)
+    inicio_encargos = (data_vencimento + timedelta(days=carencia + 1)).strftime('%Y-%m-%d')
+
+    multa = _num(cfg.get('valor_multa'))
+    if multa > 0:
+        out['multa'] = {'tipo': _tipo(cfg.get('tipo_valor_multa')),
+                        'valor': multa, 'data_inicio': inicio_encargos}
+
+    juros = _num(cfg.get('valor_juros'))
+    if juros > 0:
+        out['juros'] = {'tipo': _tipo(cfg.get('tipo_valor_juros')),
+                        'valor': juros, 'data_inicio': inicio_encargos}
+
+    desconto = _num(cfg.get('valor_desconto'))
+    if desconto > 0:
+        dias = int(cfg.get('dias_desconto') or 0)
+        limite = data_vencimento - timedelta(days=dias) if dias > 0 else data_vencimento
+        out['desconto'] = {'tipo': _tipo(cfg.get('tipo_valor_desconto')),
+                           'valor': desconto, 'data_limite': limite.strftime('%Y-%m-%d')}
+    return out
 
 
 class Parcela(TimeStampedModel):
@@ -328,6 +421,42 @@ class Parcela(TimeStampedModel):
         verbose_name='ID Cobrança (Boleto-API)',
         help_text='ID retornado pelo Boleto-API ao registrar a cobrança. Usado para casamento no webhook push.',
     )
+    # Rastreio de emissão (Boleto-API) — como/onde esta parcela foi cobrada.
+    # Registrado na emissão (Fase 3); o provider é gravado por parcela porque a
+    # conta pode mudar de provider ao longo do tempo.
+    provider = models.CharField(
+        max_length=20,
+        choices=ProviderBoleto.choices,
+        blank=True,
+        default='',
+        verbose_name='Provedor da Cobrança',
+        help_text='Provedor que emitiu esta cobrança (registrado na emissão).',
+    )
+    metodo_cobranca = models.CharField(
+        max_length=20,
+        choices=MetodoCobranca.choices,
+        blank=True,
+        default='',
+        verbose_name='Método da Cobrança',
+        help_text='Método usado nesta cobrança (boleto/carne/bolepix/pix_automatico).',
+    )
+    ext_ref = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        db_index=True,
+        verbose_name='Referência Externa (bolepix)',
+        help_text='ext_ref devolvido pelo gateway para BoletoPix. Usado no casamento do webhook.',
+    )
+    status_cobranca = models.CharField(
+        max_length=20,
+        choices=StatusCobranca.choices,
+        blank=True,
+        default='',
+        db_index=True,
+        verbose_name='Status Normalizado da Cobrança',
+        help_text='Status transversal (boleto/pix). Vazio = ainda não emitida via Boleto-API.',
+    )
 
     class Meta:
         verbose_name = 'Parcela'
@@ -542,6 +671,21 @@ class Parcela(TimeStampedModel):
             self.observacoes = observacoes
         self.save()
 
+        # Cobrança registrada (Boleto-API): a baixa manual também transiciona o
+        # status normalizado — sem isso a parcela paga ficaria 'Registrada' para
+        # sempre no painel de conciliação. Os fluxos do banco (webhook/polling)
+        # transicionam ANTES de registrar o pagamento, então este bloco só age
+        # na baixa manual; respeita a máquina de estados (transição ilegal,
+        # ex. AGUARDANDO_CIP→LIQUIDADA, não é forçada).
+        if (self.status_cobranca
+                and self.status_cobranca != StatusCobranca.LIQUIDADA
+                and self.transicionar_cobranca(StatusCobranca.LIQUIDADA)):
+            EventoCobrancaApi.objects.create(
+                cobranca_id=self.cobranca_id or '', event='conciliacao.manual',
+                status_cobranca='liquidado', parcela=self, valor=valor_pago,
+                status='baixado', payload_raw='',
+            )
+
     def cancelar_pagamento(self):
         """Cancela o pagamento da parcela"""
         self.pago = False
@@ -730,11 +874,53 @@ class Parcela(TimeStampedModel):
         conta_bancaria.save(update_fields=['nosso_numero_atual'])
         return conta_bancaria.nosso_numero_atual
 
+    def pode_transicionar_cobranca(self, novo) -> bool:
+        """True se a transição do status_cobranca atual para `novo` é permitida."""
+        atual = self.status_cobranca or ''
+        if str(novo) == str(atual):
+            return True  # idempotente
+        return novo in TRANSICOES_COBRANCA.get(atual, set())
+
+    def transicionar_cobranca(self, novo, salvar=True) -> bool:
+        """
+        Aplica a transição de status_cobranca se for permitida (máquina de
+        estados — Fase 5). Retorna True se aplicou (ou já estava no estado);
+        False se a transição for ilegal (nesse caso nada muda).
+        """
+        if not self.pode_transicionar_cobranca(novo):
+            return False
+        if str(novo) != str(self.status_cobranca or ''):
+            self.status_cobranca = novo
+            if salvar and self.pk:
+                self.save(update_fields=['status_cobranca'])
+        return True
+
+    def registrar_emissao(self, *, provider='', metodo='', status='',
+                          cobranca_id=None, ext_ref=None, txid=None):
+        """
+        Registra os metadados de emissão da cobrança (Boleto-API) de forma
+        consistente. Só sobrescreve o que for informado; NÃO persiste (o
+        chamador salva). Usado na emissão de boleto/bolepix/pix/pix_automatico.
+        O status respeita a máquina de estados (não regride LIQUIDADA→REGISTRADA).
+        """
+        if provider:
+            self.provider = provider
+        if metodo:
+            self.metodo_cobranca = metodo
+        if status and self.pode_transicionar_cobranca(status):
+            self.status_cobranca = status
+        if cobranca_id is not None:
+            self.cobranca_id = cobranca_id
+        if ext_ref is not None:
+            self.ext_ref = ext_ref
+        if txid is not None:
+            self.pix_txid = txid
+
     def _gerar_via_boleto_api(self, conta_bancaria, provider: str, force: bool, enviar_email: bool) -> dict:
         """
         Emite cobrança registrada via Boleto-API gateway (C6/Sicoob).
 
-        Chamado por gerar_boleto() quando conta_bancaria.provider != 'brcobranca'.
+        Chamado por gerar_boleto() quando conta_bancaria.provider != 'pycobranca'.
         Persiste cobranca_id para conciliação push (webhook).
         """
         from financeiro.services.boleto_api_client import BoletoApiClient
@@ -768,17 +954,44 @@ class Parcela(TimeStampedModel):
             },
         }
 
-        # Multa / juros da imobiliária (se configurados)
-        imob = contrato.imobiliaria
-        if getattr(imob, 'percentual_multa_padrao', None):
-            cobranca_payload['multa'] = float(imob.percentual_multa_padrao)
-        if getattr(imob, 'percentual_juros_padrao', None):
-            cobranca_payload['juros'] = float(imob.percentual_juros_padrao)
+        # Encargos e desconto no formato do gateway (dicts tipados), a partir da
+        # mesma configuração usada no fluxo CNAB (contrato ou imobiliária —
+        # Contrato.get_config_boleto), para que boleto registrado e boleto
+        # offline cobrem exatamente os mesmos valores e datas.
+        cobranca_payload.update(_encargos_para_gateway(contrato, self.data_vencimento))
 
         client = BoletoApiClient()
-        resultado = client.registrar_cobranca(tenant_id, provider, account_config, cobranca_payload)
+        # Token stateless (Bearer) quando a conta já foi onboarded; None mantém
+        # compatibilidade com o gateway/mocks que resolvem por tenant_id.
+        bapi_token = getattr(conta_bancaria, 'bapi_token', '') or None
+        # Dispatch pelo método de cobrança do contrato (Fase 3): BoletoPix usa
+        # /bolepix; os demais caem no boleto registrado (/cobranca).
+        metodo_contrato = getattr(contrato, 'metodo_cobranca', '') or MetodoCobranca.BOLETO
+        usa_bolepix = (metodo_contrato == MetodoCobranca.BOLETO_PIX)
+        metodo_emitido = MetodoCobranca.BOLETO_PIX if usa_bolepix else MetodoCobranca.BOLETO
+
+        def _emitir(token):
+            if usa_bolepix:
+                return client.emitir_bolepix(
+                    tenant_id, provider, account_config, cobranca_payload, bapi_token=token)
+            return client.registrar_cobranca(
+                tenant_id, provider, account_config, cobranca_payload, bapi_token=token)
+
+        # Conta cadastrada com credenciais do banco (novo cadastro C6/Sicoob):
+        # garante o onboarding (POST /credenciais → bapi_token) antes de emitir e
+        # recadastra automaticamente em 401/424. Sem credenciais no sistema,
+        # mantém o comportamento anterior (gateway resolve pelo tenant_id).
+        if getattr(conta_bancaria, 'credenciais', None):
+            from financeiro.services.boleto_api_onboarding import com_retry_credencial
+            resultado = com_retry_credencial(conta_bancaria, _emitir)
+        else:
+            resultado = _emitir(bapi_token)
 
         if not resultado.get('sucesso'):
+            # 409 (CIP): registro em processamento — marca AGUARDANDO_CIP para
+            # a fila de reprocessamento (máquina de estados, Fase 5).
+            if resultado.get('motivo') == 'cip':
+                self.transicionar_cobranca(StatusCobranca.AGUARDANDO_CIP)
             return resultado
 
         # Persistir campos do boleto
@@ -794,6 +1007,13 @@ class Parcela(TimeStampedModel):
         # Status REGISTRADO indica cobrança confirmada no banco (acima de apenas GERADO)
         self.status_boleto = StatusBoleto.REGISTRADO
         self.data_geracao_boleto = timezone.now()
+        # Rastreio normalizado (Boleto-API): boleto registrado via gateway.
+        self.registrar_emissao(
+            provider=provider,
+            metodo=metodo_emitido,
+            status=StatusCobranca.REGISTRADA,
+            ext_ref=resultado.get('ext_ref', ''),
+        )
 
         if resultado.get('pdf_content'):
             from django.core.files.base import ContentFile
@@ -862,10 +1082,10 @@ class Parcela(TimeStampedModel):
         if not conta_bancaria:
             raise ValueError("Nenhuma conta bancária disponível para gerar boleto")
 
-        # Feature flag por conta: provider != 'brcobranca' → cobrança registrada via Boleto-API.
+        # Feature flag por conta: provider != 'pycobranca' → cobrança registrada via Boleto-API.
         # Mantém fluxo CNAB intacto quando desligado (nenhuma mudança de comportamento).
-        provider = getattr(conta_bancaria, 'provider', 'brcobranca') or 'brcobranca'
-        if provider != 'brcobranca':
+        provider = getattr(conta_bancaria, 'provider', 'pycobranca') or 'pycobranca'
+        if provider != 'pycobranca':
             return self._gerar_via_boleto_api(conta_bancaria, provider, force, enviar_email)
 
         # Usar o serviço de boleto (fluxo CNAB/BRCobrança existente)
@@ -923,15 +1143,119 @@ class Parcela(TimeStampedModel):
 
         return resultado
 
+    def _e_boleto_api(self) -> bool:
+        """True se esta parcela foi/será cobrada via gateway Boleto-API (C6/Sicoob)."""
+        return bool(self.provider and self.provider != ProviderBoleto.PYCOBRANCA)
+
+    def _bapi_ctx(self):
+        """(tenant_id, bapi_token) da conta bancária para chamadas ao gateway."""
+        conta = self.conta_bancaria
+        return (getattr(conta, 'tenant_id', '') or '',
+                (getattr(conta, 'bapi_token', '') or None))
+
     def cancelar_boleto(self, motivo=''):
-        """Cancela o boleto da parcela"""
+        """
+        Cancela o boleto da parcela. Para cobrança registrada via Boleto-API
+        (C6/Sicoob), propaga o cancelamento ao gateway (DELETE /cobranca) ANTES
+        de marcar localmente — se o gateway recusar, NÃO cancela local (evita
+        deixar a cobrança ativa no banco com status divergente).
+        """
         if self.status_boleto in [StatusBoleto.NAO_GERADO, StatusBoleto.CANCELADO]:
             return False
+
+        if self._e_boleto_api() and self.cobranca_id:
+            from financeiro.services.boleto_api_client import BoletoApiClient
+            tenant_id, bapi_token = self._bapi_ctx()
+            r = BoletoApiClient().baixar_cobranca(
+                self.cobranca_id, tenant_id, self.provider, bapi_token=bapi_token)
+            if not r.get('sucesso'):
+                logger.warning('[BoletoAPI] cancelamento no gateway recusado (parcela pk=%s): %s',
+                               self.pk, r.get('erro'))
+                return False
+            self.transicionar_cobranca(StatusCobranca.BAIXADA, salvar=False)
 
         self.status_boleto = StatusBoleto.CANCELADO
         self.motivo_rejeicao = motivo
         self.save()
         return True
+
+    def emitir_pix_avulso(self, modalidade='cobv'):
+        """
+        Emite uma cobrança Pix avulsa para esta parcela via Boleto-API
+        (BAPI-14/15): 'cobv' (com vencimento) ou 'cob' (imediata, para 2ª via/
+        quitação na hora). Persiste txid e copia-e-cola sem alterar o método de
+        cobrança do contrato nem substituir o boleto já emitido.
+        """
+        from financeiro.services.boleto_api_client import BoletoApiClient
+
+        if self.pago:
+            return {'sucesso': False, 'erro': 'Parcela já paga.'}
+
+        conta = self.conta_bancaria
+        if not conta or getattr(conta, 'provider', '') in ('', ProviderBoleto.PYCOBRANCA):
+            imob = self.contrato.imobiliaria
+            conta = imob.contas_bancarias.filter(ativo=True).exclude(
+                provider=ProviderBoleto.PYCOBRANCA).order_by('-principal').first()
+        if not conta:
+            return {'sucesso': False,
+                    'erro': 'Nenhuma conta bancária com provedor de API (C6/Sicoob) disponível.'}
+
+        comprador = self.contrato.comprador
+        documento = (getattr(comprador, 'cnpj', '') or getattr(comprador, 'cpf', '') or '')
+        documento = documento.replace('.', '').replace('/', '').replace('-', '')
+        cobranca = {
+            'modalidade': modalidade,
+            'valor': float(self.valor_atual or self.valor_boleto or 0),
+            'vencimento': self.data_vencimento.isoformat() if self.data_vencimento else '',
+            'seu_numero': str(self.numero_documento
+                              or f'{self.contrato.numero_contrato}/{self.numero_parcela}'),
+            'pagador': {'nome': comprador.nome[:60], 'documento': documento},
+        }
+        r = BoletoApiClient().emitir_pix(
+            conta.tenant_id, conta.provider,
+            getattr(conta, 'account_config', None) or {}, cobranca,
+            bapi_token=(conta.bapi_token or None))
+        if not r.get('sucesso'):
+            return r
+
+        self.conta_bancaria = conta
+        self.pix_txid = r.get('txid') or self.pix_txid
+        if r.get('pix_copia_cola'):
+            self.pix_copia_cola = r['pix_copia_cola']
+        self.registrar_emissao(provider=conta.provider,
+                               status=StatusCobranca.REGISTRADA,
+                               txid=self.pix_txid)
+        self.save()
+        return {'sucesso': True, 'txid': self.pix_txid,
+                'pix_copia_cola': self.pix_copia_cola}
+
+    def estornar_cobranca(self, valor=None, e2eid='', devolucao_id=''):
+        """
+        Estorna (devolve) um Pix recebido via gateway e marca a cobrança como
+        ESTORNADA. Requer o e2eid do Pix (recebido no webhook).
+        """
+        if not self._e_boleto_api():
+            return {'sucesso': False, 'erro': 'Estorno via gateway só para C6/Sicoob.'}
+        if not e2eid:
+            return {'sucesso': False, 'erro': 'e2eid do Pix é obrigatório para o estorno.'}
+        from financeiro.services.boleto_api_client import BoletoApiClient
+        tenant_id, bapi_token = self._bapi_ctx()
+        r = BoletoApiClient().devolver_pix(
+            e2eid, devolucao_id or f'DEV{self.pk}',
+            valor if valor is not None else self.valor_pago_boleto,
+            tenant_id, self.provider, bapi_token=bapi_token)
+        if r.get('sucesso'):
+            self.transicionar_cobranca(StatusCobranca.ESTORNADA)
+        return r
+
+    def alterar_cobranca(self, alteracao: dict):
+        """Altera valor/vencimento da cobrança registrada no gateway (PUT). C6."""
+        if not (self._e_boleto_api() and self.cobranca_id):
+            return {'sucesso': False, 'erro': 'Alteração via gateway só para cobrança registrada.'}
+        from financeiro.services.boleto_api_client import BoletoApiClient
+        tenant_id, bapi_token = self._bapi_ctx()
+        return BoletoApiClient().alterar_cobranca(
+            self.cobranca_id, tenant_id, self.provider, alteracao, bapi_token=bapi_token)
 
     def registrar_pagamento_boleto(self, valor_pago, data_pagamento=None,
                                    banco_pagador='', agencia_pagadora='',
@@ -1959,6 +2283,7 @@ class HistoricoPagamento(TimeStampedModel):
         ('OFX',           'Extrato OFX'),
         ('ANTECIPACAO',   'Antecipação'),
         ('PIX_WEBHOOK',   'PIX Webhook'),
+        ('BOLETO_API',    'Cobrança Registrada (Boleto-API)'),
         ('PORTAL_UPLOAD', 'Upload pelo Portal do Comprador'),
         ('SISTEMA',       'Sistema'),
     ]
@@ -2642,6 +2967,65 @@ class AcessoBoletoPublico(models.Model):
         return f'Acesso {self.parcela} por {self.ip} em {self.acessado_em:%d/%m/%Y %H:%M}'
 
 
+class RecStatusPA(models.TextChoices):
+    """Status da recorrência de Pix Automático (débito recorrente)."""
+    CRIADA = 'CRIADA', 'Criada'
+    APROVADA = 'APROVADA', 'Aprovada'
+    REJEITADA = 'REJEITADA', 'Rejeitada'
+    CANCELADA = 'CANCELADA', 'Cancelada'
+
+
+# Transições permitidas da recorrência (guardas). Estados terminais: rejeitada/cancelada.
+TRANSICOES_REC_PA = {
+    RecStatusPA.CRIADA: {RecStatusPA.APROVADA, RecStatusPA.REJEITADA, RecStatusPA.CANCELADA},
+    RecStatusPA.APROVADA: {RecStatusPA.CANCELADA},
+    RecStatusPA.REJEITADA: set(),
+    RecStatusPA.CANCELADA: set(),
+}
+
+
+class RecorrenciaPix(TimeStampedModel):
+    """
+    Recorrência de Pix Automático de um contrato (débito recorrente). Espelha o
+    ciclo `idRec` do gateway: CRIADA → APROVADA/REJEITADA/CANCELADA.
+    """
+    contrato = models.OneToOneField(
+        'contratos.Contrato', on_delete=models.CASCADE,
+        related_name='recorrencia_pix', verbose_name='Contrato',
+    )
+    id_rec = models.CharField(max_length=100, blank=True, default='', db_index=True,
+                              verbose_name='idRec (gateway)')
+    provider = models.CharField(max_length=20, choices=ProviderBoleto.choices,
+                                blank=True, default='')
+    status = models.CharField(max_length=20, choices=RecStatusPA.choices,
+                              default=RecStatusPA.CRIADA, db_index=True)
+    aprovada_em = models.DateTimeField(null=True, blank=True)
+    cancelada_em = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Recorrência Pix Automático'
+        verbose_name_plural = 'Recorrências Pix Automático'
+
+    def __str__(self):
+        return f'RecorrenciaPix {self.id_rec or "?"} ({self.get_status_display()})'
+
+    def transicionar(self, novo) -> bool:
+        """Aplica a transição de status se permitida (guardas). Persiste se salvo."""
+        from django.utils import timezone
+        if str(novo) == str(self.status):
+            return True
+        if novo not in TRANSICOES_REC_PA.get(self.status, set()):
+            return False
+        self.status = novo
+        if novo == RecStatusPA.APROVADA:
+            self.aprovada_em = timezone.now()
+        elif novo == RecStatusPA.CANCELADA:
+            self.cancelada_em = timezone.now()
+        if self.pk:
+            self.save()
+        return True
+
+
 class EventoPIX(models.Model):
     """
     Roadmap 34.3: Log de eventos PIX recebidos via webhook do PSP.
@@ -2728,7 +3112,9 @@ class EventoCobrancaApi(models.Model):
     STATUS_CHOICES = [
         ('recebido', 'Recebido'),
         ('baixado', 'Parcela baixada'),
+        ('atualizado', 'Status atualizado'),
         ('duplicado', 'Duplicado (ignorado)'),
+        ('ignorado', 'Ignorado (não tratado nesta fase)'),
         ('sem_parcela', 'Sem parcela vinculada'),
         ('erro', 'Erro no processamento'),
     ]
@@ -2737,6 +3123,15 @@ class EventoCobrancaApi(models.Model):
         max_length=100,
         db_index=True,
         verbose_name='ID Cobrança',
+    )
+    # Idempotência por evento: o banco pode reenviar o mesmo evento.
+    event_id = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        db_index=True,
+        verbose_name='ID do Evento',
+        help_text='Identificador único do evento (idempotência).',
     )
     event = models.CharField(max_length=50, blank=True, verbose_name='Tipo de Evento')
     status_cobranca = models.CharField(
@@ -2775,6 +3170,7 @@ class EventoCobrancaApi(models.Model):
         ordering = ['-recebido_em']
         indexes = [
             models.Index(fields=['cobranca_id']),
+            models.Index(fields=['event_id']),
             models.Index(fields=['status']),
             models.Index(fields=['recebido_em']),
         ]

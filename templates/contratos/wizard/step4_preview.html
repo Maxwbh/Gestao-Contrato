@@ -255,8 +255,13 @@
     </div>
   </div>
 </div>
+{% endblock %}
 
+{# extra_js como irmão do content — aninhado dentro dele o Django renderiza o
+   script DUAS vezes (in place + placeholder do base): o 2º handler de submit
+   via o botão já desabilitado pelo 1º e cancelava a criação do contrato. #}
 {% block extra_js %}
+{{ resumo.preview_payload|json_script:"wizardPreviewPayload" }}
 <script>
 function carregarPreviewParcelas() {
     var btn = document.getElementById('btnLoadPreview');
@@ -265,25 +270,21 @@ function carregarPreviewParcelas() {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Calculando...';
     container.innerHTML = '<p class="text-muted p-3">Carregando...</p>';
 
-    var payload = {
-        valor_total: '{{ resumo.valor_total }}',
-        valor_entrada: '{{ resumo.valor_entrada }}',
-        numero_parcelas: {{ resumo.numero_parcelas }},
-        prazo_reajuste_meses: '{{ resumo.basico.prazo_reajuste_meses|default:12 }}',
-        dia_vencimento: '{{ resumo.basico.dia_vencimento|default:1 }}',
-        data_primeiro_vencimento: '{{ resumo.basico.data_primeiro_vencimento }}',
-        tipo_amortizacao: '{{ resumo.tipo_amortizacao|default:"PRICE" }}',
-        intermediarias_reduzem_pmt: {{ resumo.reduzem_pmt|yesno:"true,false" }},
-        soma_intermediarias: '{{ resumo.soma_intermediarias }}',
-        juros: {{ resumo.juros_json|default:"[]" }},
-        intermediarias_lista: {{ resumo.intermediarias_json|default:"[]" }},
-    };
+    // Payload via json_script: escape seguro dentro de <script>; interpolar
+    // json.dumps direto no JS quebra com autoescape (&quot; → SyntaxError).
+    var payload = JSON.parse(document.getElementById('wizardPreviewPayload').textContent);
+
+    // CSRF do form (sempre presente); cookie fica só como fallback — cookie
+    // ausente/inacessível gerava 403 no preview.
+    var csrfInput = document.querySelector('#formCriarContrato [name=csrfmiddlewaretoken]');
+    var csrfToken = csrfInput ? csrfInput.value
+                              : (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
 
     fetch('{% url "contratos:wizard_preview_parcelas" %}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
+            'X-CSRFToken': csrfToken,
         },
         body: JSON.stringify(payload),
     })
@@ -325,5 +326,4 @@ document.getElementById('formCriarContrato').addEventListener('submit', function
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Criando contrato...';
 });
 </script>
-{% endblock %}
 {% endblock %}

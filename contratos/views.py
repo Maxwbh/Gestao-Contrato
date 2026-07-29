@@ -2285,13 +2285,28 @@ class ContratoWizardView(LoginRequiredMixin, View):
             'soma_intermediarias': soma_intermediarias,
             'n_intermediarias': len(intermediarias),
             'juros_rows': juros_rows,
-            'juros_json': _json.dumps(juros_rows),
             'intermediarias': intermediarias_preview,
-            'intermediarias_json': _json.dumps(intermediarias_preview),
             'intermediarias_total': len(intermediarias),
             'basico': basico,
             'reduzem_pmt': reduzem_pmt,
             'reajustadas': basico.get('intermediarias_reajustadas', True),
+            # Payload do preview de parcelas, serializado no template com
+            # |json_script (escape seguro dentro de <script>): json.dumps cru
+            # interpolado no JS vira &quot; pelo autoescape e quebra o parse
+            # ("Uncaught SyntaxError: Unexpected token '&'").
+            'preview_payload': {
+                'valor_total': str(valor_total),
+                'valor_entrada': str(valor_entrada),
+                'numero_parcelas': numero_parcelas,
+                'prazo_reajuste_meses': basico.get('prazo_reajuste_meses') or 12,
+                'dia_vencimento': basico.get('dia_vencimento') or 1,
+                'data_primeiro_vencimento': str(basico.get('data_primeiro_vencimento') or ''),
+                'tipo_amortizacao': str(tipo_amortizacao or 'PRICE'),
+                'intermediarias_reduzem_pmt': bool(reduzem_pmt),
+                'soma_intermediarias': str(soma_intermediarias),
+                'juros': juros_rows,
+                'intermediarias_lista': intermediarias_preview,
+            },
         }
 
     def _salvar_contrato(self, request, sess):

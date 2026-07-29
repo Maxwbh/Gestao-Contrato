@@ -14,8 +14,8 @@ from django.core.management import call_command
 from django.db import connection
 from django.contrib.auth import get_user_model
 from django.db.models import Count, Sum, Q
-from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from django.urls import reverse_lazy
+from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
+from django.urls import reverse_lazy, reverse
 from django.contrib import messages
 from datetime import datetime, timedelta
 from django.utils import timezone
@@ -26,8 +26,10 @@ from .models import (
     get_contabilidades_usuario, get_imobiliarias_usuario,
     usuario_tem_acesso_imobiliaria, usuario_tem_acesso_contabilidade,
     usuario_tem_permissao_total, registrar_auditoria, LogAuditoria,
+    PerfilUsuario, pode_gerenciar_usuarios, ProviderBoleto, normalizar_provider,
 )
-from .forms import ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm, AcessoUsuarioForm
+from .forms import (ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm,
+                    AcessoUsuarioForm, NovoUsuarioForm)
 from django.core.cache import cache
 import io
 import json
@@ -465,23 +467,38 @@ def setup(request):
         }, status=500)
 
 
+def _bloqueia_dados_teste(request):
+    """
+    Ferramentas de dados de teste: liberadas apenas em DEBUG (dev/homologação)
+    ou para superuser/staff autenticado. Bloqueia acesso anônimo em produção
+    (evita popular/expor o banco). Retorna JsonResponse 403 quando bloqueia.
+    """
+    from django.conf import settings as _s
+    if getattr(_s, 'DEBUG', False):
+        return None
+    if request.user.is_authenticated and (request.user.is_superuser or request.user.is_staff):
+        return None
+    return JsonResponse({
+        'status': 'error',
+        'message': 'Disponível apenas em ambiente de teste ou para administradores.',
+    }, status=403)
+
+
 @require_http_methods(["GET", "POST"])
 def gerar_dados_teste(request):
     """
-    Endpoint para gerar dados de teste (ACESSÍVEL SEM LOGIN para ambiente de teste)
+    Endpoint para gerar dados de teste (só DEBUG ou superuser/staff — ver
+    _bloqueia_dados_teste).
 
     GET: Retorna status do sistema
     POST: Gera dados de teste
 
     Parâmetros POST (form-data ou JSON):
         limpar (bool): Se deve limpar dados antes (default: False)
-
-    Exemplo de uso:
-        curl -X POST http://localhost:8000/api/gerar-dados-teste/ -d "limpar=true"
-        curl -X POST http://localhost:8000/api/gerar-dados-teste/ -H "Content-Type: application/json" -d '{"limpar": true}'
     """
-    # NOTA: Endpoint liberado para facilitar setup em ambiente Render Free
-    # Em produção real, adicionar verificação de token ou IP
+    _bloq = _bloqueia_dados_teste(request)
+    if _bloq is not None:
+        return _bloq
     # Importar modelos adicionais
     from contratos.models import Contrato, IndiceReajuste
     from financeiro.models import Parcela
@@ -727,6 +744,9 @@ def gerar_boletos_teste(request):
     Parâmetros POST (JSON):
         banco (str): Banco para os boletos (001, 756, 237, 336 ou null para round-robin).
     """
+    _bloq = _bloqueia_dados_teste(request)
+    if _bloq is not None:
+        return _bloq
     if request.method == 'GET':
         return JsonResponse({'status': 'ok', 'geracao': _job_boletos_get()})
 
@@ -1555,16 +1575,27 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
                     conta_dv = conta_data.get('conta_dv', '')
                     conta_completa = f"{conta}-{conta_dv}" if conta and conta_dv else conta
 
-                    novas_contas.append(ContaBancaria(
+                    _prov = normalizar_provider(conta_data.get('provider'))
+                    _tenant = (conta_data.get('tenant_id') or '').strip()
+                    if _prov != ProviderBoleto.PYCOBRANCA and not _tenant:
+                        _tenant = f'imob{self.object.id}-{_prov}'
+                    _conta = ContaBancaria(
                         imobiliaria=self.object,
                         banco=conta_data.get('banco', ''),
                         descricao=conta_data.get('descricao', ''),
+                        provider=_prov,
+                        tenant_id=_tenant if _prov != ProviderBoleto.PYCOBRANCA else '',
+                        account_config=conta_data.get('account_config'),
                         agencia=agencia_completa,
                         conta=conta_completa,
                         convenio=conta_data.get('convenio', ''),
                         carteira=conta_data.get('carteira', ''),
                         principal=conta_data.get('principal', False),
-                    ))
+                    )
+                    _cred = conta_data.get('credenciais')
+                    if isinstance(_cred, dict) and any((v or '').strip() for v in _cred.values()):
+                        _conta.credenciais = {k: v for k, v in _cred.items() if (v or '').strip()}
+                    novas_contas.append(_conta)
                 if novas_contas:
                     ContaBancaria.objects.bulk_create(novas_contas)
             except (json.JSONDecodeError, Exception) as e:
@@ -1692,6 +1723,9 @@ def api_obter_conta_bancaria(request, conta_id):
             'provider': conta.provider,
             'tenant_id': conta.tenant_id,
             'account_config': conta.account_config,
+            # Segredos nunca voltam ao cliente — só a indicação de que existem.
+            'tem_credenciais': bool(conta.credenciais_cifradas),
+            'tem_bapi_token': bool(conta.bapi_token_cifrado),
             'agencia': conta.agencia,
             'conta': conta.conta,
             'convenio': conta.convenio,
@@ -1719,6 +1753,17 @@ def api_obter_conta_bancaria(request, conta_id):
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
+def _derivar_account_config(provider, account_config, conta):
+    """Para o Sicoob, a conta corrente (numeroContaCorrente) é o próprio campo
+    "conta" da conta bancária — não se repete no formulário. Preenche o
+    account_config a partir dela quando ausente, mantendo o resto intacto."""
+    if provider == 'sicoob' and isinstance(account_config, dict):
+        cc = (conta or '').strip()
+        if cc and not (account_config.get('numeroContaCorrente') or '').strip():
+            return {**account_config, 'numeroContaCorrente': cc}
+    return account_config
+
+
 @login_required
 @require_http_methods(["POST"])
 def api_criar_conta_bancaria(request):
@@ -1728,16 +1773,25 @@ def api_criar_conta_bancaria(request):
 
         imobiliaria = get_object_or_404(Imobiliaria, pk=data.get('imobiliaria_id'), ativo=True)
 
-        # Provider vazio = BRCobrança (fluxo CNAB padrão)
-        provider = (data.get('provider') or 'brcobranca').strip() or 'brcobranca'
+        # Provider vazio (ou legado 'brcobranca') = pyCobrança, motor offline/CNAB
+        provider = normalizar_provider(data.get('provider'))
+        # tenant_id é identificador interno (não é credencial do provedor):
+        # gerado automaticamente para C6/Sicoob quando não informado.
+        tenant_id = (data.get('tenant_id') or '').strip()
+        if provider != ProviderBoleto.PYCOBRANCA and not tenant_id:
+            tenant_id = f'imob{imobiliaria.id}-{provider}'
+
+        # Sicoob: a conta corrente é o próprio campo "conta" (não se duplica no form).
+        account_config = _derivar_account_config(provider, data.get('account_config'),
+                                                  data.get('conta', ''))
 
         conta = ContaBancaria.objects.create(
             imobiliaria=imobiliaria,
             banco=data.get('banco', ''),
             descricao=data.get('descricao', ''),
             provider=provider,
-            tenant_id=(data.get('tenant_id') or '').strip(),
-            account_config=data.get('account_config'),
+            tenant_id=tenant_id,
+            account_config=account_config,
             agencia=data.get('agencia', ''),
             conta=data.get('conta', ''),
             convenio=data.get('convenio', ''),
@@ -1757,6 +1811,12 @@ def api_criar_conta_bancaria(request):
             layout_cnab=data.get('layout_cnab', 'CNAB_240'),
             numero_remessa_cnab_atual=data.get('numero_remessa_cnab_atual', 0),
         )
+
+        # Credenciais do banco (cifradas) — só para C6/Sicoob.
+        _cred = data.get('credenciais')
+        if isinstance(_cred, dict) and any((v or '').strip() for v in _cred.values()):
+            conta.credenciais = {k: v for k, v in _cred.items() if (v or '').strip()}
+            conta.save(update_fields=['credenciais_cifradas'])
 
         return JsonResponse({
             'status': 'success',
@@ -1779,12 +1839,23 @@ def api_atualizar_conta_bancaria(request, conta_id):
 
         conta.banco = data.get('banco', conta.banco)
         conta.descricao = data.get('descricao', conta.descricao)
-        # Provider vazio = BRCobrança (fluxo CNAB padrão)
-        _provider = (data.get('provider') or '').strip()
-        conta.provider = _provider or 'brcobranca'
-        conta.tenant_id = (data.get('tenant_id', conta.tenant_id) or '').strip()
+        # Provider vazio (ou legado 'brcobranca') = pyCobrança, motor offline/CNAB
+        conta.provider = normalizar_provider(data.get('provider'))
+        # tenant_id interno: gera para C6/Sicoob quando ausente (não é credencial).
+        _tenant = (data.get('tenant_id', conta.tenant_id) or '').strip()
+        if conta.provider != ProviderBoleto.PYCOBRANCA and not _tenant:
+            _tenant = f'imob{conta.imobiliaria_id}-{conta.provider}'
+        conta.tenant_id = _tenant if conta.provider != ProviderBoleto.PYCOBRANCA else ''
         if 'account_config' in data:
-            conta.account_config = data.get('account_config')
+            # Sicoob: a conta corrente vem do campo "conta" (não se duplica no form).
+            _cc = data.get('conta', conta.conta)
+            conta.account_config = _derivar_account_config(
+                conta.provider, data.get('account_config'), _cc)
+        # Credenciais (cifradas): só grava quando enviadas e não-vazias — no
+        # edit, deixar em branco preserva as credenciais já cadastradas.
+        _cred = data.get('credenciais')
+        if isinstance(_cred, dict) and any((v or '').strip() for v in _cred.values()):
+            conta.credenciais = {k: v for k, v in _cred.items() if (v or '').strip()}
         conta.agencia = data.get('agencia', conta.agencia)
         conta.conta = data.get('conta', conta.conta)
         conta.convenio = data.get('convenio', conta.convenio)
@@ -1861,7 +1932,131 @@ def api_listar_bancos(request):
 # CRUD VIEWS - ACESSO USUÁRIO
 # =============================================================================
 
-class AcessoUsuarioListView(LoginRequiredMixin, PaginacaoMixin, ListView):
+class GerenciaUsuariosMixin(LoginRequiredMixin):
+    """
+    HU-28 RN-1: só administradores (perfil ADMIN ou superuser/staff) acessam a
+    gestão de usuários e acessos. Não-admin autenticado → 403 + auditoria.
+    """
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and not pode_gerenciar_usuarios(request.user):
+            registrar_auditoria(request, 'ACESSO_NEGADO_ESCOPO', entidade='GestaoUsuarios',
+                                descricao=f'Tentativa de acessar {request.path} sem perfil admin')
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied('Apenas administradores podem gerenciar usuários.')
+        return super().dispatch(request, *args, **kwargs)
+
+
+class UsuarioListView(GerenciaUsuariosMixin, PaginacaoMixin, ListView):
+    """Lista os usuários internos do escopo do administrador (HU-28.6)."""
+    template_name = 'core/usuario_list.html'
+    context_object_name = 'usuarios'
+    paginate_by = 25
+
+    def get_queryset(self):
+        User = get_user_model()
+        qs = User.objects.select_related('perfil').order_by('is_active', 'first_name', 'username')
+        # Só usuários internos (exclui compradores do portal).
+        qs = qs.filter(acesso_comprador__isnull=True)
+        if not usuario_tem_permissao_total(self.request.user):
+            # Escopo: usuários que têm acesso a alguma imobiliária do gestor.
+            imob_ids = list(get_imobiliarias_usuario(self.request.user).values_list('id', flat=True))
+            qs = qs.filter(acessos__imobiliaria_id__in=imob_ids, acessos__ativo=True).distinct()
+        search = self.request.GET.get('search')
+        if search:
+            qs = qs.filter(Q(first_name__icontains=search) | Q(last_name__icontains=search) |
+                           Q(email__icontains=search) | Q(username__icontains=search))
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['search'] = self.request.GET.get('search', '')
+        return ctx
+
+
+class UsuarioCreateView(GerenciaUsuariosMixin, View):
+    """Cadastra um usuário interno + acessos, no escopo do administrador (HU-28.1/2/3/7)."""
+    template_name = 'core/usuario_form.html'
+
+    def get(self, request):
+        form = NovoUsuarioForm(cadastrador=request.user)
+        return render(request, self.template_name, {'form': form})
+
+    def post(self, request):
+        form = NovoUsuarioForm(request.POST, cadastrador=request.user)
+        if form.is_valid():
+            user = form.save()
+            registrar_auditoria(
+                request, 'USUARIO_CRIADO', entidade='User', entidade_pk=user.pk,
+                descricao=f'{user.get_username()} · perfil={user.perfil.get_papel_display()} · '
+                          f'{len(form.acessos)} acesso(s)')
+            for ac in form.acessos:
+                registrar_auditoria(request, 'ACESSO_CONCEDIDO', entidade='Imobiliaria',
+                                    entidade_pk=ac['imobiliaria_id'],
+                                    descricao=f'para {user.get_username()}')
+            if form.cleaned_data.get('enviar_convite'):
+                _enviar_convite_definir_senha(request, user)
+                messages.success(request, f'Usuário criado. Convite enviado para {user.email}.')
+            else:
+                messages.success(request, f'Usuário {user.get_full_name() or user.email} criado. '
+                                          'A senha deve ser trocada no primeiro acesso.')
+            return redirect('core:listar_usuarios')
+        messages.error(request, 'Corrija os erros abaixo.')
+        return render(request, self.template_name, {'form': form})
+
+
+class UsuarioDesativarView(GerenciaUsuariosMixin, View):
+    """Desativa (soft) um usuário interno (HU-28.6)."""
+    def post(self, request, pk):
+        User = get_user_model()
+        user = get_object_or_404(User, pk=pk, acesso_comprador__isnull=True)
+        if user == request.user:
+            messages.error(request, 'Você não pode desativar a própria conta.')
+            return redirect('core:listar_usuarios')
+        user.is_active = False
+        user.save(update_fields=['is_active'])
+        registrar_auditoria(request, 'USUARIO_DESATIVADO', entidade='User', entidade_pk=user.pk,
+                            descricao=user.get_username())
+        messages.success(request, f'Usuário {user.get_username()} desativado.')
+        return redirect('core:listar_usuarios')
+
+
+class UsuarioReenviarConviteView(GerenciaUsuariosMixin, View):
+    """Reenvia o link de definição de senha (HU-28.2/28.6)."""
+    def post(self, request, pk):
+        User = get_user_model()
+        user = get_object_or_404(User, pk=pk, acesso_comprador__isnull=True)
+        _enviar_convite_definir_senha(request, user)
+        messages.success(request, f'Convite reenviado para {user.email}.')
+        return redirect('core:listar_usuarios')
+
+
+def _enviar_convite_definir_senha(request, user):
+    """Envia e-mail com link do fluxo de reset (definição de senha) — HU-28.2."""
+    from django.contrib.auth.tokens import default_token_generator
+    from django.utils.http import urlsafe_base64_encode
+    from django.utils.encoding import force_bytes
+    from django.core.mail import send_mail
+    from django.conf import settings as _s
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    try:
+        link = request.build_absolute_uri(
+            reverse('password_reset_confirm', kwargs={'uidb64': uid, 'token': token}))
+    except Exception:
+        link = f'/accounts/reset/{uid}/{token}/'
+    try:
+        send_mail(
+            subject='Bem-vindo ao Gestão de Contratos — defina sua senha',
+            message=(f'Olá {user.first_name or user.get_username()},\n\n'
+                     f'Uma conta foi criada para você. Defina sua senha pelo link '
+                     f'(válido por 72h):\n\n{link}\n'),
+            from_email=getattr(_s, 'DEFAULT_FROM_EMAIL', None),
+            recipient_list=[user.email], fail_silently=True)
+    except Exception:
+        pass
+
+
+class AcessoUsuarioListView(GerenciaUsuariosMixin, PaginacaoMixin, ListView):
     """Lista todos os acessos de usuários"""
     model = AcessoUsuario
     template_name = 'core/acesso_list.html'
@@ -1902,12 +2097,17 @@ class AcessoUsuarioListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         return context
 
 
-class AcessoUsuarioCreateView(LoginRequiredMixin, CreateView):
+class AcessoUsuarioCreateView(GerenciaUsuariosMixin, CreateView):
     """Cria um novo acesso de usuário"""
     model = AcessoUsuario
     form_class = AcessoUsuarioForm
     template_name = 'core/acesso_form.html'
     success_url = reverse_lazy('core:listar_acessos')
+
+    def get_form_kwargs(self):
+        kw = super().get_form_kwargs()
+        kw['cadastrador'] = self.request.user
+        return kw
 
     def form_valid(self, form):
         messages.success(
@@ -1921,12 +2121,17 @@ class AcessoUsuarioCreateView(LoginRequiredMixin, CreateView):
         return super().form_invalid(form)
 
 
-class AcessoUsuarioUpdateView(LoginRequiredMixin, UpdateView):
+class AcessoUsuarioUpdateView(GerenciaUsuariosMixin, UpdateView):
     """Atualiza um acesso de usuário existente"""
     model = AcessoUsuario
     form_class = AcessoUsuarioForm
     template_name = 'core/acesso_form.html'
     success_url = reverse_lazy('core:listar_acessos')
+
+    def get_form_kwargs(self):
+        kw = super().get_form_kwargs()
+        kw['cadastrador'] = self.request.user
+        return kw
 
     def get_queryset(self):
         return AcessoUsuario.objects.filter(ativo=True)
@@ -1940,7 +2145,7 @@ class AcessoUsuarioUpdateView(LoginRequiredMixin, UpdateView):
         return super().form_invalid(form)
 
 
-class AcessoUsuarioDeleteView(LoginRequiredMixin, DeleteView):
+class AcessoUsuarioDeleteView(GerenciaUsuariosMixin, DeleteView):
     """Desativa um acesso de usuário (soft delete)"""
     model = AcessoUsuario
     success_url = reverse_lazy('core:listar_acessos')
@@ -2328,12 +2533,12 @@ def configuracoes_sistema(request):
         }
 
     params_twilio = _params_por_prefixo('TWILIO_')
-    params_brcobranca = _params_por_prefixo('BRCOBRANCA_')
+    params_pycobranca = _params_por_prefixo('BRCOBRANCA_')
     params_portal = _params_por_prefixo('PORTAL_')
     params_notif = _params_por_prefixo('NOTIFICACAO_')
 
     brcobranca_url = (
-        params_brcobranca.get('BRCOBRANCA_URL')
+        params_pycobranca.get('BRCOBRANCA_URL')
         or getattr(django_settings, 'BRCOBRANCA_URL', 'http://localhost:9292')
     )
 
@@ -2349,9 +2554,9 @@ def configuracoes_sistema(request):
         'config_email': ConfiguracaoEmail.objects.filter(ativo=True).first(),
         'config_whatsapp': ConfiguracaoWhatsApp.objects.filter(ativo=True).first(),
         'config_sms': ConfiguracaoSMS.objects.filter(ativo=True).first(),
-        'status_brcobranca': bool(params_brcobranca.get('BRCOBRANCA_URL')),
+        'status_pycobranca': bool(params_pycobranca.get('BRCOBRANCA_URL')),
         'params_twilio': params_twilio,
-        'params_brcobranca': params_brcobranca,
+        'params_pycobranca': params_pycobranca,
         'params_portal': params_portal,
         'params_notif': params_notif,
         'parametros_por_grupo': dict(parametros_por_grupo),
@@ -2435,7 +2640,7 @@ def api_parametros_exportar(request):
         ParametroSistema.objects.values('chave', 'valor', 'tipo', 'grupo', 'descricao', 'modificado_manualmente')
     )
     payload = {
-        'exportado_em': datetime.datetime.utcnow().isoformat() + 'Z',
+        'exportado_em': datetime.datetime.now(datetime.UTC).isoformat().replace('+00:00', 'Z'),
         'total': len(params),
         'parametros': params,
     }
@@ -2578,7 +2783,8 @@ def ia_tokens_config(request):
     precos_map = {
         'gemini-2.0-flash':          (0.0,    0.0),
         'claude-haiku-4-5-20251001': (1.00,   5.00),
-        'claude-sonnet-4-6':         (3.00,  15.00),
+        'claude-sonnet-5':           (3.00,  15.00),
+        'claude-sonnet-4-6':         (3.00,  15.00),  # legado
         'claude-opus-4-8':           (5.00,  25.00),
     }
 
@@ -2586,6 +2792,7 @@ def ia_tokens_config(request):
     estilo_map = {
         'gemini-2.0-flash':          ('card-gemini', 'badge-free',  'GRATUITO',      'fas fa-leaf'),
         'claude-haiku-4-5-20251001': ('card-haiku',  'badge-cheap', 'ECONÔMICO',     'fas fa-bolt'),
+        'claude-sonnet-5':           ('card-sonnet', 'badge-mid',   'INTERMEDIÁRIO', 'fas fa-star'),
         'claude-sonnet-4-6':         ('card-sonnet', 'badge-mid',   'INTERMEDIÁRIO', 'fas fa-star'),
         'claude-opus-4-8':           ('card-opus',   'badge-prem',  'PREMIUM',       'fas fa-crown'),
     }

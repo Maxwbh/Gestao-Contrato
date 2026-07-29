@@ -33,6 +33,26 @@ def _gerar_boleto_fake(enviar_email=True, **kw):
     return {'sucesso': True, 'nosso_numero': '000123'}
 
 
+# Alvo do mock da geração em massa CNAB (feature multi boletos do gateway):
+# a tela Boletos do Mês envia contas brcobranca em lote via /api/boleto/multi.
+LOTE = 'financeiro.services.boleto_service.BoletoService.gerar_boletos_lote'
+
+
+def _lote_ok(pares, tamanho_lote=15, falhar_no=None):
+    """Side-effect para gerar_boletos_lote: marca GERADO (exceto `falhar_no`)."""
+    from financeiro.models import StatusBoleto
+    gerados, erros = 0, []
+    for i, (parcela, _conta) in enumerate(pares, start=1):
+        if falhar_no and i == falhar_no:
+            erros.append(f'Parcela pk={parcela.pk}: Dados inválidos')
+            continue
+        parcela.status_boleto = StatusBoleto.GERADO
+        parcela.nosso_numero = f'NN{parcela.pk}'
+        parcela.save(update_fields=['status_boleto', 'nosso_numero'])
+        gerados += 1
+    return {'gerados': gerados, 'erros': erros}
+
+
 @pytest.fixture
 def base(db):
     """Imobiliária + conta + contrato FIXO (sem bloqueio) com parcelas NAO_GERADO."""
@@ -137,14 +157,9 @@ class TestGerarPorEscopo:
                       data=json.dumps(body), content_type='application/json')
 
     def test_escopo_todos(self, base, staff_cli):
-        from financeiro.models import StatusBoleto
         _, c = staff_cli
-        with patch('financeiro.models.Parcela.gerar_boleto', autospec=True) as m:
-            def _se(self, enviar_email=True, **kw):
-                self.status_boleto = StatusBoleto.GERADO
-                self.save(update_fields=['status_boleto'])
-                return {'sucesso': True, 'nosso_numero': 'X'}
-            m.side_effect = _se
+        with patch(LOTE, side_effect=_lote_ok), \
+             patch('financeiro.services.geracao_boletos_service.GeracaoBoletosService.notificar_lote'):
             resp = self._post(c, {'escopo': 'todos', 'quantidade': 1, 'incluir_intermediarias': False})
         assert resp.status_code == 200
         data = resp.json()
@@ -152,14 +167,10 @@ class TestGerarPorEscopo:
         assert data['total_gerados'] == 1
 
     def test_escopo_contratos_proximos_3(self, base, staff_cli):
-        from financeiro.models import StatusBoleto
         _, _, contrato = base
         _, c = staff_cli
-        with patch('financeiro.models.Parcela.gerar_boleto', autospec=True) as m:
-            def _se(self, enviar_email=True, **kw):
-                self.status_boleto = StatusBoleto.GERADO; self.save(update_fields=['status_boleto'])
-                return {'sucesso': True}
-            m.side_effect = _se
+        with patch(LOTE, side_effect=_lote_ok), \
+             patch('financeiro.services.geracao_boletos_service.GeracaoBoletosService.notificar_lote'):
             resp = self._post(c, {'escopo': 'contratos', 'contrato_ids': [contrato.pk],
                                   'quantidade': 3, 'incluir_intermediarias': False})
         assert resp.json()['total_gerados'] == 3
@@ -171,15 +182,10 @@ class TestGerarPorEscopo:
         assert resp.json()['sucesso'] is False
 
     def test_tipo_carne_expoe_url(self, base, staff_cli):
-        from financeiro.models import StatusBoleto
         _, _, contrato = base
         _, c = staff_cli
-        with patch('financeiro.models.Parcela.gerar_boleto', autospec=True) as m, \
+        with patch(LOTE, side_effect=_lote_ok), \
              patch('financeiro.services.geracao_boletos_service.GeracaoBoletosService.notificar_lote'):
-            def _se(self, enviar_email=True, **kw):
-                self.status_boleto = StatusBoleto.GERADO; self.save(update_fields=['status_boleto'])
-                return {'sucesso': True}
-            m.side_effect = _se
             resp = self._post(c, {'escopo': 'contratos', 'contrato_ids': [contrato.pk],
                                   'quantidade': 2, 'tipo': 'carne', 'incluir_intermediarias': False})
         data = resp.json()
@@ -189,19 +195,8 @@ class TestGerarPorEscopo:
     def test_falha_parcial_nao_aborta(self, base, staff_cli):
         _, _, contrato = base
         _, c = staff_cli
-        chamadas = {'n': 0}
-        from financeiro.models import StatusBoleto
-
-        def _se(self, enviar_email=True, **kw):
-            chamadas['n'] += 1
-            if chamadas['n'] == 2:
-                return {'sucesso': False, 'erro': 'Dados inválidos'}
-            self.status_boleto = StatusBoleto.GERADO; self.save(update_fields=['status_boleto'])
-            return {'sucesso': True}
-
-        with patch('financeiro.models.Parcela.gerar_boleto', autospec=True) as m, \
+        with patch(LOTE, side_effect=lambda pares, tamanho_lote=15: _lote_ok(pares, falhar_no=2)), \
              patch('financeiro.services.geracao_boletos_service.GeracaoBoletosService.notificar_lote'):
-            m.side_effect = _se
             resp = self._post(c, {'escopo': 'contratos', 'contrato_ids': [contrato.pk],
                                   'quantidade': 3, 'incluir_intermediarias': False})
         data = resp.json()
@@ -306,9 +301,14 @@ class TestPacingAbort:
                       data=json.dumps(body), content_type='application/json')
 
     def test_abort_em_rate_limit(self, base, staff_cli):
-        """Quando gerar_boleto sinaliza rate_limited, a geração para imediatamente."""
+        """Quando gerar_boleto sinaliza rate_limited, a geração para imediatamente.
+        Pacing/abort valem para o caminho individual (cobrança registrada C6/Sicoob);
+        contas CNAB agora geram em lote via /api/boleto/multi."""
         from financeiro.models import StatusBoleto
-        _, _, contrato = base
+        _, conta, contrato = base
+        conta.provider = 'c6'
+        conta.tenant_id = 'imob-pacing-c6'
+        conta.save(update_fields=['provider', 'tenant_id'])
         _, c = staff_cli
         chamadas = {'n': 0}
 
@@ -340,7 +340,10 @@ class TestPacingAbort:
     def test_falha_comum_nao_aborta(self, base, staff_cli):
         """Erros normais (não rate_limited) não ativam o abort — comportamento tolerante a falhas."""
         from financeiro.models import StatusBoleto
-        _, _, contrato = base
+        _, conta, contrato = base
+        conta.provider = 'c6'
+        conta.tenant_id = 'imob-pacing2-c6'
+        conta.save(update_fields=['provider', 'tenant_id'])
         _, c = staff_cli
         chamadas = {'n': 0}
 
@@ -367,7 +370,10 @@ class TestPacingAbort:
     def test_pacing_delay_entre_chamadas(self, base, staff_cli, settings):
         """Verifica que time.sleep é chamado N-1 vezes com o delay configurado."""
         from financeiro.models import StatusBoleto
-        _, _, contrato = base
+        _, conta, contrato = base
+        conta.provider = 'c6'
+        conta.tenant_id = 'imob-pacing3-c6'
+        conta.save(update_fields=['provider', 'tenant_id'])
         _, c = staff_cli
         settings.BRCOBRANCA_INTER_BOLETO_DELAY_MS = 200
 

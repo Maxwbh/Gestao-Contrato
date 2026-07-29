@@ -9,7 +9,7 @@ Uso:
 Desenvolvedor: Maxwell da Silva Oliveira
 """
 import os
-import psycopg2
+import psycopg
 from urllib.parse import urlparse, unquote
 
 database_url = os.environ.get('DATABASE_URL')
@@ -21,10 +21,10 @@ if not database_url:
 result = urlparse(database_url)
 password = unquote(result.password) if result.password else None
 
-conn = psycopg2.connect(
+conn = psycopg.connect(
     host=result.hostname,
     port=result.port or 5432,
-    database=result.path[1:],
+    dbname=result.path[1:],
     user=result.username,
     password=password
 )

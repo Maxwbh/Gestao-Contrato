@@ -192,25 +192,25 @@ class TestContaBancariaForm:
         form.is_valid()
         assert 'conta' in form.errors
 
-    def test_provider_vazio_vira_brcobranca(self):
+    def test_provider_vazio_vira_pycobranca(self):
         """Provider não informado → BRCobrança (fluxo CNAB padrão)."""
         form = ContaBancariaForm(data=self._dados(provider=''))
         assert form.is_valid(), form.errors
-        assert form.cleaned_data['provider'] == 'brcobranca'
+        assert form.cleaned_data['provider'] == 'pycobranca'
 
-    def test_provider_ausente_vira_brcobranca(self):
+    def test_provider_ausente_vira_pycobranca(self):
         """Sem a chave provider no POST → BRCobrança."""
         dados = self._dados()
         dados.pop('provider', None)
         form = ContaBancariaForm(data=dados)
         assert form.is_valid(), form.errors
-        assert form.cleaned_data['provider'] == 'brcobranca'
+        assert form.cleaned_data['provider'] == 'pycobranca'
 
-    def test_c6_brcobranca_continua_valido(self):
-        """C6 (banco=336) com provider=brcobranca permanece válido (fluxo CNAB)."""
-        form = ContaBancariaForm(data=self._dados(provider='brcobranca'))
+    def test_c6_pycobranca_continua_valido(self):
+        """C6 (banco=336) com provider=pycobranca permanece válido (fluxo CNAB)."""
+        form = ContaBancariaForm(data=self._dados(provider='pycobranca'))
         assert form.is_valid(), form.errors
-        assert form.cleaned_data['provider'] == 'brcobranca'
+        assert form.cleaned_data['provider'] == 'pycobranca'
 
     def test_provider_c6_exige_tenant_id(self):
         """Provider c6 sem tenant_id deve dar erro."""

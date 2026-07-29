@@ -24,6 +24,34 @@ def _get_ip(request) -> str:
     return xff.split(',')[0].strip() or request.META.get('REMOTE_ADDR', 'unknown')
 
 
+class TrocaSenhaObrigatoriaMiddleware:
+    """
+    HU-28.2: quando o usuário foi criado com senha inicial pelo gestor, obriga
+    a troca no primeiro acesso — redireciona para a tela de troca de senha até
+    que a flag `PerfilUsuario.deve_trocar_senha` seja limpa.
+    """
+    # Caminhos liberados mesmo com a flag ligada (senão o usuário fica preso).
+    _ISENTOS = ('/accounts/alterar-senha/', '/accounts/logout/', '/accounts/login/')
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, 'user', None)
+        if user is not None and user.is_authenticated:
+            path = request.path
+            isento = (path.startswith(self._ISENTOS)
+                      or path.startswith('/static/') or path.startswith('/media/'))
+            if not isento:
+                perfil = getattr(user, 'perfil', None)
+                if perfil is not None and perfil.deve_trocar_senha:
+                    from django.shortcuts import redirect
+                    from django.contrib import messages
+                    messages.info(request, 'Defina uma nova senha para continuar.')
+                    return redirect('accounts:alterar_senha')
+        return self.get_response(request)
+
+
 class AntiEnumeracaoMiddleware:
     """D-01 + D-02."""
 

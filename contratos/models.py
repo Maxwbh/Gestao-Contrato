@@ -13,7 +13,7 @@ from decimal import Decimal
 import logging
 
 from dateutil.relativedelta import relativedelta
-from core.models import TimeStampedModel, Imovel, Comprador, Imobiliaria
+from core.models import TimeStampedModel, Imovel, Comprador, Imobiliaria, MetodoCobranca
 
 logger = logging.getLogger(__name__)
 
@@ -488,6 +488,16 @@ class Contrato(TimeStampedModel):
         help_text='Conta bancária para geração de boletos deste contrato'
     )
 
+    # Método de cobrança escolhido para este contrato (deve estar habilitado
+    # na imobiliária — ver Contrato.clean()).
+    metodo_cobranca = models.CharField(
+        max_length=20,
+        choices=MetodoCobranca.choices,
+        default=MetodoCobranca.BOLETO,
+        verbose_name='Método de Cobrança',
+        help_text='Forma de cobrança deste contrato (habilitada na imobiliária).'
+    )
+
     # Configurações de Multa (personalizadas)
     tipo_valor_multa = models.CharField(
         max_length=10,
@@ -655,6 +665,54 @@ class Contrato(TimeStampedModel):
             principal=True, ativo=True
         ).first()
 
+    # ── Pix Automático (débito recorrente) — Fase 8 ──
+    def aderir_pix_automatico(self):
+        """
+        Cria a recorrência de Pix Automático no gateway e registra localmente
+        (RecorrenciaPix, status CRIADA). Exige conta C6/Sicoob.
+        """
+        from financeiro.models import RecorrenciaPix, RecStatusPA
+        from financeiro.services.boleto_api_client import BoletoApiClient
+        conta = self.get_conta_bancaria()
+        if not conta or (conta.provider or 'pycobranca') == 'pycobranca':
+            return {'sucesso': False, 'erro': 'Pix Automático exige conta C6/Sicoob.'}
+        rec = getattr(self, 'recorrencia_pix', None)
+        if rec and rec.status in (RecStatusPA.CRIADA, RecStatusPA.APROVADA):
+            return {'sucesso': False, 'erro': 'Contrato já tem recorrência ativa.'}
+        doc = getattr(self.comprador, 'cnpj', '') or getattr(self.comprador, 'cpf', '')
+        dados = {
+            'devedor': {'nome': self.comprador.nome, 'documento': doc},
+            'valor': float(self.valor_parcela_original or 0),
+            'periodicidade': 'MENSAL',
+            'contrato': self.numero_contrato,
+        }
+        r = BoletoApiClient().criar_recorrencia(
+            conta.tenant_id, conta.provider, dados,
+            bapi_token=(getattr(conta, 'bapi_token', '') or None))
+        if not r.get('sucesso'):
+            return r
+        RecorrenciaPix.objects.update_or_create(
+            contrato=self,
+            defaults={'id_rec': r['id_rec'], 'provider': conta.provider,
+                      'status': RecStatusPA.CRIADA, 'aprovada_em': None, 'cancelada_em': None},
+        )
+        return {'sucesso': True, 'id_rec': r['id_rec']}
+
+    def cancelar_pix_automatico(self):
+        """Cancela a recorrência no gateway (PATCH) e marca CANCELADA localmente."""
+        from financeiro.models import RecStatusPA
+        from financeiro.services.boleto_api_client import BoletoApiClient
+        rec = getattr(self, 'recorrencia_pix', None)
+        if not rec or not rec.id_rec:
+            return {'sucesso': False, 'erro': 'Sem recorrência para cancelar.'}
+        conta = self.get_conta_bancaria()
+        r = BoletoApiClient().cancelar_recorrencia(
+            rec.id_rec, getattr(conta, 'tenant_id', '') or '', rec.provider,
+            bapi_token=(getattr(conta, 'bapi_token', '') or None))
+        if r.get('sucesso'):
+            rec.transicionar(RecStatusPA.CANCELADA)
+        return r
+
     def clean(self):
         """Validações de negócio do contrato"""
         super().clean()
@@ -713,6 +771,16 @@ class Contrato(TimeStampedModel):
                 errors['imovel'] = 'O imóvel deve pertencer à mesma imobiliária do contrato.'
         # NOTA: Comprador NÃO tem campo imobiliaria - um comprador pode
         # comprar imóveis de diferentes imobiliárias através de diferentes contratos
+
+        # Método de cobrança deve estar habilitado na imobiliária.
+        # Lenient: só valida quando a imobiliária tem métodos definidos.
+        if self.imobiliaria_id and self.metodo_cobranca:
+            metodos = getattr(self.imobiliaria, 'metodos_cobranca', None) or []
+            if metodos and self.metodo_cobranca not in metodos:
+                errors['metodo_cobranca'] = (
+                    f'O método de cobrança "{self.get_metodo_cobranca_display()}" '
+                    f'não está habilitado na imobiliária.'
+                )
 
         if errors:
             raise ValidationError(errors)

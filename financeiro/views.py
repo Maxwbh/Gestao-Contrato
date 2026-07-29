@@ -38,6 +38,23 @@ def _imobs_para_usuario(user):
     return get_imobiliarias_usuario(user)
 
 
+def _origem_baixa(event):
+    """
+    Origem da baixa no painel de conciliação Boleto-API, a partir de
+    EventoCobrancaApi.event. O webhook grava o nome do evento do gateway
+    (liquidado, pago, pix.recebido…); as conciliações gravam
+    'conciliacao.<origem>' (polling-sicoob / pix / manual). Agrega em 4 origens.
+    """
+    ev = (event or '').lower()
+    if ev == 'conciliacao.manual':
+        return 'Baixa manual'
+    if ev.startswith('conciliacao.polling'):
+        return 'Polling Sicoob'
+    if ev.startswith('conciliacao.'):
+        return 'Conciliação Pix'
+    return 'Webhook'
+
+
 def _calcular_bloqueio_reajuste(contrato, reajustes_set, hoje):
     """
     Replica verificar_bloqueio_reajuste() sem tocar no banco.
@@ -2750,6 +2767,11 @@ def boletos_painel_gerar(request):
     _inter_delay = getattr(_dj_settings, 'BRCOBRANCA_INTER_BOLETO_DELAY_MS', 100) / 1000
     _rate_limit_abort = False
     _total_boleto_calls = 0
+    # Feature "multi boletos" do gateway: contas CNAB acumulam aqui e geram em
+    # lote via POST /api/boleto/multi (1 chamada a cada 15 boletos) — menos
+    # requisições e sem estourar rate limit. C6/Sicoob (cobrança registrada)
+    # seguem no caminho individual (registro no banco via gateway).
+    pares_cnab_lote = []   # [(parcela, conta, contrato)]
 
     for contrato, parcelas, intermediarias in contratos_alvo:
         imob_nome = contrato.imobiliaria.nome
@@ -2780,6 +2802,13 @@ def boletos_painel_gerar(request):
                 por_imob[imob_nome]['erros'] += 1
                 erros.append({'parcela_id': None, 'contrato': contrato.numero_contrato,
                               'erro': f'Intermediária {it.pk}: {e}'})
+
+        # Conta CNAB → acumula para o lote /api/boleto/multi (gera após o loop).
+        _provider_conta = getattr(conta_bancaria, 'provider', 'pycobranca') or 'pycobranca'
+        if _provider_conta == 'pycobranca':
+            for parcela in alvos:
+                pares_cnab_lote.append((parcela, conta_bancaria, contrato))
+            continue
 
         for parcela in alvos:
             if _total_boleto_calls > 0 and _inter_delay > 0:
@@ -2842,6 +2871,58 @@ def boletos_painel_gerar(request):
             except Exception:
                 logger.exception('HU-24: falha ao notificar lote do contrato %s', contrato.pk)
             # Tipo carnê: expõe PDF consolidado por contrato (RN-13)
+            if tipo == 'carne':
+                carnes.append({
+                    'contrato': contrato.numero_contrato,
+                    'carne_url': reverse('financeiro:download_carne_pdf', kwargs={'contrato_id': contrato.id}),
+                })
+
+    # ----- Geração em massa CNAB via /api/boleto/multi (feature multi boletos) -----
+    if pares_cnab_lote and not _rate_limit_abort:
+        from .services.boleto_service import BoletoService
+        # tamanho do lote vem de BOLETO_MULTI_TAMANHO_LOTE (padrão 200 —
+        # mesmo teto LOTE_MAX_ITENS do gateway cobranca-api)
+        resultado_lote = BoletoService().gerar_boletos_lote(
+            [(p, c) for p, c, _ in pares_cnab_lote])
+        _erros_lote = resultado_lote.get('erros') or []
+
+        geradas_por_contrato: dict = {}
+        for parcela, conta, contrato in pares_cnab_lote:
+            imob_nome = contrato.imobiliaria.nome
+            parcela.refresh_from_db()
+            if parcela.status_boleto == StatusBoleto.GERADO:
+                total_gerados += 1
+                por_imob[imob_nome]['gerados'] += 1
+                parcela.renovar_token()
+                registrar_auditoria(
+                    request, 'BOLETO_GERADO', 'Parcela', parcela.pk,
+                    f'Nosso número: {parcela.nosso_numero} (lote multi)'
+                )
+                if hasattr(contrato, 'ultimo_mes_boleto_gerado') and \
+                        parcela.numero_parcela > contrato.ultimo_mes_boleto_gerado:
+                    contrato.ultimo_mes_boleto_gerado = parcela.numero_parcela
+                    contrato.save(update_fields=['ultimo_mes_boleto_gerado'])
+                boletos_gerados.append({
+                    'parcela_id': parcela.pk,
+                    'contrato': contrato.numero_contrato,
+                    'nosso_numero': parcela.nosso_numero,
+                    'token_publico': str(parcela.token_publico),
+                })
+                geradas_por_contrato.setdefault(contrato, []).append(parcela)
+            else:
+                total_erros += 1
+                por_imob[imob_nome]['erros'] += 1
+                erros.append({
+                    'parcela_id': parcela.pk, 'contrato': contrato.numero_contrato,
+                    'erro': _erros_lote[0] if _erros_lote else 'Falha no lote /api/boleto/multi',
+                })
+
+        # Notificação consolidada por contrato (RN-14) + carnê (RN-13)
+        for contrato, geradas in geradas_por_contrato.items():
+            try:
+                service.notificar_lote(contrato, geradas)
+            except Exception:
+                logger.exception('HU-24: falha ao notificar lote do contrato %s', contrato.pk)
             if tipo == 'carne':
                 carnes.append({
                     'contrato': contrato.numero_contrato,
@@ -2931,7 +3012,12 @@ def _cobranca_estado(request):
     )
     if imobiliaria_id:
         qs_conc = qs_conc.filter(contrato__imobiliaria_id=imobiliaria_id)
-    a_conciliar_boletos = qs_conc.count()
+    # Cobrança registrada (C6/Sicoob) não passa por retorno CNAB — concilia por
+    # webhook/polling. Sai do contador do Passo 3 e vira um contador próprio.
+    from .services.cnab_service import PROVIDERS_BOLETO_API
+    qs_conc_api = qs_conc.filter(conta_bancaria__provider__in=PROVIDERS_BOLETO_API)
+    a_conciliar_api = qs_conc_api.count()
+    a_conciliar_boletos = qs_conc.count() - a_conciliar_api
 
     # Estados derivados (cascata). Um passo só é "concluído" quando os anteriores
     # também estão; se não há o que fazer porque o passo anterior ainda não terminou,
@@ -2959,6 +3045,7 @@ def _cobranca_estado(request):
         'bloqueados': bloqueados, 'contratos_pend': contratos_pend,
         'a_enviar_boletos': a_enviar_boletos, 'a_enviar_contas': a_enviar_contas,
         'a_conciliar_arquivos': a_conciliar_arquivos, 'a_conciliar_boletos': a_conciliar_boletos,
+        'a_conciliar_api': a_conciliar_api,
     }
 
 
@@ -3015,8 +3102,10 @@ def _conciliacao_saude(request):
     recebido_valor = rec_agg['valor'] or Decimal('0.00')
     recebido_qtd = rec_agg['total'] or 0
 
-    # Recebido por origem (PIX = PIX_WEBHOOK; MANUAL agrega manual/antecipação/portal/sistema)
+    # Recebido por origem (PIX = PIX_WEBHOOK; BOLETO_API = cobrança registrada
+    # C6/Sicoob; MANUAL agrega manual/antecipação/portal/sistema)
     origem = {'CNAB': Decimal('0.00'), 'PIX': Decimal('0.00'),
+              'BOLETO_API': Decimal('0.00'),
               'OFX': Decimal('0.00'), 'MANUAL': Decimal('0.00')}
     for row in hist.values('origem_pagamento').annotate(v=Sum('valor_pago')):
         v = row['v'] or Decimal('0.00')
@@ -3025,6 +3114,8 @@ def _conciliacao_saude(request):
             origem['CNAB'] += v
         elif o == 'PIX_WEBHOOK':
             origem['PIX'] += v
+        elif o == 'BOLETO_API':
+            origem['BOLETO_API'] += v
         elif o == 'OFX':
             origem['OFX'] += v
         else:
@@ -3124,6 +3215,7 @@ def painel_conciliacao_saude(request):
     origem_rows = [
         ('CNAB (retorno)', s['origem']['CNAB'], '#0058be'),
         ('PIX (webhook)', s['origem']['PIX'], '#22c55e'),
+        ('Boleto-API (C6/Sicoob)', s['origem']['BOLETO_API'], '#C9A961'),
         ('OFX (extrato)', s['origem']['OFX'], '#f59e0b'),
         ('Manual', s['origem']['MANUAL'], '#091426'),
     ]
@@ -7676,9 +7768,16 @@ def api_brcobranca_solicitar(request):
     return JsonResponse({'status': 'acordando', 'wait': wait})
 
 
+@login_required
 def api_contas_bancarias(request):
-    """API para listar contas bancárias. GET /api/contas-bancarias/"""
-    qs = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
+    """API para listar contas bancárias. GET /api/contas-bancarias/
+
+    Requer login e é limitada às imobiliárias do usuário (dados sensíveis:
+    agência/conta/convênio).
+    """
+    imobs = _imobs_para_usuario(request.user)
+    qs = (ContaBancaria.objects.filter(ativo=True, imobiliaria__in=imobs)
+          .select_related('imobiliaria'))
 
     if request.GET.get('imobiliaria_id'):
         qs = qs.filter(imobiliaria_id=request.GET['imobiliaria_id'])
@@ -9087,12 +9186,17 @@ def webhook_pix(request):
 
     Suporta o formato padrão Banco Central (array "pix" de eventos).
     Autenticação: Authorization: Bearer <PIX_WEBHOOK_TOKEN> ou x-api-key header.
-    Quando PIX_WEBHOOK_TOKEN está vazio, a validação é pulada (dev/staging).
+    Fail-closed em produção: token vazio ⇒ 503 (o webhook dá baixa em parcela;
+    sem autenticação configurada não pode aceitar POST anônimo). Em DEBUG a
+    validação é pulada (dev/staging).
     """
     from .models import EventoPIX
     import hmac as _hmac
 
     token_esperado = getattr(_settings, 'PIX_WEBHOOK_TOKEN', '')
+    if not token_esperado and not getattr(_settings, 'DEBUG', False):
+        return JsonResponse({'erro': 'Webhook PIX não configurado (PIX_WEBHOOK_TOKEN)'},
+                            status=503)
     if token_esperado:
         auth = request.headers.get('Authorization', '')
         api_key = request.headers.get('x-api-key', '')
@@ -9144,68 +9248,118 @@ def _processar_evento_cobranca(
     paid_at_str: str,
     valor_str: str,
     payload_raw: str,
+    event_id: str = '',
+    ext_ref: str = '',
+    txid: str = '',
+    id_rec: str = '',
 ) -> dict:
     """
-    Processa um evento push do Boleto-API e dá baixa na parcela se liquidado.
-    Idempotente: evento duplicado retorna 'duplicado' sem re-baixar.
+    Processa um evento push do Boleto-API: casa a parcela (por cobranca_id,
+    ext_ref ou txid), atualiza o status normalizado (status_cobranca) e dá baixa
+    quando liquidado/pago (ou no evento pix.recebido). Idempotente por event_id
+    (o banco pode reenviar) e por cobranca_id+baixado.
     """
-    import json as _json_mod
     from decimal import Decimal as _Dec, InvalidOperation
     from django.utils import timezone as _tz
-    from .models import Parcela, EventoCobrancaApi
+    from .models import Parcela, EventoCobrancaApi, StatusCobranca
 
-    # Parsear paid_at
+    # Mapa: status do gateway -> status normalizado da cobrança
+    _MAPA = {
+        'liquidado': StatusCobranca.LIQUIDADA, 'pago': StatusCobranca.LIQUIDADA,
+        'registrado': StatusCobranca.REGISTRADA, 'emitido': StatusCobranca.REGISTRADA,
+        'baixado': StatusCobranca.BAIXADA, 'cancelado': StatusCobranca.BAIXADA,
+        'expirado': StatusCobranca.EXPIRADA, 'vencido': StatusCobranca.EXPIRADA,
+        'estornado': StatusCobranca.ESTORNADA, 'devolvido': StatusCobranca.ESTORNADA,
+    }
+    st = (status_cobranca or '').lower()
+
+    def _log(status, parcela=None, paid_at=None, valor=None, erro=''):
+        return EventoCobrancaApi.objects.create(
+            cobranca_id=cobranca_id, event_id=event_id, event=event,
+            status_cobranca=status_cobranca, parcela=parcela, paid_at=paid_at,
+            valor=valor, status=status, erro=erro, payload_raw=payload_raw,
+        )
+
+    # Idempotência por event_id (o banco pode reenviar o mesmo evento)
+    if event_id and EventoCobrancaApi.objects.filter(event_id=event_id).exclude(status='recebido').exists():
+        return {'status': 'duplicado', 'evento_id': _log('duplicado').pk}
+
+    # Pix Automático (Fase 8): recorrência atualiza o RecorrenciaPix; a cobrança
+    # do ciclo segue o fluxo normal (casa por txid e baixa se liquidada).
+    if event == 'pix_automatico.recorrencia':
+        from .models import RecorrenciaPix, RecStatusPA
+        rec = RecorrenciaPix.objects.filter(id_rec=id_rec).first() if id_rec else None
+        if rec:
+            _mapa_rec = {'APROVADA': RecStatusPA.APROVADA, 'REJEITADA': RecStatusPA.REJEITADA,
+                         'CANCELADA': RecStatusPA.CANCELADA}
+            novo = _mapa_rec.get(str(status_cobranca).upper())
+            if novo:
+                rec.transicionar(novo)
+        return {'status': 'recorrencia', 'id_rec': id_rec, 'evento_id': _log('atualizado').pk}
+    if event.startswith('pix_automatico') and event != 'pix_automatico.cobranca':
+        return {'status': 'ignorado', 'evento_id': _log('ignorado').pk}
+
     paid_at = None
     if paid_at_str:
         try:
             from dateutil.parser import parse as _dp
-            paid_at = _tz.make_aware(_dp(paid_at_str)) if _dp(paid_at_str).tzinfo is None else _dp(paid_at_str)
+            _d = _dp(paid_at_str)
+            paid_at = _tz.make_aware(_d) if _d.tzinfo is None else _d
         except Exception:
             pass
-
     valor = None
     try:
         valor = _Dec(str(valor_str))
     except (InvalidOperation, ValueError):
         pass
 
-    # Idempotência: se já há um evento 'baixado' para este cobranca_id, ignorar.
-    if EventoCobrancaApi.objects.filter(cobranca_id=cobranca_id, status='baixado').exists():
-        evt = EventoCobrancaApi.objects.create(
-            cobranca_id=cobranca_id, event=event, status_cobranca=status_cobranca,
-            paid_at=paid_at, valor=valor, status='duplicado', payload_raw=payload_raw,
-        )
-        return {'status': 'duplicado', 'evento_id': evt.pk}
+    # Idempotência: se já há baixa para este cobranca_id, ignorar.
+    if cobranca_id and EventoCobrancaApi.objects.filter(cobranca_id=cobranca_id, status='baixado').exists():
+        return {'status': 'duplicado', 'evento_id': _log('duplicado', paid_at=paid_at, valor=valor).pk}
 
-    # Casar com parcela via cobranca_id
-    parcela = Parcela.objects.filter(cobranca_id=cobranca_id).first()
+    # Casar com a parcela: cobranca_id -> ext_ref -> txid
+    parcela = None
+    if cobranca_id:
+        parcela = Parcela.objects.filter(cobranca_id=cobranca_id).first()
+    if not parcela and ext_ref:
+        parcela = Parcela.objects.filter(ext_ref=ext_ref).first()
+    if not parcela and txid:
+        parcela = Parcela.objects.filter(pix_txid=txid).first()
     if not parcela:
-        evt = EventoCobrancaApi.objects.create(
-            cobranca_id=cobranca_id, event=event, status_cobranca=status_cobranca,
-            paid_at=paid_at, valor=valor, status='sem_parcela', payload_raw=payload_raw,
-        )
-        logger.warning('[BoletoAPI webhook] cobranca_id=%s sem parcela vinculada', cobranca_id)
-        return {'status': 'sem_parcela', 'evento_id': evt.pk}
+        logger.warning('[BoletoAPI webhook] evento sem parcela (cobranca_id=%s ext_ref=%s txid=%s)',
+                       cobranca_id, ext_ref, txid)
+        return {'status': 'sem_parcela', 'evento_id': _log('sem_parcela', paid_at=paid_at, valor=valor).pk}
 
-    evt = EventoCobrancaApi.objects.create(
-        cobranca_id=cobranca_id, event=event, status_cobranca=status_cobranca,
-        parcela=parcela, paid_at=paid_at, valor=valor,
-        status='recebido', payload_raw=payload_raw,
-    )
+    evt = _log('recebido', parcela=parcela, paid_at=paid_at, valor=valor)
 
-    if status_cobranca == 'liquidado':
+    # Evento que representa pagamento (liquidação): status ou pix.recebido.
+    liquida = st in ('liquidado', 'pago') or event == 'pix.recebido'
+
+    # Máquina de estados (Fase 5): aplica a transição só se for permitida —
+    # rejeita eventos fora de ordem (ex.: 'registrado' tardio após LIQUIDADA).
+    novo_status = StatusCobranca.LIQUIDADA if liquida else _MAPA.get(st)
+    if novo_status and not parcela.transicionar_cobranca(novo_status):
+        evt.status = 'ignorado'
+        evt.save(update_fields=['status'])
+        logger.info('[BoletoAPI webhook] transição ilegal (%s->%s) ignorada parcela pk=%s',
+                    parcela.status_cobranca, novo_status, parcela.pk)
+        return {'status': 'ignorado', 'parcela_id': parcela.pk, 'evento_id': evt.pk}
+
+    if liquida:
         if parcela.pago:
             evt.status = 'duplicado'
             evt.save(update_fields=['status'])
             return {'status': 'duplicado', 'parcela_id': parcela.pk, 'evento_id': evt.pk}
         try:
             parcela.registrar_pagamento_boleto(
-                valor_pago=float(valor or 0),
-                data_pagamento=paid_at,
-                banco_pagador='boleto-api',
-                agencia_pagadora='',
-                validar_minimo=False,
+                valor_pago=float(valor or 0), data_pagamento=paid_at,
+                banco_pagador='boleto-api', agencia_pagadora='', validar_minimo=False,
             )
+            # HU-26: registra o recebimento com origem BOLETO_API para o painel
+            # de Conciliação & Saúde (que agrega por HistoricoPagamento).
+            from financeiro.services.boleto_api_conciliacao import registrar_historico_boleto_api
+            registrar_historico_boleto_api(
+                parcela, float(valor or 0), paid_at or timezone.now(), 'webhook')
             evt.status = 'baixado'
             evt.save(update_fields=['status'])
             logger.info('[BoletoAPI webhook] parcela pk=%s baixada cobranca_id=%s', parcela.pk, cobranca_id)
@@ -9217,7 +9371,11 @@ def _processar_evento_cobranca(
             logger.exception('[BoletoAPI webhook] erro ao baixar parcela pk=%s: %s', parcela.pk, exc)
             return {'status': 'erro', 'parcela_id': parcela.pk, 'evento_id': evt.pk, 'erro': str(exc)}
 
-    return {'status': 'recebido', 'parcela_id': parcela.pk, 'evento_id': evt.pk}
+    # Não-liquidação: só atualizou o status normalizado.
+    if novo_status:
+        evt.status = 'atualizado'
+        evt.save(update_fields=['status'])
+    return {'status': evt.status, 'parcela_id': parcela.pk, 'evento_id': evt.pk}
 
 
 @csrf_exempt
@@ -9228,6 +9386,9 @@ def webhook_boleto_api(request):
 
     Autenticação: X-Signature: sha256=<hmac_sha256(EVENT_WEBHOOK_SECRET, raw_body)>
     Reutiliza hmac.compare_digest (proteção timing-attack, igual ao webhook PIX).
+    Fail-closed em produção: secret vazio ⇒ 503 — o webhook dá baixa em
+    parcela; sem HMAC configurado não pode aceitar POST anônimo. Em DEBUG a
+    validação é pulada (dev/staging).
     """
     import hashlib as _hashlib
     import hmac as _hmac
@@ -9235,6 +9396,9 @@ def webhook_boleto_api(request):
 
     raw_body = request.body
     secret = getattr(_settings, 'EVENT_WEBHOOK_SECRET', '')
+    if not secret and not getattr(_settings, 'DEBUG', False):
+        return JsonResponse(
+            {'erro': 'Webhook não configurado (EVENT_WEBHOOK_SECRET)'}, status=503)
     if secret:
         sig_header = request.headers.get('X-Signature', '')
         expected = 'sha256=' + _hmac.new(
@@ -9252,18 +9416,161 @@ def webhook_boleto_api(request):
         return JsonResponse({'erro': 'JSON inválido'}, status=400)
 
     cobranca_id = str(payload.get('id', '')).strip()
-    if not cobranca_id:
-        return JsonResponse({'erro': 'Campo id ausente'}, status=400)
+    event = str(payload.get('event', '')).strip()
+    event_id = str(payload.get('event_id') or payload.get('evento_id') or '').strip()
+    ext_ref = str(payload.get('ext_ref', '')).strip()
+    txid = str(payload.get('txid', '')).strip()
+    id_rec = str(payload.get('idRec') or payload.get('id_rec') or '').strip()
+    # Exige ao menos um identificador de casamento (boleto/bolepix/pix). Eventos
+    # de pix_automatico são casados por idRec/txid.
+    if not (cobranca_id or ext_ref or txid or id_rec) and not event.startswith('pix_automatico'):
+        return JsonResponse({'erro': 'Identificador ausente (id/ext_ref/txid)'}, status=400)
 
     resultado = _processar_evento_cobranca(
         cobranca_id=cobranca_id,
         status_cobranca=str(payload.get('status', '')).strip(),
-        event=str(payload.get('event', '')).strip(),
+        event=event,
         paid_at_str=str(payload.get('paid_at', '')).strip(),
         valor_str=str(payload.get('valor', '0')).strip(),
         payload_raw=_json_mod.dumps(payload, ensure_ascii=False),
+        event_id=event_id,
+        ext_ref=ext_ref,
+        txid=txid,
+        id_rec=id_rec,
     )
     return JsonResponse(resultado, status=200)
+
+
+@login_required
+def painel_conciliacao_boleto_api(request):
+    """
+    Fase 9 — Painel de conciliação da cobrança registrada (Boleto-API):
+    % conciliado, distribuição por status, recebido por origem, fila
+    AGUARDANDO_CIP, pendências de casamento e recorrências Pix Automático.
+    """
+    from django.db.models import Count
+    from .models import EventoCobrancaApi, StatusCobranca, RecorrenciaPix, RecStatusPA
+
+    imobs = list(_imobs_para_usuario(request.user).values_list('id', flat=True))
+    imob_filtro = str(request.GET.get('imobiliaria') or '')
+
+    # Escopo aplicado de forma consistente a TODOS os blocos: sempre limitado
+    # às imobiliárias do usuário; se uma imobiliária válida for selecionada no
+    # filtro, restringe a ela (ignora IDs fora do escopo — defesa em profundidade).
+    if imob_filtro.isdigit() and int(imob_filtro) in imobs:
+        imobs_escopo = [int(imob_filtro)]
+    else:
+        imobs_escopo = imobs
+        imob_filtro = ''
+
+    parcelas = (Parcela.objects.exclude(status_cobranca='')
+                .filter(contrato__imobiliaria_id__in=imobs_escopo))
+
+    total = parcelas.count()
+    por_status = {r['status_cobranca']: r['n']
+                  for r in parcelas.values('status_cobranca').annotate(n=Count('id'))}
+    liquidadas = por_status.get(StatusCobranca.LIQUIDADA, 0)
+    pct_conciliado = round(100 * liquidadas / total, 1) if total else 0.0
+
+    status_rows = [(label, por_status.get(value, 0)) for value, label in StatusCobranca.choices]
+
+    baixas = EventoCobrancaApi.objects.filter(
+        status='baixado', parcela__contrato__imobiliaria_id__in=imobs_escopo)
+    por_origem: dict = {}
+    for r in baixas.values('event').annotate(n=Count('id')):
+        origem = _origem_baixa(r['event'])
+        por_origem[origem] = por_origem.get(origem, 0) + r['n']
+    origem_rows = sorted(por_origem.items(), key=lambda kv: -kv[1])
+    total_baixas = sum(por_origem.values())
+
+    rec_counts = {r['status']: r['n']
+                  for r in (RecorrenciaPix.objects
+                            .filter(contrato__imobiliaria_id__in=imobs_escopo)
+                            .values('status').annotate(n=Count('id')))}
+    recorrencia_rows = [(label, rec_counts.get(value, 0)) for value, label in RecStatusPA.choices]
+    total_recorrencias = sum(rec_counts.values())
+
+    # Eventos órfãos (sem parcela) não têm vínculo com imobiliária — são
+    # inatribuíveis a um tenant. Expõe a contagem global (saúde do sistema)
+    # apenas a quem tem permissão total; usuário com escopo restrito vê 0.
+    if usuario_tem_permissao_total(request.user):
+        sem_parcela = EventoCobrancaApi.objects.filter(status='sem_parcela').count()
+    else:
+        sem_parcela = 0
+
+    context = {
+        'total': total,
+        'pct_conciliado': pct_conciliado,
+        'liquidadas': liquidadas,
+        'status_rows': status_rows,
+        'origem_rows': origem_rows,
+        'total_baixas': total_baixas,
+        'recorrencia_rows': recorrencia_rows,
+        'total_recorrencias': total_recorrencias,
+        'fila_cip': por_status.get(StatusCobranca.AGUARDANDO_CIP, 0),
+        'sem_parcela': sem_parcela,
+        'imobiliarias': _imobs_para_usuario(request.user),
+        'imob_filtro': imob_filtro,
+    }
+    return render(request, 'financeiro/conciliacao/painel_boleto_api.html', context)
+
+
+@login_required
+@require_POST
+def emitir_pix_parcela(request, parcela_id):
+    """
+    BAPI-14/15 — emite Pix avulso (2ª via / quitação) para a parcela via
+    Boleto-API: POST com `modalidade` = 'cobv' (com vencimento, default) ou
+    'cob' (imediato). Retorna txid + copia-e-cola.
+    """
+    imobs = list(_imobs_para_usuario(request.user).values_list('id', flat=True))
+    parcela = get_object_or_404(
+        Parcela, pk=parcela_id, contrato__imobiliaria_id__in=imobs)
+
+    modalidade = request.POST.get('modalidade', 'cobv')
+    if modalidade not in ('cobv', 'cob'):
+        return JsonResponse({'sucesso': False, 'erro': 'Modalidade inválida.'}, status=400)
+
+    r = parcela.emitir_pix_avulso(modalidade=modalidade)
+    status = 200 if r.get('sucesso') else 422
+    return JsonResponse(r, status=status)
+
+
+@login_required
+def relatorio_conciliacao_financeira(request):
+    """
+    BAPI-32 — relatório de conciliação financeira: cruza os recebíveis do
+    gateway (GET /conciliacao) com as parcelas liquidadas no sistema no
+    período, classificando conferidos / divergentes / pendências.
+    """
+    from datetime import datetime as _dt, timedelta as _td
+    from .services.boleto_api_conciliacao import conciliacao_financeira
+
+    imobs_qs = _imobs_para_usuario(request.user)
+    imob_id = request.GET.get('imobiliaria') or ''
+    imobiliaria = imobs_qs.filter(id=imob_id).first() if imob_id.isdigit() else None
+
+    hoje = timezone.localdate()
+    try:
+        inicio = _dt.strptime(request.GET.get('inicio', ''), '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        inicio = hoje - _td(days=30)
+    try:
+        fim = _dt.strptime(request.GET.get('fim', ''), '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        fim = hoje
+
+    resultado = None
+    if imobiliaria:
+        resultado = conciliacao_financeira(imobiliaria, inicio, fim)
+
+    return render(request, 'financeiro/conciliacao/relatorio_financeiro.html', {
+        'imobiliarias': imobs_qs,
+        'imobiliaria': imobiliaria,
+        'inicio': inicio,
+        'fim': fim,
+        'resultado': resultado,
+    })
 
 
 # =============================================================================

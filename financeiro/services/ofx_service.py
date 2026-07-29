@@ -197,7 +197,7 @@ class OFXService:
                 'nao_reconciliadas': int,
                 'resultados': list[OFXReconciliacao],
                 'parcelas_quitadas': list[Parcela],
-                'parser': 'brcobranca',
+                'parser': 'pycobranca',
             }
         """
         from financeiro.models import Parcela, TipoParcela
@@ -219,7 +219,7 @@ class OFXService:
                 'Não foi possível processar o arquivo OFX: API BRCobrança indisponível. '
                 'Verifique os logs do servidor.'
             )
-        parser_usado = 'brcobranca'
+        parser_usado = 'pycobranca'
         if not transacoes:
             return {
                 'total_transacoes': 0,

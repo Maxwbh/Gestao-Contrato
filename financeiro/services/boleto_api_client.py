@@ -101,6 +101,36 @@ class BoletoApiClient:
             raise last_exc
         return resp  # type: ignore[return-value]  # última resposta 5xx
 
+    @staticmethod
+    def _headers(bapi_token=None) -> dict:
+        """Header de autenticação (stateless): Bearer bapi_ quando houver token."""
+        return {'Authorization': f'Bearer {bapi_token}'} if bapi_token else {}
+
+    @staticmethod
+    def _classificar_erro(resp, op: str) -> dict:
+        """
+        Mapeia erros HTTP do gateway para um resultado tipado:
+          401/424 → motivo='credencial' (recadastrar via onboarding)
+          409     → motivo='cip'        (registro em processamento na CIP; re-agendar)
+          422     → motivo='validacao'  (dado inválido; mostrar ao usuário)
+          outros  → motivo='http'
+        """
+        try:
+            err = resp.json()
+            detalhe = err.get('detail') or err.get('erro') or resp.text[:300]
+        except ValueError:
+            detalhe = resp.text[:300]
+        motivo = {401: 'credencial', 424: 'credencial', 409: 'cip', 422: 'validacao'}.get(
+            resp.status_code, 'http'
+        )
+        logger.error('[BoletoAPI] %s HTTP %d (%s): %s', op, resp.status_code, motivo, detalhe)
+        return {
+            'sucesso': False,
+            'codigo': resp.status_code,
+            'motivo': motivo,
+            'erro': f'Boleto-API retornou {resp.status_code}: {detalhe}',
+        }
+
     # ------------------------------------------------------------------ #
     # Normalização da resposta CobrancaOut
     # ------------------------------------------------------------------ #
@@ -135,6 +165,7 @@ class BoletoApiClient:
         provider: str,
         account_config: dict,
         cobranca: dict,
+        bapi_token=None,
     ) -> dict:
         """
         POST /cobranca — registra cobrança no banco e retorna boleto.
@@ -156,7 +187,7 @@ class BoletoApiClient:
             tenant_id, provider, cobranca.get('vencimento'), cobranca.get('valor'),
         )
         try:
-            resp = self._request('POST', '/cobranca', json=payload)
+            resp = self._request('POST', '/cobranca', json=payload, headers=self._headers(bapi_token))
         except requests.RequestException as exc:
             return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
 
@@ -169,42 +200,199 @@ class BoletoApiClient:
                 return {'sucesso': False, 'erro': data.get('detail', 'Erro no Boleto-API')}
             return self._normalizar_cobranca(data)
 
-        # Erros esperados (4xx)
+        return self._classificar_erro(resp, 'registrar_cobranca')
+
+    def criar_credenciais(self, tenant_id: str, provider: str, credenciais: dict) -> dict:
+        """
+        POST /credenciais — provisiona as credenciais do banco no gateway e
+        recebe o token bapi_ de uso diário. Onboarding: uma vez por conta ou
+        no recadastro após 401.
+        """
+        payload = {'tenant_id': tenant_id, 'provider': provider, 'credenciais': credenciais or {}}
+        logger.info('[BoletoAPI] criar_credenciais tenant=%s provider=%s', tenant_id, provider)
         try:
-            err = resp.json()
-            detalhe = err.get('detail') or err.get('erro') or resp.text[:300]
-        except ValueError:
-            detalhe = resp.text[:300]
-        logger.error('[BoletoAPI] registrar_cobranca HTTP %d: %s', resp.status_code, detalhe)
-        return {'sucesso': False, 'erro': f'Boleto-API retornou {resp.status_code}: {detalhe}'}
+            resp = self._request('POST', '/credenciais', json=payload)
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 201):
+            try:
+                data = resp.json()
+            except ValueError:
+                return {'sucesso': False, 'erro': 'Resposta não-JSON do Boleto-API'}
+            token = data.get('bapi_token') or data.get('token') or ''
+            if not token:
+                return {'sucesso': False, 'erro': 'Boleto-API não retornou bapi_token'}
+            return {'sucesso': True, 'bapi_token': token}
+        return self._classificar_erro(resp, 'criar_credenciais')
+
+    def emitir_bolepix(self, tenant_id, provider, account_config, cobranca, bapi_token=None) -> dict:
+        """POST /bolepix — boleto com QR Pix (C6). Retorna ext_ref + linha + pix_copia_cola."""
+        payload = {'tenant_id': tenant_id, 'provider': provider,
+                   'account_config': account_config or {}, 'cobranca': cobranca}
+        try:
+            resp = self._request('POST', '/bolepix', json=payload, headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 201):
+            try:
+                data = resp.json()
+            except ValueError:
+                return {'sucesso': False, 'erro': 'Resposta não-JSON do Boleto-API'}
+            norm = self._normalizar_cobranca(data)
+            norm['ext_ref'] = str(data.get('ext_ref') or data.get('id') or '')
+            return norm
+        return self._classificar_erro(resp, 'emitir_bolepix')
+
+    def emitir_pix(self, tenant_id, provider, account_config, cobranca, bapi_token=None) -> dict:
+        """POST /pix — Pix com vencimento (cobv) ou imediato (cob). Retorna txid + EMV."""
+        payload = {'tenant_id': tenant_id, 'provider': provider,
+                   'account_config': account_config or {}, 'cobranca': cobranca}
+        try:
+            resp = self._request('POST', '/pix', json=payload, headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 201):
+            try:
+                data = resp.json()
+            except ValueError:
+                return {'sucesso': False, 'erro': 'Resposta não-JSON do Boleto-API'}
+            return {
+                'sucesso': True,
+                'txid': str(data.get('txid') or ''),
+                'pix_copia_cola': str(data.get('pix_copia_cola') or data.get('emv') or ''),
+                'pix_qrcode': str(data.get('pix_qrcode') or ''),
+                'valor': Decimal(str(_fmt_valor(data.get('valor')))),
+                'status': str(data.get('status') or ''),
+                'raw': data.get('raw'),
+            }
+        return self._classificar_erro(resp, 'emitir_pix')
+
+    # ------------------------------------------------------------------ #
+    # Pix Automático (débito recorrente)
+    # ------------------------------------------------------------------ #
+
+    def criar_recorrencia(self, tenant_id, provider, dados, bapi_token=None) -> dict:
+        """POST /pix-automatico/recorrencias — cria a recorrência; retorna idRec."""
+        payload = {'tenant_id': tenant_id, 'provider': provider, **(dados or {})}
+        try:
+            resp = self._request('POST', '/pix-automatico/recorrencias', json=payload,
+                                 headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 201):
+            try:
+                data = resp.json()
+            except ValueError:
+                return {'sucesso': False, 'erro': 'Resposta não-JSON'}
+            id_rec = str(data.get('idRec') or data.get('id_rec') or data.get('id') or '')
+            if not id_rec:
+                return {'sucesso': False, 'erro': 'Gateway não retornou idRec'}
+            return {'sucesso': True, 'id_rec': id_rec, 'status': str(data.get('status', 'CRIADA'))}
+        return self._classificar_erro(resp, 'criar_recorrencia')
+
+    def cancelar_recorrencia(self, id_rec, tenant_id, provider, bapi_token=None) -> dict:
+        """PATCH /pix-automatico/recorrencias/{idRec} {status: CANCELADA}.
+        Contrato do gateway: tenant_id/provider em query; body = campos."""
+        params = {'tenant_id': tenant_id, 'provider': provider}
+        try:
+            resp = self._request('PATCH', f'/pix-automatico/recorrencias/{id_rec}',
+                                 params=params, json={'status': 'CANCELADA'},
+                                 headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 204):
+            return {'sucesso': True}
+        return self._classificar_erro(resp, 'cancelar_recorrencia')
+
+    def agendar_cobranca_pa(self, txid, tenant_id, provider, cobranca, bapi_token=None) -> dict:
+        """PUT /pix-automatico/cobrancas/{txid} — agenda uma cobrança do ciclo."""
+        payload = {'tenant_id': tenant_id, 'provider': provider, 'cobranca': cobranca or {}}
+        try:
+            resp = self._request('PUT', f'/pix-automatico/cobrancas/{txid}',
+                                 json=payload, headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 201):
+            try:
+                data = resp.json()
+            except ValueError:
+                data = {}
+            return {'sucesso': True, 'txid': str(data.get('txid', txid)),
+                    'status': str(data.get('status', ''))}
+        return self._classificar_erro(resp, 'agendar_cobranca_pa')
+
+    def retentar_cobranca_pa(self, txid, data_retentativa, tenant_id, provider, bapi_token=None) -> dict:
+        """POST /pix-automatico/cobrancas/{txid}/retentativa/{data} — retentativa.
+        Contrato do gateway: tenant_id/provider em query (sem body)."""
+        params = {'tenant_id': tenant_id, 'provider': provider}
+        try:
+            resp = self._request(
+                'POST', f'/pix-automatico/cobrancas/{txid}/retentativa/{data_retentativa}',
+                params=params, headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 201):
+            return {'sucesso': True}
+        return self._classificar_erro(resp, 'retentar_cobranca_pa')
 
     def consultar_cobranca(
         self,
         cobranca_id: str,
         tenant_id: str,
         provider: str,
+        bapi_token=None,
     ) -> dict:
-        """GET /cobranca/{id}"""
+        """GET /cobranca/{id} — usado no polling (Sicoob não tem webhook de boleto)."""
         params = {'tenant_id': tenant_id, 'provider': provider}
         try:
-            resp = self._request('GET', f'/cobranca/{cobranca_id}', params=params)
+            resp = self._request('GET', f'/cobranca/{cobranca_id}', params=params,
+                                 headers=self._headers(bapi_token))
         except requests.RequestException as exc:
             return {'sucesso': False, 'erro': str(exc)}
         if resp.status_code == 200:
             return self._normalizar_cobranca(resp.json())
-        return {'sucesso': False, 'erro': f'HTTP {resp.status_code}'}
+        return self._classificar_erro(resp, 'consultar_cobranca')
+
+    def listar_pix_recebidos(
+        self,
+        inicio: str,
+        fim: str,
+        tenant_id: str,
+        provider: str,
+        bapi_token=None,
+    ) -> dict:
+        """
+        GET /pix/recebidos?inicio&fim — Pix recebidos no período (rede de
+        segurança do webhook). Retorna {'sucesso', 'itens': [{txid, valor, ...}]}.
+        """
+        params = {'tenant_id': tenant_id, 'provider': provider, 'inicio': inicio, 'fim': fim}
+        try:
+            resp = self._request('GET', '/pix/recebidos', params=params,
+                                 headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': str(exc)}
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+            except ValueError:
+                return {'sucesso': False, 'erro': 'Resposta não-JSON'}
+            itens = data if isinstance(data, list) else data.get('itens') or data.get('pix') or []
+            return {'sucesso': True, 'itens': itens}
+        return self._classificar_erro(resp, 'listar_pix_recebidos')
 
     def baixar_cobranca(
         self,
         cobranca_id: str,
         tenant_id: str,
         provider: str,
+        bapi_token=None,
     ) -> dict:
         """DELETE /cobranca/{id} — solicita baixa/cancelamento no banco."""
         params = {'tenant_id': tenant_id, 'provider': provider}
         logger.info('[BoletoAPI] baixar_cobranca id=%s tenant=%s', cobranca_id, tenant_id)
         try:
-            resp = self._request('DELETE', f'/cobranca/{cobranca_id}', params=params)
+            resp = self._request('DELETE', f'/cobranca/{cobranca_id}', params=params,
+                                 headers=self._headers(bapi_token))
         except requests.RequestException as exc:
             return {'sucesso': False, 'erro': str(exc)}
         if resp.status_code in (200, 204):
@@ -212,7 +400,111 @@ class BoletoApiClient:
             if data:
                 return {'sucesso': True, **self._normalizar_cobranca(data)}
             return {'sucesso': True}
-        return {'sucesso': False, 'erro': f'HTTP {resp.status_code}'}
+        return self._classificar_erro(resp, 'baixar_cobranca')
+
+    def alterar_cobranca(
+        self,
+        cobranca_id: str,
+        tenant_id: str,
+        provider: str,
+        alteracao: dict,
+        bapi_token=None,
+    ) -> dict:
+        """PUT /cobranca/{id} — altera valor/vencimento da cobrança (C6).
+        Contrato do gateway: tenant_id/provider em query; body = campos alterados."""
+        params = {'tenant_id': tenant_id, 'provider': provider}
+        logger.info('[BoletoAPI] alterar_cobranca id=%s tenant=%s', cobranca_id, tenant_id)
+        try:
+            resp = self._request('PUT', f'/cobranca/{cobranca_id}', params=params,
+                                 json=alteracao or {}, headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 201):
+            try:
+                return self._normalizar_cobranca(resp.json())
+            except ValueError:
+                return {'sucesso': True}
+        return self._classificar_erro(resp, 'alterar_cobranca')
+
+    def devolver_pix(
+        self,
+        e2eid: str,
+        devolucao_id: str,
+        valor,
+        tenant_id: str,
+        provider: str,
+        bapi_token=None,
+    ) -> dict:
+        """PUT /pix/recebidos/{e2eid}/devolucao/{id} — estorno (devolução) de Pix.
+        Contrato do gateway: tenant_id/provider em query; body = {"valor": "10.00"}."""
+        params = {'tenant_id': tenant_id, 'provider': provider}
+        payload = {'valor': f'{_fmt_valor(valor):.2f}'}
+        logger.info('[BoletoAPI] devolver_pix e2eid=%s id=%s valor=%s', e2eid, devolucao_id, valor)
+        try:
+            resp = self._request('PUT', f'/pix/recebidos/{e2eid}/devolucao/{devolucao_id}',
+                                 params=params, json=payload, headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 201):
+            try:
+                data = resp.json()
+            except ValueError:
+                data = {}
+            return {'sucesso': True, 'devolucao_id': str(data.get('id', devolucao_id)),
+                    'status': str(data.get('status', ''))}
+        return self._classificar_erro(resp, 'devolver_pix')
+
+    def consultar_conciliacao(self, inicio: str, fim: str, tenant_id: str,
+                              provider: str, bapi_token=None) -> dict:
+        """
+        GET /conciliacao/recebiveis — recebíveis liquidados no período segundo o
+        banco (BAPI-32). Contrato do gateway cobranca-api: query start_date/
+        end_date (YYYY-MM-DD, janela máx. 60 dias) com paginação page/size.
+        Retorna itens com cobranca_id/txid/valor/pago_em (todas as páginas).
+        """
+        itens: list = []
+        page = 1
+        while True:
+            params = {'start_date': inicio, 'end_date': fim,
+                      'tenant_id': tenant_id, 'provider': provider,
+                      'page': page, 'size': 100}
+            try:
+                resp = self._request('GET', '/conciliacao/recebiveis', params=params,
+                                     headers=self._headers(bapi_token))
+            except requests.RequestException as exc:
+                return {'sucesso': False, 'erro': str(exc)}
+            if resp.status_code != 200:
+                return self._classificar_erro(resp, 'consultar_conciliacao')
+            try:
+                data = resp.json()
+            except ValueError:
+                return {'sucesso': False, 'erro': 'Resposta não-JSON do Boleto-API'}
+            pagina = data if isinstance(data, list) else (data.get('itens') or data.get('items') or [])
+            itens.extend(pagina)
+            # Última página quando vier vazia/incompleta (teto defensivo de 50).
+            if len(pagina) < 100 or page >= 50:
+                return {'sucesso': True, 'itens': itens}
+            page += 1
+
+    def consultar_extrato(self, inicio: str, fim: str, tenant_id: str,
+                          provider: str, bapi_token=None) -> dict:
+        """GET /extrato — lançamentos da conta no período (BAPI-32).
+        Contrato do gateway cobranca-api: query start_date/end_date (YYYY-MM-DD)."""
+        params = {'start_date': inicio, 'end_date': fim,
+                  'tenant_id': tenant_id, 'provider': provider}
+        try:
+            resp = self._request('GET', '/extrato', params=params,
+                                 headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': str(exc)}
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+            except ValueError:
+                return {'sucesso': False, 'erro': 'Resposta não-JSON do Boleto-API'}
+            lancamentos = data if isinstance(data, list) else (data.get('lancamentos') or [])
+            return {'sucesso': True, 'lancamentos': lancamentos}
+        return self._classificar_erro(resp, 'consultar_extrato')
 
     def gerar_carne(
         self,
@@ -221,6 +513,7 @@ class BoletoApiClient:
         account_config: dict,
         bank: str,
         parcelas: list[dict],
+        bapi_token=None,
     ) -> dict:
         """
         POST /carne — registra N cobranças e devolve PDF de carnê + lista de CobrancaOut.
@@ -240,7 +533,8 @@ class BoletoApiClient:
             tenant_id, provider, len(parcelas),
         )
         try:
-            resp = self._request('POST', '/carne', json=payload)
+            resp = self._request('POST', '/carne', json=payload,
+                                 headers=self._headers(bapi_token))
         except requests.RequestException as exc:
             return {'sucesso': False, 'erro': str(exc)}
 

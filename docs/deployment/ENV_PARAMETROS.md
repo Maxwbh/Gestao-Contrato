@@ -24,13 +24,37 @@ Apenas o que não pode estar no banco de dados (precede a conexão com o DB).
 | `REDIS_URL` | `redis://localhost:6379/0` | `str` | Não | URL do Redis para Celery |
 | `SENTRY_DSN` | `None` | `str` | Não | DSN do Sentry. Omitir ou deixar vazio para desativar |
 | `CSRF_TRUSTED_ORIGINS` | `https://*.onrender.com` | CSV | Não | Origens CSRF confiáveis. Necessário atrás de proxy HTTPS |
-| `ANTHROPIC_API_KEY` | `""` | `str` | Não | Chave de API Anthropic para Claude. Obrigatória para importação PDF via IA e chatbot inteligente. Gere em [console.anthropic.com](https://console.anthropic.com) |
-| `GEMINI_API_KEY` | `""` | `str` | Não | Chave de API Google Gemini (tier gratuito). Opcional — quando ausente o sistema usa diretamente a cadeia Claude. Gere em [aistudio.google.com](https://aistudio.google.com) |
+| `CREDENTIALS_ENCRYPTION_KEY` | `""` (deriva do `SECRET_KEY`) | `str` | Recomendado (produção) | Chave Fernet que cifra credenciais bancárias e o token `bapi_` do Boleto-API. Gere com `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `BOLETO_API_URL` | `http://localhost:8001` | `str` | Sim (cobrança registrada) | URL do gateway Boleto-API (C6/Sicoob) |
+| `BOLETO_API_TIMEOUT` | `30` | `int` | Não | Timeout das chamadas ao gateway (s) |
+| `BOLETO_API_MAX_TENTATIVAS` | `3` | `int` | Não | Máximo de tentativas por chamada |
+| `BOLETO_API_DELAY_INICIAL` | `2` | `int` | Não | Delay inicial de retry (s, dobra a cada tentativa) |
+| `EVENT_WEBHOOK_SECRET` | `""` | `str` | **Sim (produção)** | Segredo HMAC do webhook do Boleto-API (`X-Signature`). **Fail-closed:** vazio com `DEBUG=False` ⇒ webhook responde 503 |
+| `PIX_WEBHOOK_TOKEN` | `""` | `str` | **Sim (produção)** | Token Bearer do webhook PIX do PSP. **Fail-closed:** vazio com `DEBUG=False` ⇒ webhook responde 503 |
+| `BI_API_TOKEN` | `""` | `str` | Não | Token Bearer da API de BI (`/financeiro/api/relatorios/posicao/`). Fail-closed: vazio em produção ⇒ 503 |
+| `RELATORIO_INADIMPLENCIA_EMAILS` | `""` | CSV | Não | Destinatários do relatório agendado de inadimplência |
+| `RELATORIO_POSICAO_EMAILS` | `""` | CSV | Não | Destinatários do relatório agendado de posição |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | `""` | `str` | Não | Par de chaves Web Push (portal do comprador) |
+| `VAPID_CLAIMS_EMAIL` | `admin@example.com` | `str` | Não | E-mail de contato dos claims VAPID |
+| `BRCOBRANCA_DELAY_MAX_429` | `8` | `int` | Não | Teto do backoff quando o BRCobrança responde 429 (s) |
+| `BRCOBRANCA_HEALTH_TIMEOUT` | `90` | `int` | Não | Timeout do health-check do BRCobrança (s) |
+| `BRCOBRANCA_INTER_BOLETO_DELAY_MS` | `100` | `int` | Não | Pausa entre boletos em geração em lote (ms) |
+| `BRCOBRANCA_REMESSA_COOLDOWN_S` | `5` | `int` | Não | Intervalo mínimo entre gerações de remessa (s) |
+| `BRCOBRANCA_TEMPO_API_BOLETO_S` | `1.8` | `float` | Não | Estimativa por boleto para a barra de progresso (s) |
+| `BRCOBRANCA_TEMPLATE` | `prawn` | `str` | Não | Template de PDF do BRCobrança |
+| `ANTHROPIC_API_KEY` | `""` | `str` | Não | Chave de API Anthropic para Claude. Obrigatória para importação PDF via IA, chatbot inteligente e workflows. **Env-only: não é sincronizada para o banco** (ver seção IA). Gere em [console.anthropic.com](https://console.anthropic.com) |
+| `GEMINI_API_KEY` | `""` | `str` | Não | Chave de API Google Gemini (tier gratuito). Opcional — quando ausente o sistema usa diretamente a cadeia Claude. **Env-only.** Gere em [aistudio.google.com](https://aistudio.google.com) |
 
 > **Geração de `SECRET_KEY`:**
 > ```bash
 > python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
 > ```
+
+> **Segurança — fail-closed:** os webhooks de cobrança (`EVENT_WEBHOOK_SECRET`,
+> `PIX_WEBHOOK_TOKEN`) e a API de BI (`BI_API_TOKEN`) **dão baixa/expõem dados
+> financeiros**. Com `DEBUG=False` e a chave vazia, os endpoints respondem
+> **503** em vez de aceitar requisições sem autenticação. Em `DEBUG=True`
+> (dev/staging) a validação é pulada.
 
 ---
 
@@ -132,10 +156,20 @@ A tabela abaixo documenta todos os parâmetros com seus grupos, tipos e defaults
 
 ### Grupo: IA e Modelos de Linguagem (`ia`)
 
+> **Chaves de API são env-only.** `ANTHROPIC_API_KEY` e `GEMINI_API_KEY` vivem
+> apenas como variáveis de ambiente e **não são sincronizadas** para
+> `ParametroSistema` (o valor ficaria em texto claro no banco, visível no
+> Admin). Precedência de leitura unificada (chatbot e importação de PDF):
+> **env (settings) → parâmetro legado no banco → erro**. Linhas antigas de
+> `ANTHROPIC_API_KEY` no banco seguem funcionando como fallback, mas o
+> recomendado é migrar o valor para a env e remover a linha do Admin.
+
 | Chave | Tipo | Padrão | Descrição |
 |-------|------|--------|-----------|
 | `CHATBOT_IA_ATIVO` | bool | `True` | Liga/desliga o chatbot com IA. Quando `False`, o sistema usa apenas o despachante de regras sem nenhuma chamada de API |
 | `CHATBOT_MODELO` | str | `claude-haiku-4-5-20251001` | Modelo Claude utilizado em ambos os estágios do chatbot (classificador de intent e humanizador de resposta) |
+| `IA_TIERS_CLAUDE` | str | `claude-haiku-4-5-20251001,claude-sonnet-5,claude-opus-4-8` | Cascade de modelos Claude da importação de PDF (CSV, ordem barato→caro). Um `WorkflowIA` ativo no Admin tem precedência. IDs vigentes na doc da API; `claude-sonnet-4-6` é legado (migrado automaticamente para `claude-sonnet-5`) |
+| `IA_GEMINI_MODELO` | str | `gemini-2.0-flash` | Modelo Google Gemini do Tier 0 gratuito da importação de PDF |
 | `CHATBOT_MAX_TOKENS_POR_RESPOSTA` | int | `300` | Limite de tokens gerados por resposta do chatbot. Controla custo e comprimento das mensagens enviadas ao comprador |
 | `CHATBOT_SYSTEM_PROMPT_CLASSIFIER` | str | *(prompt interno)* | System prompt completo do classificador de intent (estágio `tool_use`). O valor padrão é gerenciado pelo código; só altere para customizar o comportamento de classificação |
 | `CHATBOT_SYSTEM_PROMPT` | str | *(prompt interno)* | System prompt completo do humanizador de resposta. O valor padrão é gerenciado pelo código; só altere para ajustar tom ou formato das respostas |

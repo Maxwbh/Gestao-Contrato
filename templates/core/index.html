@@ -2,136 +2,291 @@
 
 {% block title %}Início - Gestão de Contratos{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* ===== Landing page — tema "Ocean Depths" (escopado em .lp) ===== */
+    .lp {
+        --lp-primary: #0F2A47;   /* azul-marinho profundo */
+        --lp-secondary: #3B5A7C; /* azul-aço */
+        --lp-accent: #C9A961;    /* dourado fosco */
+        --lp-bg: #FFFFFF;
+        --lp-surface: #F4F6F9;   /* cinza-azulado claro */
+        --lp-text: #0F2A47;
+        --lp-text-2: #5A6B7D;
+        --lp-border: #D5DCE5;
+        --lp-font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        color: var(--lp-text);
+        font-family: var(--lp-font);
+    }
+
+    /* ---- Hero ---- */
+    .lp-hero {
+        position: relative;
+        margin: -1rem -1rem 0;          /* encosta nas bordas do container */
+        padding: 4.5rem 1.5rem 5.5rem;
+        border-radius: 0 0 28px 28px;
+        overflow: hidden;
+        background:
+            radial-gradient(1100px 460px at 82% -12%, rgba(201,169,97,.20), transparent 60%),
+            radial-gradient(760px 420px at 8% 118%, rgba(59,90,124,.55), transparent 62%),
+            linear-gradient(135deg, #0B2038 0%, #0F2A47 48%, #163A5F 100%);
+        color: #fff;
+        text-align: center;
+        box-shadow: 0 24px 60px -28px rgba(15,42,71,.55);
+    }
+    .lp-hero::after {   /* textura pontilhada sutil */
+        content: "";
+        position: absolute; inset: 0;
+        background-image: radial-gradient(rgba(255,255,255,.06) 1px, transparent 1px);
+        background-size: 22px 22px;
+        pointer-events: none;
+    }
+    .lp-hero > * { position: relative; z-index: 1; }
+    .lp-eyebrow {
+        display: inline-flex; align-items: center; gap: .5rem;
+        font-size: .8rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+        color: var(--lp-accent);
+        background: rgba(201,169,97,.12);
+        border: 1px solid rgba(201,169,97,.35);
+        padding: .38rem .85rem; border-radius: 999px;
+        margin-bottom: 1.4rem;
+    }
+    .lp-hero h1 {
+        font-family: var(--lp-font);
+        font-weight: 800;
+        font-size: clamp(2rem, 4.6vw, 3.35rem);
+        line-height: 1.08;
+        margin: 0 auto 1rem;
+        max-width: 15ch;
+        letter-spacing: -.02em;
+    }
+    .lp-hero h1 .lp-hl { color: var(--lp-accent); }
+    .lp-hero p.lp-sub {
+        font-size: clamp(1rem, 1.6vw, 1.22rem);
+        color: #D7E0EC;
+        max-width: 58ch; margin: 0 auto 2.2rem; line-height: 1.6;
+    }
+    .lp-cta { display: flex; gap: .9rem; justify-content: center; flex-wrap: wrap; }
+    .lp-btn {
+        display: inline-flex; align-items: center; gap: .55rem;
+        font-weight: 700; font-size: 1rem;
+        padding: .85rem 1.7rem; border-radius: 12px;
+        text-decoration: none; border: 1.5px solid transparent;
+        transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+    .lp-btn-gold { background: var(--lp-accent); color: #23303f; box-shadow: 0 12px 26px -12px rgba(201,169,97,.8); }
+    .lp-btn-gold:hover { transform: translateY(-2px); box-shadow: 0 18px 34px -14px rgba(201,169,97,.95); color:#23303f; }
+    .lp-btn-ghost { background: rgba(255,255,255,.06); color: #fff; border-color: rgba(255,255,255,.32); }
+    .lp-btn-ghost:hover { background: rgba(255,255,255,.14); transform: translateY(-2px); color:#fff; }
+
+    /* ---- Stats ---- */
+    .lp-stats {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.1rem;
+        margin: -3.2rem auto 0; max-width: 1040px; position: relative; z-index: 3;
+        padding: 0 .25rem;
+    }
+    .lp-stat {
+        background: var(--lp-bg);
+        border: 1px solid var(--lp-border);
+        border-top: 3px solid var(--lp-accent);
+        border-radius: 16px;
+        padding: 1.4rem 1.25rem;
+        box-shadow: 0 18px 40px -26px rgba(15,42,71,.4);
+        transition: transform .18s ease, box-shadow .18s ease;
+    }
+    .lp-stat:hover { transform: translateY(-4px); box-shadow: 0 26px 50px -26px rgba(15,42,71,.55); }
+    .lp-stat-ico {
+        width: 44px; height: 44px; border-radius: 12px;
+        display: grid; place-items: center; font-size: 1.15rem;
+        background: var(--lp-surface); color: var(--lp-secondary);
+        margin-bottom: .85rem;
+    }
+    .lp-stat-num { font-size: 2.15rem; font-weight: 800; line-height: 1; color: var(--lp-primary); }
+    .lp-stat-lbl { color: var(--lp-text-2); font-weight: 600; font-size: .92rem; margin-top: .35rem; }
+
+    /* ---- Section ---- */
+    .lp-section { max-width: 1120px; margin: 4rem auto 0; padding: 0 .25rem; }
+    .lp-section-head { text-align: center; margin-bottom: 2.2rem; }
+    .lp-section-head .lp-kicker {
+        color: var(--lp-secondary); font-weight: 700; font-size: .82rem;
+        letter-spacing: .12em; text-transform: uppercase;
+    }
+    .lp-section-head h2 {
+        font-weight: 800; font-size: clamp(1.5rem, 2.6vw, 2.1rem);
+        color: var(--lp-primary); margin: .4rem 0 0; letter-spacing: -.01em;
+    }
+
+    /* ---- Módulos ---- */
+    .lp-modules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.3rem; }
+    .lp-mod {
+        display: flex; flex-direction: column;
+        background: var(--lp-bg); border: 1px solid var(--lp-border);
+        border-radius: 18px; padding: 1.7rem; text-decoration: none; color: inherit;
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+    .lp-mod:hover { transform: translateY(-5px); box-shadow: 0 24px 48px -28px rgba(15,42,71,.5); border-color: var(--lp-accent); color: inherit; }
+    .lp-mod-ico {
+        width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center;
+        font-size: 1.35rem; color: #fff; margin-bottom: 1.1rem;
+        background: linear-gradient(135deg, var(--lp-primary), var(--lp-secondary));
+    }
+    .lp-mod h3 { font-size: 1.18rem; font-weight: 700; color: var(--lp-primary); margin: 0 0 .45rem; }
+    .lp-mod p { color: var(--lp-text-2); font-size: .96rem; line-height: 1.55; margin: 0 0 1.1rem; flex: 1; }
+    .lp-mod-link { font-weight: 700; color: var(--lp-secondary); display: inline-flex; align-items: center; gap: .45rem; }
+    .lp-mod:hover .lp-mod-link { gap: .75rem; }
+
+    /* ---- Recursos (fundo escuro) ---- */
+    .lp-features {
+        margin: 4.5rem -1rem 0; padding: 3.2rem 1.5rem;
+        background:
+            radial-gradient(700px 340px at 90% 0%, rgba(201,169,97,.14), transparent 60%),
+            linear-gradient(135deg, #0F2A47, #163A5F);
+        border-radius: 28px; color: #fff;
+    }
+    .lp-features .lp-section-head h2 { color: #fff; }
+    .lp-features .lp-section-head .lp-kicker { color: var(--lp-accent); }
+    .lp-feat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.6rem 1.4rem; max-width: 1120px; margin: 0 auto; }
+    .lp-feat h4 { font-size: 1.02rem; font-weight: 700; margin: 0 0 .7rem; display: flex; align-items: center; gap: .5rem; }
+    .lp-feat h4 i { color: var(--lp-accent); }
+    .lp-feat ul { list-style: none; padding: 0; margin: 0; }
+    .lp-feat li { color: #C6D2E0; font-size: .92rem; padding: .28rem 0 .28rem 1.35rem; position: relative; line-height: 1.4; }
+    .lp-feat li::before {
+        content: "\f00c"; font-family: "Font Awesome 6 Free"; font-weight: 900;
+        position: absolute; left: 0; top: .28rem; color: var(--lp-accent); font-size: .72rem;
+    }
+
+    @media (max-width: 900px) {
+        .lp-stats { grid-template-columns: repeat(2, 1fr); }
+        .lp-modules { grid-template-columns: 1fr; }
+        .lp-feat-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 560px) {
+        .lp-stats { grid-template-columns: 1fr; }
+        .lp-feat-grid { grid-template-columns: 1fr; }
+        .lp-hero { padding: 3.2rem 1.1rem 4.5rem; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="row">
-    <div class="col-12 text-center mb-5">
-        <h1 class="display-4">
-            <i class="fas fa-home"></i> Bem-vindo ao Sistema de Gestão de Contratos
-        </h1>
-        <p class="lead">Sistema completo para gerenciamento de contratos de venda de imóveis</p>
-    </div>
-</div>
+<div class="lp">
 
-<div class="row">
-    <div class="col-md-3">
-        <div class="stats-card" style="background: linear-gradient(135deg, #3498db, #2980b9);">
-            <h3>{{ total_contabilidades }}</h3>
-            <p><i class="fas fa-building"></i> Contabilidades</p>
+    <!-- ===== Hero ===== -->
+    <section class="lp-hero">
+        <span class="lp-eyebrow"><i class="fas fa-file-contract"></i> Gestão de Contratos Imobiliários</span>
+        <h1>Contratos, cobrança e reajustes <span class="lp-hl">num só lugar</span></h1>
+        <p class="lp-sub">
+            Plataforma completa para venda de imóveis: parcelas, reajustes automáticos (IPCA/IGP-M),
+            cobrança registrada com Pix, BoletoPix e CNAB, portal do comprador e BI — do contrato à baixa.
+        </p>
+        <div class="lp-cta">
+            {% if user.is_authenticated %}
+                <a href="{% url 'core:dashboard' %}" class="lp-btn lp-btn-gold"><i class="fas fa-gauge-high"></i> Ir para o Dashboard</a>
+                <a href="{% url 'contratos:listar' %}" class="lp-btn lp-btn-ghost"><i class="fas fa-folder-open"></i> Ver contratos</a>
+            {% else %}
+                <a href="{% url 'accounts:login' %}" class="lp-btn lp-btn-gold"><i class="fas fa-right-to-bracket"></i> Acessar o sistema</a>
+                <a href="{% url 'contratos:listar' %}" class="lp-btn lp-btn-ghost"><i class="fas fa-folder-open"></i> Ver contratos</a>
+            {% endif %}
         </div>
-    </div>
-    <div class="col-md-3">
-        <div class="stats-card" style="background: linear-gradient(135deg, #27ae60, #229954);">
-            <h3>{{ total_imobiliarias }}</h3>
-            <p><i class="fas fa-store"></i> Imobiliárias</p>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="stats-card" style="background: linear-gradient(135deg, #f39c12, #d68910);">
-            <h3>{{ total_imoveis }}</h3>
-            <p><i class="fas fa-home"></i> Imóveis</p>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="stats-card" style="background: linear-gradient(135deg, #e74c3c, #c0392b);">
-            <h3>{{ total_compradores }}</h3>
-            <p><i class="fas fa-users"></i> Compradores</p>
-        </div>
-    </div>
-</div>
+    </section>
 
-<div class="row mt-5">
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-header">
-                <i class="fas fa-file-contract"></i> Contratos
-            </div>
-            <div class="card-body">
-                <p>Gerencie todos os contratos de venda de imóveis</p>
-                <a href="{% url 'contratos:listar' %}" class="btn btn-primary">
-                    <i class="fas fa-arrow-right"></i> Acessar
-                </a>
-            </div>
+    <!-- ===== Stats ===== -->
+    <div class="lp-stats">
+        <div class="lp-stat">
+            <div class="lp-stat-ico"><i class="fas fa-building"></i></div>
+            <div class="lp-stat-num">{{ total_contabilidades }}</div>
+            <div class="lp-stat-lbl">Contabilidades</div>
+        </div>
+        <div class="lp-stat">
+            <div class="lp-stat-ico"><i class="fas fa-store"></i></div>
+            <div class="lp-stat-num">{{ total_imobiliarias }}</div>
+            <div class="lp-stat-lbl">Imobiliárias</div>
+        </div>
+        <div class="lp-stat">
+            <div class="lp-stat-ico"><i class="fas fa-house"></i></div>
+            <div class="lp-stat-num">{{ total_imoveis }}</div>
+            <div class="lp-stat-lbl">Imóveis</div>
+        </div>
+        <div class="lp-stat">
+            <div class="lp-stat-ico"><i class="fas fa-users"></i></div>
+            <div class="lp-stat-num">{{ total_compradores }}</div>
+            <div class="lp-stat-lbl">Compradores</div>
         </div>
     </div>
 
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-header">
-                <i class="fas fa-money-bill-wave"></i> Financeiro
-            </div>
-            <div class="card-body">
-                <p>Controle de parcelas, pagamentos e reajustes</p>
-                <a href="{% url 'financeiro:listar_parcelas' %}" class="btn btn-primary">
-                    <i class="fas fa-arrow-right"></i> Acessar
-                </a>
-            </div>
+    <!-- ===== Módulos ===== -->
+    <section class="lp-section">
+        <div class="lp-section-head">
+            <span class="lp-kicker">Módulos</span>
+            <h2>Acesso rápido ao dia a dia</h2>
         </div>
-    </div>
+        <div class="lp-modules">
+            <a href="{% url 'contratos:listar' %}" class="lp-mod">
+                <div class="lp-mod-ico"><i class="fas fa-file-contract"></i></div>
+                <h3>Contratos</h3>
+                <p>Gerencie todos os contratos de venda de imóveis, do cadastro à quitação.</p>
+                <span class="lp-mod-link">Acessar <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a href="{% url 'financeiro:listar_parcelas' %}" class="lp-mod">
+                <div class="lp-mod-ico"><i class="fas fa-money-bill-wave"></i></div>
+                <h3>Financeiro</h3>
+                <p>Parcelas, pagamentos, reajustes e cobrança registrada (Pix, BoletoPix, CNAB).</p>
+                <span class="lp-mod-link">Acessar <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a href="{% url 'notificacoes:listar' %}" class="lp-mod">
+                <div class="lp-mod-ico"><i class="fas fa-bell"></i></div>
+                <h3>Notificações</h3>
+                <p>Avisos automáticos por e-mail, SMS e WhatsApp com templates personalizáveis.</p>
+                <span class="lp-mod-link">Acessar <i class="fas fa-arrow-right"></i></span>
+            </a>
+        </div>
+    </section>
 
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-header">
-                <i class="fas fa-bell"></i> Notificações
+    <!-- ===== Recursos ===== -->
+    <section class="lp-features">
+        <div class="lp-section-head">
+            <span class="lp-kicker">Funcionalidades</span>
+            <h2>Tudo que a operação precisa</h2>
+        </div>
+        <div class="lp-feat-grid">
+            <div class="lp-feat">
+                <h4><i class="fas fa-layer-group"></i> Gestão Completa</h4>
+                <ul>
+                    <li>Contabilidades e Imobiliárias</li>
+                    <li>Imóveis (lotes, terrenos, casas)</li>
+                    <li>Cadastro de Compradores</li>
+                    <li>Contratos personalizáveis</li>
+                </ul>
             </div>
-            <div class="card-body">
-                <p>Notificações automáticas por e-mail, SMS e WhatsApp</p>
-                <a href="{% url 'notificacoes:listar' %}" class="btn btn-primary">
-                    <i class="fas fa-arrow-right"></i> Acessar
-                </a>
+            <div class="lp-feat">
+                <h4><i class="fas fa-coins"></i> Financeiro</h4>
+                <ul>
+                    <li>Geração automática de parcelas</li>
+                    <li>Juros e multa configuráveis</li>
+                    <li>Reajuste automático (IPCA/IGP-M/SELIC)</li>
+                    <li>Controle de pagamentos</li>
+                </ul>
+            </div>
+            <div class="lp-feat">
+                <h4><i class="fas fa-barcode"></i> Cobrança &amp; Pix</h4>
+                <ul>
+                    <li>Cobrança registrada C6/Sicoob</li>
+                    <li>Pix, BoletoPix e Pix Automático</li>
+                    <li>Remessa/retorno CNAB</li>
+                    <li>Conciliação automática</li>
+                </ul>
+            </div>
+            <div class="lp-feat">
+                <h4><i class="fas fa-chart-line"></i> Inteligência</h4>
+                <ul>
+                    <li>Dashboard com indicadores</li>
+                    <li>Portal do comprador</li>
+                    <li>Índices econômicos (API BCB)</li>
+                    <li>Relatórios e BI</li>
+                </ul>
             </div>
         </div>
-    </div>
-</div>
+    </section>
 
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <i class="fas fa-info-circle"></i> Funcionalidades
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <h5><i class="fas fa-check text-success"></i> Gestão Completa</h5>
-                        <ul>
-                            <li>Cadastro de Contabilidades e Imobiliárias</li>
-                            <li>Gestão de Imóveis (Lotes, Terrenos, Casas)</li>
-                            <li>Cadastro de Compradores</li>
-                            <li>Contratos de Venda Personalizáveis</li>
-                        </ul>
-                    </div>
-                    <div class="col-md-6">
-                        <h5><i class="fas fa-check text-success"></i> Sistema Financeiro</h5>
-                        <ul>
-                            <li>Geração Automática de Parcelas</li>
-                            <li>Cálculo de Juros e Multa</li>
-                            <li>Reajuste Automático (IPCA/IGPM/SELIC)</li>
-                            <li>Controle de Pagamentos</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-md-6">
-                        <h5><i class="fas fa-check text-success"></i> Notificações Inteligentes</h5>
-                        <ul>
-                            <li>E-mail Automático</li>
-                            <li>SMS</li>
-                            <li>WhatsApp</li>
-                            <li>Templates Personalizáveis</li>
-                        </ul>
-                    </div>
-                    <div class="col-md-6">
-                        <h5><i class="fas fa-check text-success"></i> Recursos Avançados</h5>
-                        <ul>
-                            <li>Dashboard com Estatísticas</li>
-                            <li>Relatórios Detalhados</li>
-                            <li>Busca de Índices Econômicos (API BCB)</li>
-                            <li>Interface Administrativa Completa</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
 {% endblock %}

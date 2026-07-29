@@ -382,7 +382,7 @@ class CNABService:
 
         # Boleto-API (C6/Sicoob): cobrança registrada não gera remessa CNAB.
         # A conciliação ocorre por evento push (webhook), não por arquivo.
-        if getattr(conta_bancaria, 'provider', 'brcobranca') in PROVIDERS_BOLETO_API:
+        if getattr(conta_bancaria, 'provider', 'pycobranca') in PROVIDERS_BOLETO_API:
             return {
                 'sucesso': False,
                 'erro': (
@@ -455,8 +455,15 @@ class CNABService:
                 )
             }
 
-        # Validar parcelas
-        parcelas_validas = [p for p in parcelas if p.tem_boleto and not p.pago]
+        # Validar parcelas. O CNAB é exclusivo do modo offline: parcelas emitidas
+        # em cobrança registrada (Parcela.provider = c6/sicoob) ficam de fora
+        # mesmo que passadas explicitamente — elas já estão registradas no banco
+        # e conciliam por webhook.
+        parcelas_validas = [
+            p for p in parcelas
+            if p.tem_boleto and not p.pago
+            and (getattr(p, 'provider', '') or '') not in PROVIDERS_BOLETO_API
+        ]
         if not parcelas_validas:
             return {
                 'sucesso': False,
@@ -1008,8 +1015,14 @@ class CNABService:
             status_boleto=StatusBoleto.GERADO,
             pago=False,
         ).exclude(
-            # Boleto-API (C6/Sicoob): sem remessa CNAB — conciliação via webhook
+            # Boleto-API (C6/Sicoob): sem remessa CNAB — conciliação via webhook.
+            # O CNAB é exclusivo do modo OFFLINE, então o corte considera o
+            # provider QUE GEROU o boleto (Parcela.provider, gravado na emissão)
+            # além do provider atual da conta — a conta pode ter trocado de modo
+            # depois da emissão, e o arquivo tem de refletir como o boleto saiu.
             conta_bancaria__provider__in=PROVIDERS_BOLETO_API,
+        ).exclude(
+            provider__in=PROVIDERS_BOLETO_API,
         ).exclude(
             # HU-23 RN-18: itens REJEITADO não bloqueiam reinclusão
             itens_remessa__arquivo_remessa__status__in=[
@@ -1297,7 +1310,10 @@ class CNABService:
                 return {'parcela_ids': [], 'erro': 'Boleto não encontrado.'}
             if not p.conta_bancaria:
                 return {'parcela_ids': [], 'erro': 'Boleto sem conta bancária associada.'}
-            if getattr(p.conta_bancaria, 'provider', 'brcobranca') in PROVIDERS_BOLETO_API:
+            # CNAB é exclusivo do modo offline: barra tanto pelo provider atual
+            # da conta quanto pelo provider que gerou o boleto (Parcela.provider).
+            if (getattr(p.conta_bancaria, 'provider', 'pycobranca') in PROVIDERS_BOLETO_API
+                    or (p.provider or '') in PROVIDERS_BOLETO_API):
                 return {
                     'parcela_ids': [],
                     'erro': (

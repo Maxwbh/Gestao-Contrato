@@ -9,3 +9,4 @@ class CoreConfig(AppConfig):
     def ready(self):
         from core.parametros import aplicar_em_settings
         aplicar_em_settings()
+        from core import signals  # noqa: F401 — registra os receivers

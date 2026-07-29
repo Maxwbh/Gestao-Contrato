@@ -100,10 +100,80 @@ class LayoutCNAB(models.TextChoices):
 
 
 class ProviderBoleto(models.TextChoices):
-    """Provedor de emissão de boletos / cobrança registrada."""
-    BRCOBRANCA = 'brcobranca', 'BRCobrança (CNAB local/Docker)'
+    """
+    Provedor de emissão de boletos / cobrança registrada.
+
+    Os bancos C6 (336) e Sicoob (756) existem nos DOIS modos do gateway:
+
+      • **offline** — motor **pyCobrança** (boleto/CNAB, sem credencial de
+        banco; sucessor do BRCobrança/Ruby). No sistema, é a conta com
+        `provider='pycobranca'` — valor mantido por compatibilidade com os
+        dados já gravados; a emissão em massa usa POST /api/boleto/multi.
+      • **próprio** — REST registrado no banco (OAuth2 + mTLS), exige
+        credenciais e `*_REGISTERED_READY=true` no gateway. No sistema, é a
+        conta com `provider='c6'|'sicoob'`; a emissão é individual (POST
+        /cobranca), pois cada boleto é registrado no banco.
+
+    Ou seja: escolher C6/Sicoob aqui significa **cobrança registrada**; para
+    usar esses bancos apenas no fluxo offline/CNAB, mantenha `brcobranca`.
+    """
+    PYCOBRANCA = 'pycobranca', 'pyCobrança (motor offline — boleto/CNAB)'
     C6 = 'c6', 'C6 Bank (cobrança registrada)'
     SICOOB = 'sicoob', 'Sicoob (cobrança registrada)'
+
+
+# Valor legado do modo offline (antes do motor migrar de BRCobrança/Ruby para
+# pyCobrança/Python). Ainda aceito na entrada (APIs/forms/imports) e convertido
+# para `pycobranca`; os dados já gravados foram migrados em
+# core.migrations.0026 / financeiro.migrations.0026.
+PROVIDER_OFFLINE_LEGADO = 'brcobranca'
+
+
+def normalizar_provider(valor) -> str:
+    """Normaliza o provider recebido de fora: vazio ou legado → `pycobranca`."""
+    v = (valor or '').strip().lower()
+    if not v or v == PROVIDER_OFFLINE_LEGADO:
+        return ProviderBoleto.PYCOBRANCA
+    return v
+
+
+class MetodoCobranca(models.TextChoices):
+    """Método de cobrança oferecido/escolhido (Boleto-API)."""
+    BOLETO = 'boleto', 'Boleto registrado'
+    CARNE = 'carne', 'Carnê'
+    BOLETO_PIX = 'bolepix', 'Boleto + Pix (BoletoPix)'
+    PIX_AUTOMATICO = 'pix_automatico', 'Pix Automático (débito recorrente)'
+
+
+def default_metodos_cobranca():
+    """Default do campo Imobiliaria.metodos_cobranca (mutável → callable)."""
+    return [MetodoCobranca.BOLETO]
+
+
+# Bancos → provedores de cobrança compatíveis (para validação banco↔provider).
+# Bancos fora do mapa aceitam apenas BRCobrança (CNAB local).
+PROVIDERS_POR_BANCO = {
+    '336': {ProviderBoleto.C6, ProviderBoleto.PYCOBRANCA},      # C6 Bank
+    '756': {ProviderBoleto.SICOOB, ProviderBoleto.PYCOBRANCA},  # Sicoob / Bancoob
+}
+
+# account_config (sem segredos) por provider: chaves obrigatórias e opcionais.
+# Usado como schema de referência e por ContaBancaria.account_config_faltando()
+# (validação branda para onboarding — NÃO é enforced no clean()).
+ACCOUNT_CONFIG_SCHEMA = {
+    ProviderBoleto.C6: {
+        'obrigatorias': ['billing_scheme'],
+        'opcionais': ['chave_pix'],
+    },
+    ProviderBoleto.SICOOB: {
+        'obrigatorias': ['numeroCliente', 'codigoModalidade', 'numeroContaCorrente'],
+        'opcionais': ['chave_pix'],
+    },
+    ProviderBoleto.PYCOBRANCA: {
+        'obrigatorias': [],
+        'opcionais': [],
+    },
+}
 
 
 class Imobiliaria(TimeStampedModel):
@@ -376,6 +446,15 @@ class Imobiliaria(TimeStampedModel):
         verbose_name='Aceite'
     )
 
+    # Métodos de cobrança oferecidos por esta imobiliária (lista multi-seleção).
+    # Restringe o que cada contrato pode escolher (Contrato.metodo_cobranca).
+    metodos_cobranca = models.JSONField(
+        default=default_metodos_cobranca,
+        blank=True,
+        verbose_name='Métodos de Cobrança Disponíveis',
+        help_text='Métodos habilitados: boleto, carne, bolepix, pix_automatico.',
+    )
+
     ativo = models.BooleanField(default=True, verbose_name='Ativo')
 
     class Meta:
@@ -390,6 +469,10 @@ class Imobiliaria(TimeStampedModel):
     def nome_fantasia(self):
         """Compatibilidade: retorna razao_social como nome_fantasia"""
         return self.razao_social or ''
+
+    def metodo_habilitado(self, metodo) -> bool:
+        """True se o método de cobrança está habilitado nesta imobiliária."""
+        return metodo in (self.metodos_cobranca or [])
 
     def clean(self):
         from django.core.exceptions import ValidationError
@@ -538,12 +621,12 @@ class ContaBancaria(TimeStampedModel):
     )
 
     # Boleto-API: provedor de cobrança registrada (flag de feature por conta)
-    # 'brcobranca' (padrão) mantém o fluxo CNAB atual; 'c6'/'sicoob' ativam
+    # 'pycobranca' (padrão) mantém o fluxo CNAB atual; 'c6'/'sicoob' ativam
     # o fluxo de cobrança registrada via gateway Boleto-API.
     provider = models.CharField(
         max_length=20,
         choices=ProviderBoleto.choices,
-        default=ProviderBoleto.BRCOBRANCA,
+        default=ProviderBoleto.PYCOBRANCA,
         verbose_name='Provedor de Cobrança',
         help_text='BRCobrança = fluxo CNAB atual; C6/Sicoob = cobrança registrada via Boleto-API.',
     )
@@ -552,10 +635,11 @@ class ContaBancaria(TimeStampedModel):
         blank=True,
         verbose_name='Config. da Conta (Boleto-API)',
         help_text=(
-            'Parâmetros bancários sem segredos para o Boleto-API. '
-            'C6: {"agencia","conta","convenio"}. '
-            'Sicoob: {"cooperativa","conta","numeroCliente","codigoModalidade"}. '
-            'Credenciais (client_id/secret/.pfx) ficam no cofre do Boleto-API.'
+            'Parâmetros bancários SEM segredos para o Boleto-API. '
+            'C6: {"billing_scheme","chave_pix"}. '
+            'Sicoob: {"numeroCliente","codigoModalidade","numeroContaCorrente","chave_pix"}. '
+            'As credenciais (client_id/secret/.pfx/token) ficam cifradas em '
+            '`credenciais_cifradas` (ver property `credenciais`).'
         ),
     )
     tenant_id = models.CharField(
@@ -618,6 +702,28 @@ class ContaBancaria(TimeStampedModel):
         help_text='Número sequencial da remessa CNAB'
     )
 
+    # ── Boleto-API (stateless): credenciais do banco cifradas + token bapi_ ──
+    # O produto guarda as credenciais de API do banco (C6/Sicoob) cifradas e as
+    # envia ao gateway (POST /credenciais), que devolve o token `bapi_` de uso
+    # diário — também guardado cifrado. Nunca em texto claro. Ver core.crypto.
+    credenciais_cifradas = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Credenciais do Banco (cifradas)',
+        help_text='JSON cifrado das credenciais de API do banco. Use a property `credenciais`.',
+    )
+    bapi_token_cifrado = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Token Boleto-API (cifrado)',
+        help_text='Token bapi_ devolvido pelo gateway. Use a property `bapi_token`.',
+    )
+    bapi_token_criado_em = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Token Boleto-API criado em',
+    )
+
     ativo = models.BooleanField(default=True, verbose_name='Ativo')
 
     class Meta:
@@ -642,6 +748,59 @@ class ContaBancaria(TimeStampedModel):
     def banco_nome(self):
         """Retorna o nome completo do banco"""
         return self.get_banco_display() if self.banco else ''
+
+    # ── Credenciais cifradas (Boleto-API) ──
+    @property
+    def credenciais(self) -> dict:
+        """Credenciais de API do banco (decifradas). {} se não houver."""
+        from core.crypto import decrypt_dict
+        return decrypt_dict(self.credenciais_cifradas)
+
+    @credenciais.setter
+    def credenciais(self, value):
+        from core.crypto import encrypt_dict
+        self.credenciais_cifradas = encrypt_dict(value or {})
+
+    @property
+    def bapi_token(self) -> str:
+        """Token bapi_ (decifrado). '' se não houver."""
+        from core.crypto import decrypt_str
+        return decrypt_str(self.bapi_token_cifrado)
+
+    def set_bapi_token(self, token):
+        """Grava o token bapi_ cifrado e registra o timestamp de criação."""
+        from core.crypto import encrypt_str
+        from django.utils import timezone
+        self.bapi_token_cifrado = encrypt_str(token or '')
+        self.bapi_token_criado_em = timezone.now() if token else None
+
+    def get_config(self, chave, default=None):
+        """Lê um parâmetro (sem segredo) de account_config."""
+        return (self.account_config or {}).get(chave, default)
+
+    def account_config_faltando(self):
+        """
+        Lista as chaves OBRIGATÓRIAS de account_config ausentes para o provider
+        desta conta (validação branda para onboarding). [] para BRCobrança ou
+        quando tudo presente. Não é enforced no clean().
+        """
+        schema = ACCOUNT_CONFIG_SCHEMA.get(self.provider, {})
+        cfg = self.account_config or {}
+        return [k for k in schema.get('obrigatorias', []) if not cfg.get(k)]
+
+    def clean(self):
+        """Valida compatibilidade banco↔provider."""
+        super().clean()
+        from django.core.exceptions import ValidationError
+        permitidos = PROVIDERS_POR_BANCO.get(self.banco, {ProviderBoleto.PYCOBRANCA})
+        if self.provider and self.provider not in permitidos:
+            nomes = ', '.join(sorted(permitidos))
+            raise ValidationError({
+                'provider': (
+                    f'Provedor "{self.get_provider_display()}" incompatível com o '
+                    f'banco {self.get_banco_display()}. Permitidos: {nomes}.'
+                )
+            })
 
 
 class TipoImovel(models.TextChoices):
@@ -1223,7 +1382,7 @@ class AcessoUsuario(TimeStampedModel):
         return f"{self.usuario.username} → {self.contabilidade.nome} → {self.imobiliaria.nome}"
 
     def clean(self):
-        """Valida que a imobiliária pertence à contabilidade"""
+        """Valida imobiliária↔contabilidade e a exclusividade Comprador × Usuário."""
         from django.core.exceptions import ValidationError
 
         if self.imobiliaria and self.contabilidade:
@@ -1231,10 +1390,55 @@ class AcessoUsuario(TimeStampedModel):
                 raise ValidationError({
                     'imobiliaria': 'A imobiliária deve pertencer à contabilidade selecionada'
                 })
+        # HU-28 RN-5: quem é comprador do portal não pode ser usuário interno.
+        if self.usuario_id and hasattr(self.usuario, 'acesso_comprador'):
+            raise ValidationError(
+                'Este usuário é um comprador do portal e não pode receber acesso interno.')
 
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class PerfilUsuario(TimeStampedModel):
+    """
+    Perfil estendido do usuário interno (HU-28).
+
+    - `papel`: ADMIN (pode cadastrar/gerenciar usuários no próprio escopo) ou
+      COMUM (só opera os módulos a que tem acesso).
+    - `deve_trocar_senha`: quando o usuário foi criado com senha inicial pelo
+      gestor, obriga a troca no primeiro acesso.
+
+    Papel é independente das permissões por imobiliária (`AcessoUsuario`):
+    `papel` diz *se administra usuários*; `pode_editar`/`pode_excluir` dizem
+    *o que faz nos dados de cada imobiliária*.
+    """
+    PAPEL_ADMIN = 'ADMIN'
+    PAPEL_COMUM = 'COMUM'
+    PAPEL_CHOICES = [
+        (PAPEL_ADMIN, 'Administrador'),
+        (PAPEL_COMUM, 'Usuário comum'),
+    ]
+
+    usuario = models.OneToOneField(
+        'auth.User', on_delete=models.CASCADE, related_name='perfil',
+        verbose_name='Usuário')
+    papel = models.CharField(
+        max_length=6, choices=PAPEL_CHOICES, default=PAPEL_COMUM,
+        verbose_name='Perfil de acesso')
+    deve_trocar_senha = models.BooleanField(
+        default=False, verbose_name='Deve trocar senha no próximo acesso')
+
+    class Meta:
+        verbose_name = 'Perfil de Usuário'
+        verbose_name_plural = 'Perfis de Usuários'
+
+    def __str__(self):
+        return f'{self.usuario.get_username()} — {self.get_papel_display()}'
+
+    @property
+    def is_admin(self) -> bool:
+        return self.papel == self.PAPEL_ADMIN
 
 
 # =============================================================================
@@ -1249,6 +1453,26 @@ def usuario_tem_permissao_total(user):
     if not user.is_authenticated:
         return False
     return user.is_superuser or user.is_staff
+
+
+def pode_gerenciar_usuarios(user) -> bool:
+    """
+    HU-28 RN-1: só administradores cadastram/gerenciam usuários — perfil ADMIN
+    ou permissão total (superuser/staff). O escopo do que ele concede continua
+    limitado às suas próprias contabilidades/imobiliárias (RN-2).
+    """
+    if not getattr(user, 'is_authenticated', False):
+        return False
+    if usuario_tem_permissao_total(user):
+        return True
+    perfil = getattr(user, 'perfil', None)
+    return bool(perfil and perfil.papel == PerfilUsuario.PAPEL_ADMIN)
+
+
+def usuario_deve_trocar_senha(user) -> bool:
+    """True se o usuário tem perfil com o flag de troca obrigatória ligado."""
+    perfil = getattr(user, 'perfil', None)
+    return bool(perfil and perfil.deve_trocar_senha)
 
 
 def get_contabilidades_usuario(user):
@@ -1421,7 +1645,7 @@ class ParametroSistema(models.Model):
     GRUPO_TESTE = 'teste'
     GRUPO_NOTIFICACAO = 'notificacao'
     GRUPO_TAREFA = 'tarefa'
-    GRUPO_BRCOBRANCA = 'brcobranca'
+    GRUPO_PYCOBRANCA = 'pycobranca'
     GRUPO_PORTAL = 'portal'
     GRUPO_APLICACAO = 'aplicacao'
     GRUPO_BCB = 'bcb'
@@ -1432,7 +1656,7 @@ class ParametroSistema(models.Model):
         (GRUPO_TESTE, 'Modo de Teste'),
         (GRUPO_NOTIFICACAO, 'Notificações'),
         (GRUPO_TAREFA, 'Tarefas Agendadas'),
-        (GRUPO_BRCOBRANCA, 'BRCobrança'),
+        (GRUPO_PYCOBRANCA, 'pyCobrança (motor offline)'),
         (GRUPO_PORTAL, 'Portal do Comprador'),
         (GRUPO_APLICACAO, 'Aplicação'),
         (GRUPO_BCB, 'APIs BCB'),
@@ -1524,6 +1748,10 @@ class LogAuditoria(models.Model):
         ('EXPORTACAO',          'Exportação de relatório'),
         ('BLOQUEIO_CREDITO',    'Bloqueio de crédito ativado'),
         ('DESBLOQUEIO_CREDITO', 'Bloqueio de crédito removido'),
+        ('USUARIO_CRIADO',      'Usuário criado'),
+        ('USUARIO_DESATIVADO',  'Usuário desativado'),
+        ('ACESSO_CONCEDIDO',    'Acesso concedido'),
+        ('ACESSO_NEGADO_ESCOPO', 'Acesso negado (fora do escopo)'),
     ]
 
     usuario = models.ForeignKey(
@@ -1723,8 +1951,10 @@ class WorkflowIATier(models.Model):
 
     MODELO_CHOICES = [
         ('claude-haiku-4-5-20251001', 'Claude Haiku 4.5'),
-        ('claude-sonnet-4-6',         'Claude Sonnet 4.6'),
+        ('claude-sonnet-5',           'Claude Sonnet 5'),
         ('claude-opus-4-8',           'Claude Opus 4.8'),
+        # Legado: ainda disponível na API, mas a doc recomenda migrar.
+        ('claude-sonnet-4-6',         'Claude Sonnet 4.6 (legado)'),
     ]
 
     workflow   = models.ForeignKey(WorkflowIA, on_delete=models.CASCADE, related_name='tiers')

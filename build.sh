@@ -9,6 +9,49 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 # ============================================================================
+# Grava metadados de versão (.build_info) enquanto o git ainda está disponível.
+# Em runtime (produção) o git pode não existir; o core/version.py lê este
+# arquivo para exibir a versão MAJOR.MINOR.PATCH correta e o commit/data.
+# ============================================================================
+echo "==> Gravando .build_info (versão)..."
+python - <<'BUILDINFOEOF'
+import json, os, subprocess, pathlib
+def g(*a):
+    try:
+        return subprocess.run(['git', *a], capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:
+        return ''
+# Versão oficial só na main: deploy de outra branch (ex.: hml) é marcado com
+# o canal, e a versão exibida ganha sufixo (3.2.N-hml). Render expõe a branch
+# em RENDER_GIT_BRANCH; fallback para o git local.
+branch = (os.environ.get('RENDER_GIT_BRANCH')
+          or g('rev-parse', '--abbrev-ref', 'HEAD') or '')
+canal = 'oficial' if branch in ('master', 'main') else 'hml'
+# PATCH conta só commits de FONTE: commit que toca apenas documentação/infra
+# não altera a versão. Manter esta lista em sincronia com core/version.py
+# (_EXCLUIR_NAO_FONTE) e com o NONCODE do ci.yml.
+excluir = [
+    'docs', '*.md', 'LICENSE', 'VERSION', '.gitignore', '.dockerignore',
+    '.editorconfig', '.gitattributes', '.env.example', '.githooks', '.github',
+    'static', 'staticfiles', 'media', 'render.yaml', 'Dockerfile*',
+    'docker-compose.yml', 'docker-entrypoint.sh', 'build.sh',
+    '*.png', '*.jpg', '*.jpeg', '*.gif', '*.svg', '*.ico', '*.webp', '*.pdf',
+    '*.woff', '*.woff2', '*.ttf', '*.eot',
+]
+patch = g('rev-list', '--count', 'HEAD', '--', '.',
+          *[f':(exclude){p}' for p in excluir])
+info = {
+    'patch': patch or g('rev-list', '--count', 'HEAD') or '0',
+    'commit': g('rev-parse', '--short', 'HEAD') or 'unknown',
+    'date': (g('log', '-1', '--format=%ci') or '')[:19],
+    'branch': branch,
+    'canal': canal,
+}
+pathlib.Path('.build_info').write_text(json.dumps(info))
+print('    .build_info =', info)
+BUILDINFOEOF
+
+# ============================================================================
 # NOTA SOBRE MAKEMIGRATIONS
 # ============================================================================
 # Em produção (Render), as migrations já estão commitadas no repositório.
@@ -26,7 +69,7 @@ pip install -r requirements.txt
 echo "==> Creating schema gestao_contrato if not exists..."
 python << 'SCHEMAEOF'
 import os
-import psycopg2
+import psycopg
 from urllib.parse import urlparse, unquote
 
 # Conectar sem search_path para criar o schema
@@ -35,10 +78,10 @@ if database_url:
     result = urlparse(database_url)
     # Decodificar senha (pode ter caracteres especiais URL-encoded)
     password = unquote(result.password) if result.password else None
-    conn = psycopg2.connect(
+    conn = psycopg.connect(
         host=result.hostname,
         port=result.port or 5432,
-        database=result.path[1:],
+        dbname=result.path[1:],
         user=result.username,
         password=password
     )

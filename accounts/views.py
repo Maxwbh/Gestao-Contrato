@@ -44,7 +44,18 @@ def logout_view(request):
 
 
 def registro_view(request):
-    """View de registro de novo usuário"""
+    """View de registro de novo usuário.
+
+    HU-28.4: auto-registro aberto é desativado por padrão — só administradores
+    cadastram usuários internos (Cadastros → Usuários). O portal do comprador
+    tem fluxo próprio de auto-cadastro.
+    """
+    from django.conf import settings as _s
+    if not getattr(_s, 'PERMITIR_AUTO_REGISTRO', False):
+        messages.info(request, 'O cadastro é feito por um administrador. '
+                               'Procure o responsável pela sua conta.')
+        return redirect('accounts:login')
+
     if request.user.is_authenticated:
         return redirect('core:dashboard')
 
@@ -88,6 +99,11 @@ def alterar_senha_view(request):
             if user.check_password(form.cleaned_data['senha_atual']):
                 user.set_password(form.cleaned_data['nova_senha'])
                 user.save()
+                # HU-28: limpa a obrigatoriedade de troca no 1º acesso.
+                perfil = getattr(user, 'perfil', None)
+                if perfil is not None and perfil.deve_trocar_senha:
+                    perfil.deve_trocar_senha = False
+                    perfil.save(update_fields=['deve_trocar_senha'])
                 update_session_auth_hash(request, user)  # Mantém logado
                 messages.success(request, 'Senha alterada com sucesso!')
                 return redirect('accounts:perfil')

@@ -129,12 +129,12 @@ class TestGerarDadosBoletoApi:
         assert ContaBancaria.objects.filter(banco='756', provider='sicoob').exists()
         assert ContaBancaria.objects.filter(banco='336', provider='c6').exists()
 
-    def test_contas_bb_e_bradesco_usam_brcobranca(self):
+    def test_contas_bb_e_bradesco_usam_pycobranca(self):
         """BB e Bradesco devem manter provider=brcobranca (fluxo CNAB)."""
         from core.models import ContaBancaria
         call_command('gerar_dados_teste', stdout=StringIO())
-        assert not ContaBancaria.objects.filter(banco='001').exclude(provider='brcobranca').exists()
-        assert not ContaBancaria.objects.filter(banco='237').exclude(provider='brcobranca').exists()
+        assert not ContaBancaria.objects.filter(banco='001').exclude(provider='pycobranca').exists()
+        assert not ContaBancaria.objects.filter(banco='237').exclude(provider='pycobranca').exists()
 
     def test_contas_api_tem_account_config_e_tenant_id(self):
         """Contas Boleto-API devem ter account_config e tenant_id preenchidos."""

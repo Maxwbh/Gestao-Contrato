@@ -6,7 +6,15 @@ Email: maxwbh@gmail.com
 """
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Contabilidade, Imobiliaria, Imovel, Comprador, ParametroSistema, LoteamentoOverlay, AcessoNegado, LogAuditoria
+from .models import Contabilidade, Imobiliaria, Imovel, Comprador, ParametroSistema, LoteamentoOverlay, AcessoNegado, LogAuditoria, PerfilUsuario
+
+
+@admin.register(PerfilUsuario)
+class PerfilUsuarioAdmin(admin.ModelAdmin):
+    list_display = ('usuario', 'papel', 'deve_trocar_senha')
+    list_filter = ('papel', 'deve_trocar_senha')
+    search_fields = ('usuario__username', 'usuario__email', 'usuario__first_name')
+    raw_id_fields = ('usuario',)
 from .parametros import invalidar_cache
 
 
@@ -50,7 +58,7 @@ class ImobiliariaAdmin(admin.ModelAdmin):
             'fields': ('endereco', 'telefone', 'email', 'responsavel_financeiro')
         }),
         ('Dados Bancários', {
-            'fields': ('banco', 'agencia', 'conta', 'pix')
+            'fields': ('banco', 'agencia', 'conta', 'pix', 'metodos_cobranca')
         }),
         ('Identidade Visual (Boleto)', {
             'fields': ('logo', 'cor_marca', 'rodape_contato', 'marca_dagua'),

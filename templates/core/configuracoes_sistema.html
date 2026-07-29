@@ -119,7 +119,7 @@
                 <a class="cfg-nav-item" data-panel="brcobranca" onclick="showPanel('brcobranca',this)">
                     <span class="cfg-nav-icon"><i class="fas fa-barcode text-dark"></i></span>
                     BRCobrança
-                    <span class="ms-auto {% if status_brcobranca %}status-ok{% else %}status-warn{% endif %}"></span>
+                    <span class="ms-auto {% if status_pycobranca %}status-ok{% else %}status-warn{% endif %}"></span>
                 </a>
 
                 <div class="cfg-nav-sep mt-2">Portal / Sistema</div>
@@ -312,25 +312,25 @@
                         <div class="col-md-8">
                             <label class="form-label form-label-sm fw-semibold">URL da API</label>
                             <input type="url" class="form-control form-control-sm font-monospace"
-                                   value="{{ params_brcobranca.BRCOBRANCA_URL|default:'http://localhost:9292' }}"
+                                   value="{{ params_pycobranca.BRCOBRANCA_URL|default:'http://localhost:9292' }}"
                                    placeholder="http://brcobranca:9292" data-param="BRCOBRANCA_URL">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label form-label-sm fw-semibold">Timeout (s)</label>
                             <input type="number" class="form-control form-control-sm" min="5" max="300"
-                                   value="{{ params_brcobranca.BRCOBRANCA_TIMEOUT|default:30 }}"
+                                   value="{{ params_pycobranca.BRCOBRANCA_TIMEOUT|default:30 }}"
                                    data-param="BRCOBRANCA_TIMEOUT">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label form-label-sm fw-semibold">Máx. Tentativas</label>
                             <input type="number" class="form-control form-control-sm" min="1" max="10"
-                                   value="{{ params_brcobranca.BRCOBRANCA_MAX_TENTATIVAS|default:3 }}"
+                                   value="{{ params_pycobranca.BRCOBRANCA_MAX_TENTATIVAS|default:3 }}"
                                    data-param="BRCOBRANCA_MAX_TENTATIVAS">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label form-label-sm fw-semibold">Delay inicial retry (s)</label>
                             <input type="number" class="form-control form-control-sm" min="1" max="60"
-                                   value="{{ params_brcobranca.BRCOBRANCA_DELAY_INICIAL|default:2 }}"
+                                   value="{{ params_pycobranca.BRCOBRANCA_DELAY_INICIAL|default:2 }}"
                                    data-param="BRCOBRANCA_DELAY_INICIAL">
                         </div>
                         <div class="col-12 d-flex gap-2">

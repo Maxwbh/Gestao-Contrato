@@ -1085,7 +1085,7 @@ class BoletoService:
         logger.error('gerar_carne: erro HTTP %s — %s', response.status_code, error_msg)
         return {'sucesso': False, 'erro': error_msg}
 
-    def gerar_boletos_lote(self, parcelas_contas, tamanho_lote=15, template=None):
+    def gerar_boletos_lote(self, parcelas_contas, tamanho_lote=None, template=None):
         """
         Gera boletos reais em lotes via POST /api/boleto/multi.
         1 chamada à API por lote → drástica redução de requisições vs. gerar_boleto() individual.
@@ -1110,6 +1110,9 @@ class BoletoService:
 
         gerados = 0
         erros = []
+        # O gateway /api/boleto/multi aceita até 200 boletos por chamada.
+        if tamanho_lote is None:
+            tamanho_lote = getattr(settings, 'BOLETO_MULTI_TAMANHO_LOTE', 200)
 
         # Agrupar por (banco_nome, conta.pk) — /api/boleto/multi exige mesmo banco
         grupos: dict = defaultdict(list)
@@ -1154,7 +1157,8 @@ class BoletoService:
                     b['bank'] = banco_nome
                     lote_boletos.append(b)
 
-                timeout_lote = max(self.timeout, len(lote_dados) * 5)
+                # 5s/boleto com teto de 300s (lotes de até 200 boletos)
+                timeout_lote = min(max(self.timeout, len(lote_dados) * 5), 300)
                 # template: 'prawn' = Ruby nativo (sem GhostScript, menos RAM); '' = padrão API
                 _tmpl = template if template is not None else getattr(
                     settings, 'BRCOBRANCA_TEMPLATE', ''
@@ -1233,6 +1237,12 @@ class BoletoService:
 
                 agora = timezone.now()
                 a_atualizar = []
+                # Quando a resposta traz metadados por boleto (include_data /
+                # X-Boletos-Info), cada boleto SOLICITADO é conferido no retorno:
+                # só grava quem veio OK; os ausentes/com erro entram em `erros`.
+                # Sem metadados (resposta binária antiga), mantém o comportamento
+                # anterior (grava todos com o PDF do lote).
+                tem_confirmacao = bool(boletos_info_por_idx or boletos_info_por_nn)
                 for idx, (parcela, dados, nosso_numero) in enumerate(lote_dados):
                     # Nosso número formatado conforme o banco:
                     #   BB (001): convenio(8) + sequencial(9) = 17 dígitos
@@ -1244,10 +1254,25 @@ class BoletoService:
                     else:
                         nn_fmt = nn_banco
 
-                    # DV do nosso número via include_data — match por nosso_numero, fallback posição
+                    # Metadados via include_data — match por nosso_numero, fallback posição
                     info = boletos_info_por_nn.get(nn_banco) or (
                         boletos_info_por_idx[idx] if idx < len(boletos_info_por_idx) else {}
                     )
+
+                    if tem_confirmacao:
+                        info_erro = info.get('erro') or info.get('error') or ''
+                        if not info or info_erro:
+                            motivo = info_erro or 'boleto ausente na resposta do lote'
+                            erros.append(
+                                f'gerar_boletos_lote [{banco_nome}]: parcela pk={parcela.pk} '
+                                f'não confirmada — {motivo}'
+                            )
+                            logger.warning(
+                                'gerar_boletos_lote: parcela pk=%s sem confirmação no retorno (%s)',
+                                parcela.pk, motivo,
+                            )
+                            continue  # não grava — permanece NAO_GERADO para nova tentativa
+
                     nn_dv = info.get('nosso_numero_dv', '')
                     nn_fmt_api = info.get('nosso_numero_formatado', '') or nn_fmt
 
@@ -1256,6 +1281,11 @@ class BoletoService:
                     parcela.nosso_numero = nn_fmt_api
                     parcela.nosso_numero_formatado = nn_fmt_api
                     parcela.nosso_numero_dv = nn_dv
+                    # Grava os dados de cobrança devolvidos pela API quando disponíveis
+                    if info.get('linha_digitavel'):
+                        parcela.linha_digitavel = info['linha_digitavel']
+                    if info.get('codigo_barras'):
+                        parcela.codigo_barras = info['codigo_barras']
                     parcela.numero_documento = parcela.gerar_numero_documento()
                     parcela.data_geracao_boleto = agora
                     # PDF do lote — carnê compartilhado por todas as parcelas do lote
@@ -1267,6 +1297,7 @@ class BoletoService:
                     [
                         'conta_bancaria', 'status_boleto',
                         'nosso_numero', 'nosso_numero_formatado', 'nosso_numero_dv',
+                        'linha_digitavel', 'codigo_barras',
                         'numero_documento', 'data_geracao_boleto', 'boleto_pdf_db',
                     ],
                 )

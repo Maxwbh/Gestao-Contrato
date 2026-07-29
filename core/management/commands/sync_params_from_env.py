@@ -82,13 +82,13 @@ PARAMETROS = [
      'Token Bearer para autenticar chamadas à API /api/tasks/run-all/'),
 
     # ── BRCobrança ───────────────────────────────────────────────────────────
-    ('BRCOBRANCA_URL',           'brcobranca', 'str', 'http://localhost:9292',
-     'URL base da API BRCobrança (docker run -p 9292:9292 kivanio/brcobranca)'),
-    ('BRCOBRANCA_TIMEOUT',       'brcobranca', 'int', '30',
+    ('BRCOBRANCA_URL',           'pycobranca', 'str', 'http://localhost:9292',
+     'URL base do motor offline pyCobrança (gateway cobranca-api)'),
+    ('BRCOBRANCA_TIMEOUT',       'pycobranca', 'int', '30',
      'Timeout para chamadas à API BRCobrança (segundos)'),
-    ('BRCOBRANCA_MAX_TENTATIVAS', 'brcobranca', 'int', '3',
+    ('BRCOBRANCA_MAX_TENTATIVAS', 'pycobranca', 'int', '3',
      'Número máximo de tentativas em caso de falha'),
-    ('BRCOBRANCA_DELAY_INICIAL', 'brcobranca', 'int', '2',
+    ('BRCOBRANCA_DELAY_INICIAL', 'pycobranca', 'int', '2',
      'Delay inicial de retry em segundos (dobra a cada tentativa)'),
 
     # ── Portal do Comprador ──────────────────────────────────────────────────
@@ -126,8 +126,10 @@ PARAMETROS = [
      'Máximo de acessos por IP por hora na URL pública de boleto.'),
 
     # ── Chatbot IA (Seção 30) ────────────────────────────────────────────────
-    ('ANTHROPIC_API_KEY', 'chatbot_ia', 'secret', '',
-     'Chave de API da Anthropic para o chatbot humanizado. Obtenha em console.anthropic.com'),
+    # ANTHROPIC_API_KEY NÃO é sincronizada: ParametroSistema guarda o valor em
+    # texto claro no banco (visível no Admin). A chave vive só como variável de
+    # ambiente (settings); linhas legadas no banco seguem funcionando como
+    # fallback de leitura, mas não são criadas/atualizadas por este comando.
     ('CHATBOT_IA_ATIVO', 'chatbot_ia', 'str', 'false',
      'H-10: ativa/desativa IA no chatbot sem deploy. Valores: true | false'),
     ('CHATBOT_MODELO', 'chatbot_ia', 'str', 'claude-haiku-4-5-20251001',
@@ -138,6 +140,14 @@ PARAMETROS = [
      'H-08: prompt de sistema para humanizador. Deixe vazio para usar o padrão embutido.'),
     ('CHATBOT_SYSTEM_PROMPT_CLASSIFIER', 'chatbot_ia', 'str', '',
      'H-08: prompt para classificador de intent. Deixe vazio para usar o padrão embutido.'),
+
+    # ── IA — modelos configuráveis (importação de PDF) ───────────────────────
+    ('IA_TIERS_CLAUDE', 'chatbot_ia', 'str',
+     'claude-haiku-4-5-20251001,claude-sonnet-5,claude-opus-4-8',
+     'Cascade de modelos Claude da importação de PDF (CSV, ordem barato→caro). '
+     'Um WorkflowIA ativo no Admin tem precedência sobre este parâmetro.'),
+    ('IA_GEMINI_MODELO', 'chatbot_ia', 'str', 'gemini-2.0-flash',
+     'Modelo Google Gemini do Tier 0 gratuito da importação de PDF.'),
 ]
 
 

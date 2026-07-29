@@ -115,7 +115,13 @@ class TestLogoutView:
 
 @pytest.mark.django_db
 class TestRegistroView:
-    """Testes da view de registro"""
+    """Testes da view de registro (com auto-registro habilitado — HU-28.4:
+    o padrão em produção é FECHADO; ver TestAutoRegistroFechado em
+    tests/unit/core/test_hu28_usuarios.py)."""
+
+    @pytest.fixture(autouse=True)
+    def _habilita_auto_registro(self, settings):
+        settings.PERMITIR_AUTO_REGISTRO = True
 
     def test_registro_get_retorna_formulario(self, client):
         """GET /accounts/registro/ retorna formulário de registro"""

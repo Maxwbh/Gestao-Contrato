@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """
-Script para incrementar a versao do projeto automaticamente.
+Script para atualizar a linha de release (MAJOR.MINOR) do projeto.
 
 Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 LinkedIn: /maxwbh
 Empresa: M&S do Brasil LTDA - www.msbrasil.inf.br
 
+O arquivo VERSION guarda apenas MAJOR.MINOR (ex.: 4.0). O PATCH é automático
+(nº de commits) e resolvido em core/version.py — não é gravado aqui.
+
 Uso:
-    python scripts/bump_version.py [patch|minor|major]
+    python scripts/bump_version.py [minor|major]
 
 Exemplos:
-    python scripts/bump_version.py patch  # 1.0.0 -> 1.0.1
-    python scripts/bump_version.py minor  # 1.0.0 -> 1.1.0
-    python scripts/bump_version.py major  # 1.0.0 -> 2.0.0
+    python scripts/bump_version.py minor  # 4.0 -> 4.1
+    python scripts/bump_version.py major  # 4.0 -> 5.0
 """
 import sys
 from pathlib import Path
@@ -25,52 +27,46 @@ def get_project_root():
 
 
 def read_version():
-    """Le a versao atual do arquivo VERSION"""
+    """Le a versao atual (MAJOR.MINOR) do arquivo VERSION"""
     version_file = get_project_root() / 'VERSION'
     if version_file.exists():
         return version_file.read_text().strip()
-    return '0.0.0'
+    return '0.0'
 
 
 def write_version(version):
-    """Escreve a nova versao no arquivo VERSION"""
+    """Escreve a nova versao (MAJOR.MINOR) no arquivo VERSION"""
     version_file = get_project_root() / 'VERSION'
     version_file.write_text(f'{version}\n')
 
 
 def parse_version(version_str):
-    """Converte string de versao para tupla (major, minor, patch)"""
+    """Converte 'MAJOR.MINOR' para (major, minor). Ignora patch legado, se houver."""
     parts = version_str.split('.')
-    major = int(parts[0]) if len(parts) > 0 else 0
-    minor = int(parts[1]) if len(parts) > 1 else 0
-    patch = int(parts[2]) if len(parts) > 2 else 0
-    return (major, minor, patch)
+    major = int(parts[0]) if len(parts) > 0 and parts[0].isdigit() else 0
+    minor = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+    return (major, minor)
 
 
-def bump_version(bump_type='patch'):
+def bump_version(bump_type='minor'):
     """
-    Incrementa a versao baseado no tipo.
+    Incrementa a linha de release.
 
     Args:
-        bump_type: 'patch' (padrao), 'minor' ou 'major'
+        bump_type: 'minor' (padrao) ou 'major'
 
     Returns:
-        Nova versao como string
+        Nova versao MAJOR.MINOR como string
     """
-    current = read_version()
-    major, minor, patch = parse_version(current)
+    major, minor = parse_version(read_version())
 
     if bump_type == 'major':
         major += 1
         minor = 0
-        patch = 0
-    elif bump_type == 'minor':
+    else:  # minor
         minor += 1
-        patch = 0
-    else:  # patch
-        patch += 1
 
-    new_version = f'{major}.{minor}.{patch}'
+    new_version = f'{major}.{minor}'
     write_version(new_version)
 
     return new_version
@@ -78,24 +74,28 @@ def bump_version(bump_type='patch'):
 
 def main():
     """Funcao principal"""
-    bump_type = 'patch'
+    bump_type = 'minor'
 
     if len(sys.argv) > 1:
         arg = sys.argv[1].lower()
-        if arg in ('patch', 'minor', 'major'):
+        if arg in ('minor', 'major'):
             bump_type = arg
+        elif arg == 'patch':
+            print('PATCH e automatico (no. de commits) — nada a gravar no VERSION.')
+            print('A versao completa MAJOR.MINOR.PATCH e resolvida em core/version.py.')
+            sys.exit(0)
         elif arg in ('-h', '--help'):
             print(__doc__)
             sys.exit(0)
         else:
             print(f'Tipo invalido: {arg}')
-            print('Use: patch, minor ou major')
+            print('Use: minor ou major (patch e automatico)')
             sys.exit(1)
 
     old_version = read_version()
     new_version = bump_version(bump_type)
 
-    print(f'Versao atualizada: {old_version} -> {new_version}')
+    print(f'Linha de release atualizada: {old_version} -> {new_version}')
     return new_version
 
 

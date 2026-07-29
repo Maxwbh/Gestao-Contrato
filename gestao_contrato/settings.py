@@ -23,6 +23,11 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-dev-key-change-in-pro
 HASHIDS_SALT = SECRET_KEY[:20]
 HASHIDS_MIN_LENGTH = 6
 
+# ── Cifra de segredos em repouso (credenciais de banco / token bapi_) ─────────
+# base64 urlsafe de 32 bytes (Fernet.generate_key()). Se vazia, core.crypto
+# deriva do SECRET_KEY (ok em dev; defina explicitamente em produção).
+CREDENTIALS_ENCRYPTION_KEY = config('CREDENTIALS_ENCRYPTION_KEY', default='')
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
@@ -53,6 +58,7 @@ INSTALLED_APPS = [
     'django_celery_beat',
     'rest_framework',
     'drf_spectacular',
+    'drf_spectacular_sidecar',  # Serve os assets do Swagger/Redoc localmente (sem CDN)
 
     # Local apps
     'accounts',
@@ -72,8 +78,12 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.TrocaSenhaObrigatoriaMiddleware',  # HU-28: senha inicial → troca no 1º acesso
     'core.middleware.AntiEnumeracaoMiddleware',  # D-01: anti-enumeration
 ]
+
+# HU-28.4: auto-registro aberto desativado — só administradores cadastram usuários.
+PERMITIR_AUTO_REGISTRO = config('PERMITIR_AUTO_REGISTRO', default=False, cast=bool)
 
 # D-03: Security headers — sempre ativos (não apenas em produção)
 SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -313,29 +323,48 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Gestão de Contratos API',
+    'TITLE': 'Gestão de Contratos — API',
     'DESCRIPTION': (
-        'API REST para o sistema de Gestão de Contratos Imobiliários.\n\n'
+        'Referência da API interna do sistema de **Gestão de Contratos '
+        'Imobiliários**.\n\n'
         '## Autenticação\n'
-        'Todas as rotas requerem autenticação via sessão Django (`/accounts/login/`).\n\n'
-        '## Módulos\n'
-        '- **Financeiro**: parcelas, boletos, CNAB, reajustes, dashboards\n'
-        '- **Core**: contabilidades, imobiliárias, compradores, CEP/CNPJ\n'
-        '- **Portal Comprador**: contratos, boletos e segunda via\n'
-        '- **Tasks**: cron jobs para reajustes, notificações e relatórios\n'
+        'Os endpoints exigem **sessão autenticada do Django** (cookie `sessionid`); '
+        'faça login em `/accounts/login/`. Clique em **Authorize** e mantenha a '
+        'sessão ativa para testar as rotas pela própria página.\n\n'
+        '## Sobre esta documentação\n'
+        'A aplicação usa *views* Django tradicionais (respostas `JsonResponse`), '
+        'e não *viewsets* do DRF. Por isso, os endpoints abaixo são um '
+        '**catálogo curado** dos fluxos mais estáveis, descrito manualmente — '
+        'não uma varredura automática de todas as ~100 rotas `api/`.\n\n'
+        '## Grupos\n'
+        '- **Utilidades** — consultas de CEP e CNPJ\n'
+        '- **Contas Bancárias** — CRUD das contas (credenciais cifradas)\n'
+        '- **Conciliação** — indicadores da cobrança registrada\n'
     ),
-    'VERSION': '3.1.0',
+    'VERSION': ((BASE_DIR / 'VERSION').read_text().strip() if (BASE_DIR / 'VERSION').exists() else '3.2'),
     'SERVE_INCLUDE_SCHEMA': False,
     'CONTACT': {
         'name': 'Maxwell da Silva Oliveira',
         'email': 'maxwbh@gmail.com',
     },
     'LICENSE': {'name': 'Proprietário — M&S do Brasil LTDA'},
+    # Assets servidos localmente (sem CDN) via drf-spectacular-sidecar.
+    'SWAGGER_UI_DIST': 'SIDECAR',
+    'SWAGGER_UI_FAVICON_HREF': 'SIDECAR',
+    'REDOC_DIST': 'SIDECAR',
     'SWAGGER_UI_SETTINGS': {
         'deepLinking': True,
         'persistAuthorization': True,
         'displayOperationId': False,
+        'docExpansion': 'list',
+        'defaultModelsExpandDepth': -1,
     },
+    # Mantém o hook padrão de enums e injeta o catálogo curado de endpoints
+    # (a API usa views Django puras, não introspectáveis pelo DRF).
+    'POSTPROCESSING_HOOKS': [
+        'drf_spectacular.hooks.postprocess_schema_enums',
+        'gestao_contrato.api_docs.add_curated_paths',
+    ],
     'COMPONENT_SPLIT_REQUEST': True,
     'SORT_OPERATIONS': False,
 }
@@ -363,6 +392,9 @@ BRCOBRANCA_HEALTH_TIMEOUT = config('BRCOBRANCA_HEALTH_TIMEOUT', default=90, cast
 BRCOBRANCA_BACKOFF_COLD_START = [5, 10, 20, 30]
 # Pacing entre chamadas individuais de geração de boleto (ms) — reduz burst no Render free tier
 BRCOBRANCA_INTER_BOLETO_DELAY_MS = config('BRCOBRANCA_INTER_BOLETO_DELAY_MS', default=100, cast=int)
+# Boletos por chamada no lote POST /api/boleto/multi — o gateway cobranca-api
+# aceita até 200 por requisição (geração em massa da tela Boletos do Mês)
+BOLETO_MULTI_TAMANHO_LOTE = config('BOLETO_MULTI_TAMANHO_LOTE', default=200, cast=int)
 # Cooldown (s) entre o último burst de geração de boletos e o POST de remessa (0 desativa)
 BRCOBRANCA_REMESSA_COOLDOWN_S = config('BRCOBRANCA_REMESSA_COOLDOWN_S', default=5, cast=int)
 # Tempo médio (s) de resposta da API por boleto — usado só na estimativa visual de progresso
