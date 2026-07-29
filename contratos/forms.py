@@ -131,6 +131,38 @@ class ContratoForm(forms.ModelForm):
             }),
         }
 
+    def _limitar_metodos_cobranca(self):
+        """
+        Restringe as opções de `metodo_cobranca` aos métodos habilitados na
+        imobiliária do contrato (Imobiliaria.metodos_cobranca).
+
+        A imobiliária é resolvida do POST, do initial ou da instância — nessa
+        ordem — porque o formulário serve à criação e à edição. O método já
+        gravado no contrato é preservado na lista mesmo que tenha sido
+        desabilitado depois, para a edição não perder o dado.
+        """
+        campo = self.fields.get('metodo_cobranca')
+        if campo is None:
+            return
+
+        origem = ((self.data.get('imobiliaria') if self.data else None)
+                  or self.initial.get('imobiliaria')
+                  or getattr(self.instance, 'imobiliaria_id', None))
+        imob = origem if isinstance(origem, Imobiliaria) else (
+            Imobiliaria.objects.filter(pk=origem).first() if origem else None)
+
+        habilitados = list(getattr(imob, 'metodos_cobranca', None) or []) if imob else []
+        if not habilitados:
+            return  # imobiliária indefinida ou sem restrição: mantém tudo
+
+        atual = getattr(self.instance, 'metodo_cobranca', '') or ''
+        permitidos = set(habilitados) | ({atual} if atual else set())
+        campo.choices = [(v, r) for v, r in campo.choices if not v or v in permitidos]
+        campo.help_text = (
+            f'Métodos habilitados em {imob.nome}. Para liberar outros, '
+            'ajuste o cadastro da imobiliária.'
+        )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -162,6 +194,11 @@ class ContratoForm(forms.ModelForm):
         # Importar ContaBancaria para o queryset
         from core.models import ContaBancaria
         self.fields['conta_bancaria_padrao'].queryset = ContaBancaria.objects.filter(ativo=True)
+
+        # Método de cobrança: oferecer somente os métodos HABILITADOS na
+        # imobiliária. Antes o select listava todos e o usuário só descobria a
+        # indisponibilidade no erro de validação, depois de salvar.
+        self._limitar_metodos_cobranca()
 
         # Se for edicao, desabilitar campos que nao devem ser alterados
         if self.instance and self.instance.pk:

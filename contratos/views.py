@@ -145,6 +145,11 @@ class ContratoListView(LoginRequiredMixin, TenantMixin, PaginacaoMixin, ListView
         ).select_related('comprador', 'imovel', 'imobiliaria')
 
         for contrato in contratos_ativos:
+            # Contrato 100% pago não recebe reajuste: não há saldo a corrigir.
+            # (Antes o badge de reajuste aparecia até em contrato quitado.)
+            if contrato.esta_totalmente_pago:
+                continue
+
             # Data base para reajuste
             data_base = contrato.data_ultimo_reajuste or contrato.data_contrato
 

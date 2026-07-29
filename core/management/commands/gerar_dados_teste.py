@@ -15,6 +15,11 @@ import re
 from decimal import Decimal
 from datetime import date, timedelta
 from django.core.management.base import BaseCommand
+
+from ._dados_brasil import (  # dados brasileiros válidos p/ massa de teste
+    gerar_pessoa, gerar_empresa, gerar_endereco, gerar_telefones, gerar_email,
+    gerar_cpf, gerar_cnpj, gerar_coordenadas, ENDERECOS,
+)
 from django.utils import timezone
 from django.db import transaction
 from faker import Faker
@@ -143,6 +148,19 @@ class Command(BaseCommand):
         if options['limpar']:
             self.stdout.write(self.style.WARNING('Limpando dados existentes...'))
             self.limpar_dados()
+        else:
+            # Guarda anti-duplicação: o gerador usa seed fixa (dados reprodutíveis)
+            # e cria imóveis/compradores novos a cada execução. Rodar duas vezes
+            # sem --limpar produzia o MESMO loteamento, os MESMOS compradores e
+            # dois contratos identicos por imovel (bug visto na listagem).
+            if Contrato.objects.exists():
+                self.stdout.write(self.style.ERROR(
+                    'Já existem contratos no banco. Rodar novamente sem --limpar '
+                    'duplicaria imóveis, compradores e contratos (o gerador usa '
+                    'seed fixa).\n'
+                    'Use: manage.py gerar_dados_teste --limpar'
+                ))
+                return
 
         self.stdout.write(self.style.SUCCESS('Iniciando geração de dados de teste...'))
 
@@ -239,6 +257,10 @@ class Command(BaseCommand):
                 # 15. Criar templates padrão de notificação (Email + SMS + WhatsApp)
                 self.stdout.write('Criando templates padrão de notificação...')
                 templates_criados = self.criar_templates_notificacao()
+
+                # 10.1 Régua de cobrança (N-03) — sem regras a tela fica vazia
+                # e o sistema cai nos padrões de settings.py
+                regras_criadas = self.criar_regua_cobranca()
                 self.stdout.write(f'   {templates_criados} templates criados/verificados')
 
                 # 16. Gerar arquivo remessa CNAB para boletos simulados
@@ -272,6 +294,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'   • {indices_reais} Índices Reais IPCA/IGPM (planilhas)'))
             self.stdout.write(self.style.SUCCESS(f'   • {len(contratos_reais)} Contratos Reais (Uanda + Henry)'))
             self.stdout.write(self.style.SUCCESS(f'   • {templates_criados} Templates de Notificação (Email+SMS+WhatsApp)'))
+            self.stdout.write(self.style.SUCCESS(f'   • {regras_criadas} Regras da Régua de Cobrança (N-03)'))
             self.stdout.write(self.style.SUCCESS(f'   • {retornos_cnab} Arquivos de Retorno CNAB (conciliação bancária)'))
 
         except Exception as e:
@@ -599,18 +622,25 @@ class Command(BaseCommand):
                 # Últimos lotes ficam disponíveis (não vendidos)
                 disponivel = lote_num > (lotes_por_loteamento - lotes_nao_vendidos)
 
+                # Endereço real (CEP coerente com a cidade) + coordenadas dentro
+                # da malha urbana: sem isso o mapa do imóvel abre vazio.
+                end_lote = gerar_endereco(random)
+                lat, lon = gerar_coordenadas(end_lote['cidade'], random)
                 lote = Imovel.objects.create(
                     imobiliaria=imobiliaria,
                     tipo=TipoImovel.LOTE,
                     identificacao=f'Quadra {quadra}, Lote {lote_na_quadra:02d}',
                     loteamento=nome_loteamento,
-                    cep='35700-000',
-                    logradouro=f'Rua {quadra}',
+                    cep=end_lote['cep'],
+                    logradouro=end_lote['logradouro'],
                     numero=str(lote_na_quadra),
                     bairro=nome_loteamento,
-                    cidade='Sete Lagoas',
-                    estado='MG',
-                    endereco=f'Quadra {quadra}, Lote {lote_na_quadra:02d} - {nome_loteamento} - Sete Lagoas/MG',
+                    cidade=end_lote['cidade'],
+                    estado=end_lote['uf'],
+                    latitude=lat,
+                    longitude=lon,
+                    endereco=(f'Quadra {quadra}, Lote {lote_na_quadra:02d} - '
+                              f'{nome_loteamento} - {end_lote["cidade"]}/{end_lote["uf"]}'),
                     area=area,
                     valor=valor_lote,
                     matricula=f'{20000+i*1000+lote_num}',
@@ -652,18 +682,23 @@ class Command(BaseCommand):
             # Últimos terrenos ficam disponíveis
             disponivel = i >= (quantidade - terrenos_nao_vendidos)
 
+            end_terreno = gerar_endereco(random)
+            lat_t, lon_t = gerar_coordenadas(end_terreno['cidade'], random)
             terreno = Imovel.objects.create(
                 imobiliaria=imobiliaria,
                 tipo=TipoImovel.TERRENO,
                 identificacao=f'Terreno {i+1}',
-                loteamento=f'Bairro {bairro}',
-                cep=random.choice(ceps),
-                logradouro=rua,
-                numero=numero,
-                bairro=bairro,
-                cidade='Sete Lagoas',
-                estado='MG',
-                endereco=f'Rua {rua}, {numero} - {bairro} - Sete Lagoas/MG',
+                loteamento=f'Bairro {end_terreno["bairro"]}',
+                cep=end_terreno['cep'],
+                logradouro=end_terreno['logradouro'],
+                numero=end_terreno['numero'],
+                bairro=end_terreno['bairro'],
+                cidade=end_terreno['cidade'],
+                estado=end_terreno['uf'],
+                latitude=lat_t,
+                longitude=lon_t,
+                endereco=(f'{end_terreno["logradouro"]}, {end_terreno["numero"]} - '
+                          f'{end_terreno["bairro"]} - {end_terreno["cidade"]}/{end_terreno["uf"]}'),
                 area=area,
                 valor=valor_terreno,
                 matricula=f'{30000+i}',
@@ -690,55 +725,60 @@ class Command(BaseCommand):
         qtd_pf = int(quantidade * 0.8)
         qtd_pj = quantidade - qtd_pf
 
-        # Criar Pessoas Físicas
+        # Criar Pessoas Físicas — dados válidos (CPF com DV, endereço real cujo
+        # CEP/logradouro/bairro/cidade/UF são coerentes entre si, DDD da cidade)
         for i in range(qtd_pf):
-            nome = self.fake.name()
-            cpf = self.gerar_cpf()
-            bairro = random.choice(bairros)
+            pessoa = gerar_pessoa(random)
+            endereco = gerar_endereco(random)
+            fones = gerar_telefones(endereco['ddd'], random)
+            nome = pessoa['nome']
             estado_civil = random.choice(['SOLTEIRO', 'CASADO', 'DIVORCIADO', 'VIUVO'])
 
             comprador = Comprador.objects.create(
                 tipo_pessoa='PF',
                 nome=nome,
-                cpf=cpf,
-                rg=f'{random.randint(10000000, 99999999)}',
+                cpf=pessoa['cpf'],
+                rg=pessoa['rg'],
                 data_nascimento=self.fake.date_of_birth(minimum_age=25, maximum_age=65),
                 estado_civil=estado_civil,
-                profissao=self.fake.job()[:100],
-                # Endereço estruturado
-                cep=random.choice(ceps),
-                logradouro=self.fake.street_name(),
-                numero=str(random.randint(1, 999)),
-                bairro=bairro,
-                cidade='Sete Lagoas',
-                estado='MG',
+                profissao=pessoa['profissao'],
+                # Endereço estruturado (real e coerente)
+                cep=endereco['cep'],
+                logradouro=endereco['logradouro'],
+                numero=endereco['numero'],
+                complemento=endereco['complemento'],
+                bairro=endereco['bairro'],
+                cidade=endereco['cidade'],
+                estado=endereco['uf'],
                 # Contato
-                telefone=f'(31) {random.randint(3000, 3999)}-{random.randint(1000, 9999)}',
-                celular=f'(31) 9{random.randint(8000, 9999)}-{random.randint(1000, 9999)}',
-                email=self.normalizar_email(f'{nome}@email.com')[:100],
+                telefone=fones['telefone'],
+                celular=fones['celular'],
+                email=gerar_email(nome)[:100],
                 notificar_email=True,
                 notificar_sms=random.choice([True, False]),
                 notificar_whatsapp=random.choice([True, False]),
                 # Cônjuge (se casado)
-                conjuge_nome=self.fake.name() if estado_civil == 'CASADO' else '',
-                conjuge_cpf=self.gerar_cpf() if estado_civil == 'CASADO' else '',
+                conjuge_nome=gerar_pessoa(random)['nome'] if estado_civil == 'CASADO' else '',
+                conjuge_cpf=gerar_cpf(random) if estado_civil == 'CASADO' else '',
                 ativo=True
             )
             compradores.append(comprador)
 
-        # Criar Pessoas Jurídicas
-        tipos_empresa = ['Construtora', 'Incorporadora', 'Investimentos', 'Participações', 'Holdings']
+        # Criar Pessoas Jurídicas — CNPJ com DV válido e endereço real coerente
         for i in range(qtd_pj):
-            razao_social = f'{self.fake.company()} {random.choice(tipos_empresa)} LTDA'
-            nome_fantasia = razao_social.split()[0] + ' ' + razao_social.split()[1]
-            cnpj = self.gerar_cnpj()
-            bairro = random.choice(bairros)
+            empresa = gerar_empresa(random)
+            endereco = gerar_endereco(random)
+            fones = gerar_telefones(endereco['ddd'], random)
+            razao_social = empresa['razao_social']
+            nome_fantasia = empresa['nome_fantasia']
+            cnpj = empresa['cnpj']
+            responsavel = gerar_pessoa(random)
 
             comprador = Comprador.objects.create(
                 tipo_pessoa='PJ',
                 nome=razao_social[:200],
                 # Campos PF com valores para PJ (constraints do banco)
-                cpf=self.gerar_cpf(),  # CPF fictício único (constraint UNIQUE no banco)
+                cpf=gerar_cpf(random),  # CPF fictício único (constraint UNIQUE no banco)
                 rg='',
                 data_nascimento=None,
                 estado_civil='',
@@ -748,20 +788,20 @@ class Command(BaseCommand):
                 nome_fantasia=nome_fantasia[:200],
                 inscricao_estadual=f'{random.randint(100, 999)}.{random.randint(100, 999)}.{random.randint(100, 999)}',
                 inscricao_municipal=f'{random.randint(10000, 99999)}',
-                responsavel_legal=self.fake.name(),
-                responsavel_cpf=self.gerar_cpf(),
-                # Endereço estruturado
-                cep=random.choice(ceps),
-                logradouro=self.fake.street_name(),
-                numero=str(random.randint(1, 999)),
+                responsavel_legal=responsavel['nome'],
+                responsavel_cpf=responsavel['cpf'],
+                # Endereço estruturado (real e coerente)
+                cep=endereco['cep'],
+                logradouro=endereco['logradouro'],
+                numero=endereco['numero'],
                 complemento=random.choice(['Sala 01', 'Sala 02', 'Loja', '', '']),
-                bairro=bairro,
-                cidade='Sete Lagoas',
-                estado='MG',
+                bairro=endereco['bairro'],
+                cidade=endereco['cidade'],
+                estado=endereco['uf'],
                 # Contato
-                telefone=f'(31) {random.randint(3000, 3999)}-{random.randint(1000, 9999)}',
-                celular=f'(31) 9{random.randint(8000, 9999)}-{random.randint(1000, 9999)}',
-                email=self.normalizar_email(f'contato@{nome_fantasia}.com.br')[:100],
+                telefone=fones['telefone'],
+                celular=fones['celular'],
+                email=gerar_email(f'contato {nome_fantasia}', 'com.br')[:100],
                 notificar_email=True,
                 notificar_sms=False,
                 notificar_whatsapp=True,
@@ -1808,16 +1848,20 @@ class Command(BaseCommand):
         pool = list(compradores[-5:]) if len(compradores) >= 5 else list(compradores)
 
         def _imovel(sufixo, area='300.00'):
+            _lat, _lon = gerar_coordenadas('Sete Lagoas', random)
             return Imovel.objects.create(
                 imobiliaria=imob,
                 tipo=TipoImovel.LOTE,
                 identificacao=f'Cenário {sufixo}',
                 area=Decimal(area),
-                logradouro='Rua dos Cenários',
+                cep='35701-057',
+                logradouro='Avenida Dr. Renato Azeredo',
                 numero=sufixo,
-                bairro='Distrito de Testes',
+                bairro='Jardim Cambuí',
                 cidade='Sete Lagoas',
                 estado='MG',
+                latitude=_lat,
+                longitude=_lon,
                 disponivel=False,
                 observacoes=f'Imóvel de cenário de teste HU {sufixo}',
             )
@@ -2239,6 +2283,45 @@ class Command(BaseCommand):
                 count += 1
 
         return count
+
+    def criar_regua_cobranca(self):
+        """
+        N-03: régua de cobrança padrão.
+
+        Sem regras ativas a tela "Régua de Notificação" fica vazia e o sistema
+        recorre aos padrões de settings.py. Esta régua cobre o ciclo típico:
+        lembretes antes do vencimento e cobranças escalonadas na inadimplência,
+        variando o canal conforme o atraso avança.
+        """
+        from notificacoes.models import (RegraNotificacao, TipoGatilho,
+                                         TipoNotificacao, TemplateNotificacao)
+
+        # (nome, gatilho, dias, canal)
+        REGUA = [
+            ('Lembrete 5 dias antes',   TipoGatilho.ANTES_VENCIMENTO, 5,  TipoNotificacao.EMAIL),
+            ('Lembrete 1 dia antes',    TipoGatilho.ANTES_VENCIMENTO, 1,  TipoNotificacao.WHATSAPP),
+            ('Vencimento hoje',         TipoGatilho.APOS_VENCIMENTO,  0,  TipoNotificacao.EMAIL),
+            ('Cobrança 3 dias após',    TipoGatilho.APOS_VENCIMENTO,  3,  TipoNotificacao.WHATSAPP),
+            ('Cobrança 7 dias após',    TipoGatilho.APOS_VENCIMENTO,  7,  TipoNotificacao.EMAIL),
+            ('Cobrança 15 dias após',   TipoGatilho.APOS_VENCIMENTO,  15, TipoNotificacao.SMS),
+            ('Cobrança 30 dias após',   TipoGatilho.APOS_VENCIMENTO,  30, TipoNotificacao.EMAIL),
+        ]
+
+        # Reaproveita um template do mesmo canal, quando existir (o campo do
+        # TemplateNotificacao chama-se `tipo`, com os mesmos valores de canal)
+        templates = {}
+        for t in TemplateNotificacao.objects.filter(ativo=True):
+            templates.setdefault(t.tipo, t)
+
+        criadas = 0
+        for nome, gatilho, dias, canal in REGUA:
+            _, created = RegraNotificacao.objects.get_or_create(
+                tipo_gatilho=gatilho, dias_offset=dias, tipo_notificacao=canal,
+                defaults={'nome': nome, 'ativo': True,
+                          'template': templates.get(canal)},
+            )
+            criadas += 1 if created else 0
+        return criadas
 
     def criar_templates_notificacao(self):
         """
@@ -2692,33 +2775,70 @@ class Command(BaseCommand):
                         ('imobiliaria', 'imóveis', 'negócios', 'ltda', 'me', 'sa', 'eireli')]
             iniciais = ''.join(p[0].upper() for p in palavras[:3]) or imob.nome[:3].upper()
 
-            # Imagem 400×120
-            img = Image.new('RGB', (400, 120), color=(r, g, b))
+            # Logo 480×160 com fundo TRANSPARENTE (PNG), como uma marca real:
+            # símbolo (telhado sobre monograma) + nome + linha de contato.
+            larg, alt = 480, 160
+            img = Image.new('RGBA', (larg, alt), (255, 255, 255, 0))
             draw = ImageDraw.Draw(img)
 
-            # Faixa inferior mais escura
-            escuro = (max(0, r - 40), max(0, g - 40), max(0, b - 40))
-            draw.rectangle([0, 90, 400, 120], fill=escuro)
+            claro = (min(255, r + 55), min(255, g + 55), min(255, b + 55))
+            escuro = (max(0, r - 45), max(0, g - 45), max(0, b - 45))
 
-            # Iniciais grandes no lado esquerdo
-            tam_iniciais = 62
             try:
                 from PIL import ImageFont
-                font_inicial = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', tam_iniciais)
-                font_nome = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 22)
-                font_rodape = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 14)
+                _bold = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+                _reg = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+                font_mono = ImageFont.truetype(_bold, 44)
+                font_nome = ImageFont.truetype(_bold, 34)
+                font_sub = ImageFont.truetype(_reg, 17)
             except Exception:
-                font_inicial = font_nome = font_rodape = None
+                font_mono = font_nome = font_sub = None
 
-            draw.text((20, 5), iniciais, fill='white', font=font_inicial)
+            # ── Símbolo: casa estilizada (telhado + corpo arredondado) ──
+            sx, sy, s_lado = 22, 32, 96
+            draw.rounded_rectangle([sx, sy + 30, sx + s_lado, sy + s_lado],
+                                   radius=12, fill=(r, g, b))
+            draw.polygon([(sx - 8, sy + 36), (sx + s_lado / 2, sy - 6),
+                          (sx + s_lado + 8, sy + 36)], fill=claro)
+            # "porta" vazada dá leitura de imóvel mesmo em tamanho pequeno
+            draw.rounded_rectangle([sx + 38, sy + 62, sx + 58, sy + s_lado],
+                                   radius=4, fill=(255, 255, 255, 235))
+            # monograma sobre o telhado
+            bbox = draw.textbbox((0, 0), iniciais[:2], font=font_mono)
+            draw.text((sx + s_lado / 2 - (bbox[2] - bbox[0]) / 2, sy + 4),
+                      iniciais[:2], fill='white', font=font_mono)
 
-            # Nome da empresa à direita
-            nome_curto = imob.nome[:28]
-            draw.text((140, 22), nome_curto, fill='white', font=font_nome)
+            # ── Nome da imobiliária: reduz a fonte até caber na largura útil ──
+            tx = sx + s_lado + 26
+            disponivel_px = larg - tx - 24
+            nome_curto = imob.nome.replace('Imobiliária ', '').strip() or imob.nome
 
-            # Rodapé: telefone ou site
-            rodape = (imob.rodape_contato or imob.telefone or '')[:50]
-            draw.text((10, 96), rodape, fill=(220, 220, 220), font=font_rodape)
+            def _cabe(txt, fonte):
+                bb = draw.textbbox((0, 0), txt, font=fonte)
+                return (bb[2] - bb[0]) <= disponivel_px
+
+            try:
+                from PIL import ImageFont
+                for tamanho in (34, 30, 26, 23, 20):
+                    _f = ImageFont.truetype(_bold, tamanho)
+                    if _cabe(nome_curto, _f):
+                        font_nome = _f
+                        break
+                else:
+                    font_nome = ImageFont.truetype(_bold, 20)
+            except Exception:
+                pass
+            draw.text((tx, 46), nome_curto, fill=(r, g, b), font=font_nome)
+
+            # Linha de apoio + contato (truncado com reticências se não couber)
+            draw.rectangle([tx, 92, larg - 24, 95], fill=claro)
+            rodape = (imob.rodape_contato or imob.telefone or 'Imóveis e Loteamentos')
+            if font_sub is not None:
+                while rodape and not _cabe(rodape, font_sub):
+                    rodape = rodape[:-1]
+                if rodape != (imob.rodape_contato or imob.telefone or 'Imóveis e Loteamentos'):
+                    rodape = rodape[:-1] + '…'
+            draw.text((tx, 102), rodape, fill=escuro, font=font_sub)
 
             # Salvar
             buf = io.BytesIO()
@@ -2893,7 +3013,9 @@ class Command(BaseCommand):
             defaults=dict(
                 tipo=TipoImovel.LOTE,
                 area=Decimal('300.00'),
-                cep='35700-000',
+                cep='35700-004',
+                latitude=gerar_coordenadas('Sete Lagoas', random)[0],
+                longitude=gerar_coordenadas('Sete Lagoas', random)[1],
                 logradouro='Rua Parque das Nogueiras',
                 numero='16',
                 bairro='Parque das Nogueiras',
@@ -3018,7 +3140,9 @@ class Command(BaseCommand):
             defaults=dict(
                 tipo=TipoImovel.LOTE,
                 area=Decimal('360.00'),
-                cep='35700-000',
+                cep='35700-004',
+                latitude=gerar_coordenadas('Sete Lagoas', random)[0],
+                longitude=gerar_coordenadas('Sete Lagoas', random)[1],
                 logradouro='Rua Parque das Nogueiras',
                 numero='13',
                 bairro='Parque das Nogueiras',

@@ -607,9 +607,49 @@ class Contrato(TimeStampedModel):
             models.Index(fields=['status']),
             models.Index(fields=['data_contrato']),
         ]
+        constraints = [
+            # Um imóvel não pode ter dois contratos em vigor ao mesmo tempo.
+            # Contratos QUITADO/CANCELADO ficam de fora: o mesmo imóvel pode ser
+            # revendido depois de quitado ou de um distrato.
+            models.UniqueConstraint(
+                fields=['imovel'],
+                condition=models.Q(status__in=['ATIVO', 'SUSPENSO']),
+                name='unique_contrato_vigente_por_imovel',
+            ),
+        ]
 
     def __str__(self):
         return f"Contrato {self.numero_contrato} - {self.comprador.nome}"
+
+    @property
+    def esta_totalmente_pago(self) -> bool:
+        """
+        True quando todas as parcelas do contrato estão pagas.
+
+        Base para o status QUITADO e para excluir o contrato da régua de
+        reajuste: sem saldo devedor não há valor a corrigir.
+        """
+        parcelas = self.parcelas.all()
+        total = len(parcelas) if hasattr(parcelas, '__len__') else parcelas.count()
+        if not total:
+            return False
+        return not any(not p.pago for p in parcelas)
+
+    def sincronizar_quitacao(self, salvar=True) -> bool:
+        """
+        Promove o contrato a QUITADO quando todas as parcelas estão pagas.
+
+        Só age sobre contratos em vigor (ATIVO/SUSPENSO) — CANCELADO é decisão
+        comercial e não deve ser sobrescrito. Retorna True se mudou o status.
+        """
+        if self.status not in (StatusContrato.ATIVO, StatusContrato.SUSPENSO):
+            return False
+        if not self.esta_totalmente_pago:
+            return False
+        self.status = StatusContrato.QUITADO
+        if salvar:
+            self.save(update_fields=['status'])
+        return True
 
     def get_config_boleto(self):
         """
@@ -717,6 +757,19 @@ class Contrato(TimeStampedModel):
         """Validações de negócio do contrato"""
         super().clean()
         errors = {}
+
+        # Um imóvel só pode ter um contrato em vigor. A constraint no banco
+        # garante a integridade; aqui a mensagem chega amigável ao usuário.
+        if self.imovel_id and self.status in ('ATIVO', 'SUSPENSO'):
+            outro = Contrato.objects.filter(
+                imovel_id=self.imovel_id, status__in=['ATIVO', 'SUSPENSO'],
+            ).exclude(pk=self.pk).first()
+            if outro:
+                errors['imovel'] = (
+                    f'Este imóvel já possui o contrato {outro.numero_contrato} '
+                    f'em vigor ({outro.get_status_display()}). Quite ou cancele '
+                    f'o contrato anterior antes de vender o imóvel novamente.'
+                )
 
         # Validar prazo máximo de 360 meses
         if self.numero_parcelas is not None and self.numero_parcelas > 360:
