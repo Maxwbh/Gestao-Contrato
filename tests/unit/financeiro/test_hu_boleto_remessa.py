@@ -192,12 +192,14 @@ class TestHU02_GerarNBoletos:
 
     def test_gerar_carne_parcela_de_outro_contrato_ignorada(self, cli, contrato_com_parcelas, dominio):
         """IDs de outro contrato são silenciosamente ignorados."""
-        from tests.fixtures.factories import ContratoFactory
+        from tests.fixtures.factories import ContratoFactory, ImovelFactory
         from contratos.models import TipoCorrecao
         imob, conta, imovel, comprador = dominio
 
-        # Criar outro contrato com suas parcelas (auto-geradas)
-        outro = ContratoFactory(imobiliaria=imob, imovel=imovel, comprador=comprador,
+        # Criar outro contrato com suas parcelas (auto-geradas). O imóvel tem de
+        # ser OUTRO: um imóvel não aceita dois contratos em vigor.
+        outro = ContratoFactory(imobiliaria=imob, comprador=comprador,
+                                imovel=ImovelFactory(imobiliaria=imob, disponivel=False),
                                 numero_contrato='CTR-HU-999', numero_parcelas=3,
                                 tipo_correcao=TipoCorrecao.FIXO)
         parcela_outra = outro.parcelas.first()
