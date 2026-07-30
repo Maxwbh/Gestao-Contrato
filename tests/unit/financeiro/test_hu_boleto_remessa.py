@@ -162,13 +162,24 @@ class TestHU02_GerarNBoletos:
     """N boletos de 1 contrato."""
 
     def test_gerar_todos_boletos_contrato(self, cli, contrato_com_parcelas):
-        """POST em gerar_carne deve tentar gerar todos os boletos selecionados."""
+        """POST em gerar_carne emite o carnê em UM lote (/api/boleto/multi)."""
+        from financeiro.models import StatusBoleto
+        from financeiro.services.boleto_service import BoletoService
         parcelas = list(contrato_com_parcelas.parcelas.order_by('numero_parcela')[:6])
         ids = [p.pk for p in parcelas]
 
+        def _lote_ok(pares, *a, **kw):
+            """Simula a emissão em lote: marca as parcelas e devolve os pks ok."""
+            pks = []
+            for parcela, _conta in pares:
+                parcela.status_boleto = StatusBoleto.GERADO
+                parcela.nosso_numero = f'{parcela.numero_parcela:010d}'
+                parcela.save(update_fields=['status_boleto', 'nosso_numero'])
+                pks.append(parcela.pk)
+            return {'gerados': len(pks), 'erros': [], 'parcelas_ok': pks}
+
         url = reverse('financeiro:gerar_carne', kwargs={'contrato_id': contrato_com_parcelas.pk})
-        with patch('financeiro.models.Parcela.gerar_boleto',
-                   return_value=_mock_brcobranca_sucesso()):
+        with patch.object(BoletoService, 'gerar_boletos_lote', side_effect=_lote_ok) as lote:
             resp = cli.post(
                 url,
                 content_type='application/json',
@@ -179,6 +190,8 @@ class TestHU02_GerarNBoletos:
         data = resp.json()
         assert data['sucesso'] is True
         assert data.get('gerados', 0) > 0
+        # UMA chamada ao lote — não N chamadas individuais
+        assert lote.call_count == 1
 
     def test_gerar_carne_sem_parcelas_retorna_erro(self, cli, contrato_com_parcelas):
         """POST sem IDs deve retornar erro 400."""

@@ -15,7 +15,10 @@ from datetime import timedelta
 import logging
 import uuid
 
-from core.models import TimeStampedModel, ContaBancaria, ProviderBoleto, MetodoCobranca
+from core.models import (
+    TimeStampedModel, ContaBancaria, ProviderBoleto, MetodoCobranca,
+    PROVIDER_OFFLINE_LEGADO,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1102,10 +1105,14 @@ class Parcela(TimeStampedModel):
         if not conta_bancaria:
             raise ValueError("Nenhuma conta bancária disponível para gerar boleto")
 
-        # Feature flag por conta: provider != 'pycobranca' → cobrança registrada via Boleto-API.
-        # Mantém fluxo CNAB intacto quando desligado (nenhuma mudança de comportamento).
-        provider = getattr(conta_bancaria, 'provider', 'pycobranca') or 'pycobranca'
-        if provider != 'pycobranca':
+        # Feature flag por conta: provider registrado (c6/sicoob) → cobrança
+        # registrada via Boleto-API. Mantém fluxo offline (CNAB/pyCobrança)
+        # intacto quando desligado (nenhuma mudança de comportamento).
+        # 'brcobranca' é o valor legado do modo offline — tratado como offline.
+        provider = getattr(conta_bancaria, 'provider', '') or ProviderBoleto.PYCOBRANCA
+        if provider == PROVIDER_OFFLINE_LEGADO:
+            provider = ProviderBoleto.PYCOBRANCA
+        if provider != ProviderBoleto.PYCOBRANCA:
             return self._gerar_via_boleto_api(conta_bancaria, provider, force, enviar_email)
 
         # Usar o serviço de boleto (fluxo CNAB/BRCobrança existente)
@@ -1165,7 +1172,10 @@ class Parcela(TimeStampedModel):
 
     def _e_boleto_api(self) -> bool:
         """True se esta parcela foi/será cobrada via gateway Boleto-API (C6/Sicoob)."""
-        return bool(self.provider and self.provider != ProviderBoleto.PYCOBRANCA)
+        return bool(
+            self.provider
+            and self.provider not in (ProviderBoleto.PYCOBRANCA, PROVIDER_OFFLINE_LEGADO)
+        )
 
     def _bapi_ctx(self):
         """(tenant_id, bapi_token) da conta bancária para chamadas ao gateway."""

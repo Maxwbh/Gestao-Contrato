@@ -32,6 +32,7 @@ from unittest.mock import patch, MagicMock
 from django.test import Client
 from django.urls import reverse
 from core.hashids_utils import encode_id
+from financeiro.services.boleto_service import BoletoService
 
 # ── Constantes do cenário ──────────────────────────────────────────────────────
 PV = Decimal('120000.00')       # Valor financiado (130k total − 10k entrada)
@@ -65,6 +66,25 @@ def _mock_gerar_boleto(self, conta_bancaria=None, force=False, enviar_email=True
         'codigo_barras': '75691' + nosso_numero + '000000000000001',
         'pdf_content': b'%PDF-1.4 MOCK_BOLETO',
     }
+
+
+def _mock_gerar_boletos_lote(self, pares, *args, **kwargs):
+    """
+    Substitui BoletoService.gerar_boletos_lote() (carnê multi-boleto offline)
+    evitando chamada ao motor. Marca cada parcela como gerada e devolve os pks.
+    """
+    from financeiro.models import StatusBoleto
+    pks = []
+    for parcela, _conta in pares:
+        nosso_numero = f'{parcela.numero_parcela:010d}'
+        parcela.status_boleto = StatusBoleto.GERADO
+        parcela.nosso_numero = nosso_numero
+        parcela.linha_digitavel = (
+            f'75691.{nosso_numero[:5]} {nosso_numero[5:]} 00000.000001 1 10000000000000'
+        )
+        parcela.save(update_fields=['status_boleto', 'nosso_numero', 'linha_digitavel'])
+        pks.append(parcela.pk)
+    return {'gerados': len(pks), 'erros': [], 'parcelas_ok': pks}
 
 
 # ==============================================================================
@@ -333,7 +353,8 @@ class TestHUFluxoCompleto:
         ids_20 = [p.pk for p in parcelas_carne_20]
         url_carne = reverse('financeiro:gerar_carne', kwargs={'contrato_id': contrato.pk})
 
-        with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto):
+        with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto), \
+             patch.object(BoletoService, 'gerar_boletos_lote', _mock_gerar_boletos_lote):
             resp = cli.post(
                 url_carne,
                 data=json.dumps({'parcelas': ids_20}),
@@ -377,7 +398,8 @@ class TestHUFluxoCompleto:
 
         ids_ciclo3 = [p.pk for p in parcelas_ciclo3]
 
-        with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto):
+        with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto), \
+             patch.object(BoletoService, 'gerar_boletos_lote', _mock_gerar_boletos_lote):
             resp = cli.post(
                 url_carne,
                 data=json.dumps({'parcelas': ids_ciclo3}),
@@ -813,7 +835,8 @@ class TestGeracaoCarne20Meses:
             ).order_by('numero_parcela').values_list('pk', flat=True)[:20]
         )
         url = reverse('financeiro:gerar_carne', kwargs={'contrato_id': contrato_36m.pk})
-        with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto):
+        with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto), \
+             patch.object(BoletoService, 'gerar_boletos_lote', _mock_gerar_boletos_lote):
             resp = cli.post(url, data=json.dumps({'parcelas': ids}), content_type='application/json')
 
         assert resp.status_code == 200
@@ -863,7 +886,8 @@ class TestBloqueioReajusteCiclo3:
         assert len(ids_c3) > 0
 
         url = reverse('financeiro:gerar_carne', kwargs={'contrato_id': contrato_36m.pk})
-        with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto):
+        with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto), \
+             patch.object(BoletoService, 'gerar_boletos_lote', _mock_gerar_boletos_lote):
             resp = cli.post(url, data=json.dumps({'parcelas': ids_c3}),
                             content_type='application/json')
 
@@ -887,7 +911,8 @@ class TestBloqueioReajusteCiclo3:
             ).order_by('numero_parcela').values_list('pk', flat=True)
         )
         url = reverse('financeiro:gerar_carne', kwargs={'contrato_id': contrato_36m.pk})
-        with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto):
+        with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto), \
+             patch.object(BoletoService, 'gerar_boletos_lote', _mock_gerar_boletos_lote):
             resp = cli.post(url, data=json.dumps({'parcelas': ids}),
                             content_type='application/json')
 

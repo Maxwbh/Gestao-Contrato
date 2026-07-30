@@ -71,7 +71,7 @@ class BoletoService:
         '341': '175',      # Itau
         '336': '10',       # C6 Bank (10=emissao banco, 20=emissao cliente)
         '748': '3',        # Sicredi (3=sem registro)
-        '756': '01',       # Sicoob (2 dígitos obrigatórios)
+        '756': '1',        # Sicoob: 1 dígito (1, 3 ou 9) — '01' estoura o campo livre do código de barras
     }
 
     # Campos especificos obrigatorios por banco
@@ -336,7 +336,7 @@ class BoletoService:
         '104': {  # Caixa
             'agencia': 4,
             'convenio': 6,
-            'nosso_numero': 17,
+            'nosso_numero': 15,  # SIGCB: motor exige exatamente 15 dígitos (17 → HTTP 400)
         },
         '237': {  # Bradesco
             'agencia': 4,
@@ -473,6 +473,12 @@ class BoletoService:
         for campo in campos_obrigatorios:
             if not dados_filtrados.get(campo):
                 logger.warning(f"Campo obrigatorio '{campo}' ausente para banco {codigo_banco}")
+
+        # Convênio vazio quebra a validação do motor para bancos que não o usam
+        # (ex.: Bradesco → "Convenio não é um número"). Omite quando não há valor
+        # em vez de enviar string vazia.
+        if not dados_filtrados.get('convenio'):
+            dados_filtrados.pop('convenio', None)
 
         logger.info(f"Campos filtrados para banco {codigo_banco}: removidos={campos_remover}")
 
@@ -712,6 +718,12 @@ class BoletoService:
         # Sicoob (756)
         # Campos: agencia (4), conta_corrente (8), nosso_numero (7), convenio (7), variacao (2)
         elif codigo_banco == '756':
+            # Carteira Sicoob é de 1 dígito (1, 3 ou 9). Um valor com zero à
+            # esquerda ('01') faz o motor pyCobrança estourar o campo livre do
+            # código de barras → HTTP 400 "base.too_long". Normaliza para um
+            # dígito válido (a remessa CNAB re-padroniza para 2 dígitos sozinha).
+            cart_sicoob = re.sub(r'\D', '', str(dados.get('carteira', ''))).lstrip('0')
+            dados['carteira'] = cart_sicoob if cart_sicoob in ('1', '3', '9') else '1'
             # Variacao padrao 01
             dados['variacao'] = getattr(conta_bancaria, 'variacao', None) or '01'
             # Quantidade (obrigatorio, padrao 001)
@@ -1103,13 +1115,14 @@ class BoletoService:
             tamanho_lote: boletos por chamada à API (recomendado 10-20, padrão 15)
 
         Returns:
-            dict: {'gerados': int, 'erros': list[str]}
+            dict: {'gerados': int, 'erros': list[str], 'parcelas_ok': list[int]}
         """
         from collections import defaultdict
         from financeiro.models import StatusBoleto, Parcela as ParcelaModel
 
         gerados = 0
         erros = []
+        parcelas_ok: list = []  # pks das parcelas efetivamente geradas
         # O gateway /api/boleto/multi aceita até 200 boletos por chamada.
         if tamanho_lote is None:
             tamanho_lote = getattr(settings, 'BOLETO_MULTI_TAMANHO_LOTE', 200)
@@ -1302,8 +1315,9 @@ class BoletoService:
                     ],
                 )
                 gerados += len(a_atualizar)
+                parcelas_ok.extend(p.pk for p in a_atualizar)
 
-        return {'gerados': gerados, 'erros': erros}
+        return {'gerados': gerados, 'erros': erros, 'parcelas_ok': parcelas_ok}
 
     def _chamar_api_boleto(self, banco_nome, dados_boleto):
         """
@@ -1418,6 +1432,11 @@ class BoletoService:
                 for campo in campos_opcionais:
                     if campo in dados_boleto and dados_boleto[campo]:
                         boleto_data[campo] = dados_boleto[campo]
+
+                # Convênio vazio é rejeitado por bancos que não o usam (Bradesco):
+                # omite em vez de enviar string vazia.
+                if not boleto_data.get('convenio'):
+                    boleto_data.pop('convenio', None)
 
                 # Preparar parametros da requisicao conforme API customizada
                 _tmpl_single = getattr(settings, 'BRCOBRANCA_TEMPLATE', '')
