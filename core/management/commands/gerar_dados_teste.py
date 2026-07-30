@@ -459,9 +459,10 @@ class Command(BaseCommand):
         """
         Cria Contas Bancárias para cada imobiliária.
 
-        BB e Bradesco: fluxo CNAB offline (provider=pycobranca).
-        Sicoob e C6:   cobrança registrada via Boleto-API (provider=sicoob/c6),
-                       com account_config e tenant_id de demonstração.
+        Todas as contas usam o motor OFFLINE (provider=pycobranca — pyCobrança/
+        cobranca_api): boletos e remessa CNAB reais sem credenciais de banco.
+        A cobrança registrada (provider=c6/sicoob) exige credenciais e gateway
+        próprio, indisponíveis na massa de teste; por isso a demo é offline.
         """
         contas = []
 
@@ -482,23 +483,18 @@ class Command(BaseCommand):
                 'account_config': None,
             },
             {
-                'banco': '756',  # Sicoob — cobrança registrada via Boleto-API
+                'banco': '756',  # Sicoob — CNAB/boleto offline (pyCobrança)
                 'descricao': 'Conta Sicoob',
                 'agencia': '3073',
                 'agencia_dv': '0',
                 'conta': '12345678',
                 'conta_dv': '5',
                 'convenio': '123456789',  # 9 dígitos (remessa exige 9; boleto usa os 7 primeiros)
-                'carteira': '01',
+                'carteira': '1',  # Sicoob: 1 dígito (1/3/9); a remessa re-padroniza p/ 2
                 'layout_cnab': 'CNAB_240',
                 'nosso_numero_atual': 1,
-                'provider': 'sicoob',
-                'account_config': {
-                    'cooperativa': '3073',
-                    'conta': '12345678',
-                    'numeroCliente': '123456789',
-                    'codigoModalidade': '1',
-                },
+                'provider': 'pycobranca',
+                'account_config': None,
             },
             {
                 'banco': '237',  # Bradesco — CNAB offline (CNAB 400)
@@ -515,22 +511,18 @@ class Command(BaseCommand):
                 'account_config': None,
             },
             {
-                'banco': '336',  # C6 Bank — cobrança registrada via Boleto-API
+                'banco': '336',  # C6 Bank — CNAB/boleto offline (pyCobrança)
                 'descricao': 'Conta C6 Bank',
                 'agencia': '1234',
                 'agencia_dv': '5',
                 'conta': '12345678',
                 'conta_dv': '9',
                 'convenio': '123456789012',  # código do beneficiário (até 12 dígitos)
-                'carteira': '10',
+                'carteira': '10',  # C6: 10 (emissão banco) ou 20
                 'layout_cnab': 'CNAB_400',
                 'nosso_numero_atual': 1,
-                'provider': 'c6',
-                'account_config': {
-                    'agencia': '1234',
-                    'conta': '12345678',
-                    'convenio': '123456789012',
-                },
+                'provider': 'pycobranca',
+                'account_config': None,
             },
         ]
 
@@ -578,6 +570,7 @@ class Command(BaseCommand):
 
                 if not criada:
                     # Sincroniza campos que podem ter mudado entre execuções
+                    # (inclui a migração de contas registradas → offline).
                     update_fields = []
                     if conta.principal != eh_principal:
                         conta.principal = eh_principal
@@ -585,6 +578,15 @@ class Command(BaseCommand):
                     if conta.provider != provider:
                         conta.provider = provider
                         update_fields.append('provider')
+                    if conta.carteira != config['carteira']:
+                        conta.carteira = config['carteira']
+                        update_fields.append('carteira')
+                    if conta.tenant_id != tenant_id:
+                        conta.tenant_id = tenant_id
+                        update_fields.append('tenant_id')
+                    if conta.account_config != config.get('account_config'):
+                        conta.account_config = config.get('account_config')
+                        update_fields.append('account_config')
                     if update_fields:
                         conta.save(update_fields=update_fields)
 

@@ -122,27 +122,28 @@ class TestGerarDadosTestePassos:
 class TestGerarDadosBoletoApi:
     """Testa que o comando gera contas Boleto-API corretamente."""
 
-    def test_contas_sicoob_e_c6_tem_provider_correto(self):
-        """Sicoob deve ter provider=sicoob e C6 deve ter provider=c6."""
+    def test_contas_todas_offline_pycobranca(self):
+        """Sem credenciais de banco, toda conta gerada é offline (pycobranca)."""
         from core.models import ContaBancaria
         call_command('gerar_dados_teste', stdout=StringIO())
-        assert ContaBancaria.objects.filter(banco='756', provider='sicoob').exists()
-        assert ContaBancaria.objects.filter(banco='336', provider='c6').exists()
+        assert ContaBancaria.objects.exists()
+        # Nenhuma conta com provedor de cobrança registrada (c6/sicoob)
+        assert not ContaBancaria.objects.exclude(provider='pycobranca').exists()
 
-    def test_contas_bb_e_bradesco_usam_pycobranca(self):
-        """BB e Bradesco devem manter provider=brcobranca (fluxo CNAB)."""
+    def test_sicoob_carteira_um_digito(self):
+        """Sicoob: carteira de 1 dígito ('01' estoura o campo livre do boleto)."""
         from core.models import ContaBancaria
         call_command('gerar_dados_teste', stdout=StringIO())
-        assert not ContaBancaria.objects.filter(banco='001').exclude(provider='pycobranca').exists()
-        assert not ContaBancaria.objects.filter(banco='237').exclude(provider='pycobranca').exists()
+        for conta in ContaBancaria.objects.filter(banco='756'):
+            assert conta.carteira == '1', f'{conta}: carteira {conta.carteira!r} != "1"'
 
-    def test_contas_api_tem_account_config_e_tenant_id(self):
-        """Contas Boleto-API devem ter account_config e tenant_id preenchidos."""
+    def test_contas_offline_sem_account_config_e_tenant(self):
+        """Contas offline não carregam account_config nem tenant_id de gateway."""
         from core.models import ContaBancaria
         call_command('gerar_dados_teste', stdout=StringIO())
-        for conta in ContaBancaria.objects.filter(banco__in=['756', '336']):
-            assert conta.account_config is not None, f'{conta}: account_config vazio'
-            assert conta.tenant_id, f'{conta}: tenant_id vazio'
+        for conta in ContaBancaria.objects.all():
+            assert conta.account_config is None, f'{conta}: account_config preenchido'
+            assert not conta.tenant_id, f'{conta}: tenant_id preenchido'
 
     def test_boletos_api_simulados_tem_cobranca_id(self):
         """Após --so-boletos, parcelas com conta Boleto-API devem ter cobranca_id."""

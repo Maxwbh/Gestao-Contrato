@@ -3676,6 +3676,8 @@ def gerar_carne(request, contrato_id):
     sem reajuste aplicado serão bloqueados.
     """
     import json
+    from core.models import ProviderBoleto, PROVIDER_OFFLINE_LEGADO
+    from financeiro.services.boleto_service import BoletoService
 
     contrato = get_object_or_404(Contrato, pk=contrato_id)
 
@@ -3714,15 +3716,43 @@ def gerar_carne(request, contrato_id):
         bloqueados = 0
         erros = 0
 
+        def _conta_da_parcela(parcela):
+            """Conta da parcela ou a principal ativa da imobiliária."""
+            conta = parcela.conta_bancaria
+            if not conta:
+                imob = contrato.imovel.imobiliaria
+                conta = (imob.contas_bancarias.filter(principal=True, ativo=True).first()
+                         or imob.contas_bancarias.filter(ativo=True).first())
+            return conta
+
+        def _e_offline(conta):
+            """Conta que emite pelo motor offline (pyCobrança/CNAB), não pelo gateway."""
+            prov = getattr(conta, 'provider', '') or ProviderBoleto.PYCOBRANCA
+            return prov in (ProviderBoleto.PYCOBRANCA, PROVIDER_OFFLINE_LEGADO)
+
+        def _registrar_sucesso(parcela, nosso_numero):
+            nonlocal gerados
+            gerados += 1
+            resultados.append({
+                'parcela_id': parcela.id,
+                'numero_parcela': parcela.numero_parcela,
+                'sucesso': True,
+                'nosso_numero': nosso_numero,
+            })
+            if hasattr(contrato, 'ultimo_mes_boleto_gerado'):
+                if parcela.numero_parcela > contrato.ultimo_mes_boleto_gerado:
+                    contrato.ultimo_mes_boleto_gerado = parcela.numero_parcela
+
+        # =====================================================================
+        # FASE 1 — filtrar elegíveis.
+        # BLOQUEIO POR REAJUSTE — fonte única: contrato.pode_gerar_boleto()
+        # (mesma regra de HU-03/HU-24). Política do carnê: gera a sequência de
+        # parcelas liberadas e PÁRA na primeira bloqueada — as seguintes também
+        # estariam bloqueadas por cascata. `force=True` ignora o bloqueio.
+        # =====================================================================
+        pares_offline = []   # [(parcela, conta)] → emitidos em 1 lote (/api/boleto/multi)
+        pares_registrados = []  # [(parcela, conta)] → gateway Boleto-API, individual
         for parcela in parcelas:
-            # =====================================================================
-            # BLOQUEIO POR REAJUSTE — fonte única: contrato.pode_gerar_boleto()
-            # (mesma regra de HU-03/HU-24). Política do carnê: cada contrato gera
-            # a sequência de parcelas liberadas e PÁRA na primeira bloqueada — as
-            # seguintes (mesmo ciclo ou superiores) também estariam bloqueadas por
-            # cascata. Ex.: pediu 10, só as 5 primeiras liberadas → gera 5; outro
-            # contrato libera 9 → gera 9. `force=True` ignora o bloqueio.
-            # =====================================================================
             if not force and hasattr(contrato, 'pode_gerar_boleto'):
                 pode_gerar, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
                 if not pode_gerar:
@@ -3734,9 +3764,8 @@ def gerar_carne(request, contrato_id):
                         'erro': f'Boleto bloqueado: {motivo}',
                     })
                     bloqueados += 1
-                    break  # interrompe este contrato — próximas parcelas também bloqueadas
+                    break  # interrompe — próximas parcelas também bloqueadas
 
-            # Verificar se ja tem boleto
             if parcela.tem_boleto and not force:
                 resultados.append({
                     'parcela_id': parcela.id,
@@ -3746,22 +3775,59 @@ def gerar_carne(request, contrato_id):
                 })
                 continue
 
-            # Gerar boleto
+            conta = _conta_da_parcela(parcela)
+            if not conta:
+                erros += 1
+                resultados.append({
+                    'parcela_id': parcela.id,
+                    'numero_parcela': parcela.numero_parcela,
+                    'sucesso': False,
+                    'erro': 'Nenhuma conta bancária disponível para gerar boleto',
+                })
+                continue
+            (pares_offline if _e_offline(conta) else pares_registrados).append((parcela, conta))
+
+        # =====================================================================
+        # FASE 2a — OFFLINE: o carnê inteiro em UMA chamada /api/boleto/multi
+        # (1 requisição para o lote, em vez de N boletos individuais).
+        # =====================================================================
+        if pares_offline:
             try:
-                resultado = parcela.gerar_boleto(enviar_email=False)
-                if resultado and resultado.get('sucesso'):
-                    gerados += 1
+                lote = BoletoService().gerar_boletos_lote(pares_offline)
+                ok = set(lote.get('parcelas_ok', []))
+                for e in lote.get('erros', []):
+                    logger.warning('gerar_carne (lote): %s', e)
+                for parcela, _conta in pares_offline:
+                    if parcela.pk in ok:
+                        _registrar_sucesso(parcela, parcela.nosso_numero)
+                    else:
+                        erros += 1
+                        resultados.append({
+                            'parcela_id': parcela.id,
+                            'numero_parcela': parcela.numero_parcela,
+                            'sucesso': False,
+                            'erro': 'Falha ao gerar boleto no lote',
+                        })
+            except Exception as e:
+                logger.exception('Erro ao gerar carnê em lote (contrato pk=%s): %s', contrato.pk, e)
+                for parcela, _conta in pares_offline:
+                    erros += 1
                     resultados.append({
                         'parcela_id': parcela.id,
                         'numero_parcela': parcela.numero_parcela,
-                        'sucesso': True,
-                        'nosso_numero': resultado.get('nosso_numero')
+                        'sucesso': False,
+                        'erro': str(e),
                     })
 
-                    # Atualizar último mês com boleto gerado
-                    if hasattr(contrato, 'ultimo_mes_boleto_gerado'):
-                        if parcela.numero_parcela > contrato.ultimo_mes_boleto_gerado:
-                            contrato.ultimo_mes_boleto_gerado = parcela.numero_parcela
+        # =====================================================================
+        # FASE 2b — REGISTRADO (C6/Sicoob via gateway): individual, cada boleto
+        # é registrado no banco (POST /cobranca) — não há emissão em lote.
+        # =====================================================================
+        for parcela, conta in pares_registrados:
+            try:
+                resultado = parcela.gerar_boleto(conta_bancaria=conta, force=force, enviar_email=False)
+                if resultado and resultado.get('sucesso'):
+                    _registrar_sucesso(parcela, resultado.get('nosso_numero'))
                 else:
                     erros += 1
                     resultados.append({
