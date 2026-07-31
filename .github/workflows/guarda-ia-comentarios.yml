@@ -1,0 +1,52 @@
+# Comentários são a terceira superfície por onde a atribuição a IA escapa —
+# e a que quase todo guard esquece. O corpo do PR pode estar impecável
+# enquanto um comentário carrega o rodapé, porque ele é acrescentado na
+# publicação, depois de o texto já ter sido revisado.
+#
+# Vive em arquivo separado do `ci.yml` de propósito: `issue_comment` e
+# `pull_request_review*` no gatilho de lá fariam a suíte inteira (testes,
+# lint, build) rodar a cada comentário publicado.
+#
+# Limite honesto: este job roda FORA do check suite do PR, então ele DETECTA
+# e avisa, mas não bloqueia o merge sozinho. Quem bloqueia é o job
+# `no-ai-refs` do `ci.yml`, exigido na branch protection.
+name: Guarda de IA em comentários
+
+on:
+  issue_comment:
+    types: [created, edited]
+  pull_request_review:
+    types: [submitted, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  comentario:
+    name: Comentário sem referências a IA
+    runs-on: ubuntu-latest
+    env:
+      # Mesmo padrão do job `no-ai-refs` do ci.yml. `\[?` cobre o rodapé em
+      # markdown e `claude\.(ai|com)` cobre a mudança de domínio.
+      AI_PATTERN: 'claude\.(ai|com)|anthropic\.com|openai\.com|chatgpt\.com|gemini\.google\.com|bard\.google\.com|copilot\.(microsoft|github)\.com|grok\.x\.com|mistral\.ai|perplexity\.ai|[Cc]laude-[Ss]ession|[Cc]o-[Aa]uthored-[Bb]y:.*(laude|opilot|hatGPT|emini|nthropic)|[Gg]enerated (by|with) *\[?(AI|Claude|ChatGPT|Copilot|Gemini|Grok|GPT)|[Pp]owered by *\[?(AI|Claude|OpenAI|ChatGPT)'
+    steps:
+      - name: Conferir o comentário recém-publicado
+        env:
+          # Sempre por variável de ambiente, nunca interpolado no script:
+          # comentário é texto de terceiro e fecharia as aspas do shell.
+          CORPO: ${{ github.event.comment.body || github.event.review.body }}
+          AUTOR: ${{ github.event.comment.user.login || github.event.review.user.login }}
+          LINK: ${{ github.event.comment.html_url || github.event.review.html_url }}
+        run: |
+          if [ -z "$CORPO" ]; then
+            echo "✅ Comentário vazio — nada a verificar."
+            exit 0
+          fi
+          if printf '%s\n' "$CORPO" | grep -qiE "$AI_PATTERN"; then
+            echo "❌ Comentário de @$AUTOR contém referência a IA — edite em $LINK"
+            printf '%s\n' "$CORPO" | grep -iE "$AI_PATTERN" | sed 's/^/    /'
+            exit 1
+          fi
+          echo "✅ Comentário sem referências a IA."

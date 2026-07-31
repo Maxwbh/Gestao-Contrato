@@ -5,6 +5,11 @@ on:
     branches: ["claude/**"]              # feature branches: roda tudo
   pull_request:
     branches: ["V3.1", "master", "hml"]  # PRs para hml (validação) e main
+    # `edited` é indispensável para o job no-ai-refs: sem declarar types, o
+    # default do GitHub é opened/synchronize/reopened, e a checagem do corpo do
+    # PR nunca reexecutaria depois de uma edição — bastaria abrir o PR limpo e
+    # colar a marca em seguida para o check continuar verde.
+    types: [opened, edited, reopened, synchronize, ready_for_review]
   # Fluxo: QUALQUER branch → PR para hml (validação/homologação; deploy exibe
   # versão com sufixo -hml) → promoção hml → master via SQUASH (1 commit).
   # Na main, commit de FONTE avança o PATCH; commit só de documentação não
@@ -171,6 +176,16 @@ jobs:
   no-ai-refs:
     name: Sem referências a IA
     runs-on: ubuntu-latest
+    env:
+      # Padrão único para os dois passos. Antes havia duas cópias divergentes,
+      # e a do corpo do PR era a mais fraca — faltavam bard/copilot e a
+      # cláusula de co-autoria, justamente as marcas que chegam por texto.
+      #
+      # `\[?` e `claude\.(ai|com)` não são zelo excessivo: o rodapé automático
+      # vem em markdown — "Generated with [Claude Code](...)" — e passou a
+      # apontar para o domínio .com. Padrão que exija as palavras coladas, ou
+      # que case só o .ai, deixa passar.
+      AI_PATTERN: 'claude\.(ai|com)|anthropic\.com|openai\.com|chatgpt\.com|gemini\.google\.com|bard\.google\.com|copilot\.(microsoft|github)\.com|grok\.x\.com|mistral\.ai|perplexity\.ai|[Cc]laude-[Ss]ession|[Cc]o-[Aa]uthored-[Bb]y:.*(laude|opilot|hatGPT|emini|nthropic)|[Gg]enerated (by|with) *\[?(AI|Claude|ChatGPT|Copilot|Gemini|Grok|GPT)|[Pp]owered by *\[?(AI|Claude|OpenAI|ChatGPT)'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -205,28 +220,43 @@ jobs:
           COMMITS=$(git log "$MERGE_BASE".."$HEAD" --format="%H")
           [ -z "$COMMITS" ] && echo "✅ Nenhum commit novo." && exit 0
 
-          AI='claude\.ai|anthropic\.com|openai\.com|chatgpt\.com|gemini\.google\.com|bard\.google\.com|copilot\.microsoft\.com|grok\.x\.com|mistral\.ai|perplexity\.ai|Co-Authored-By:.*(opilot|laude|hatGPT|emini)|[Gg]enerated by (AI|Claude|ChatGPT|Copilot|Gemini|GPT)|[Pp]owered by (AI|Claude|OpenAI|ChatGPT)'
+          # A identidade entra na varredura junto com a mensagem: commit de
+          # texto impecável assinado por um bot não aparece para quem lê só o
+          # corpo.
           FOUND=0
           for sha in $COMMITS; do
-            MSG=$(git log -1 --format="%B" "$sha")
-            if echo "$MSG" | grep -qiE "$AI"; then
+            ALVO=$(git log -1 --format='%B%n%an <%ae>%n%cn <%ce>' "$sha")
+            if printf '%s\n' "$ALVO" | grep -qiE "$AI_PATTERN"; then
               echo "❌ $sha contém referência a IA:"
-              echo "$MSG" | grep -iE "$AI"
+              printf '%s\n' "$ALVO" | grep -iE "$AI_PATTERN" | sed 's/^/    /'
               FOUND=1
             fi
           done
-          [ "$FOUND" -eq 1 ] && exit 1
+          if [ "$FOUND" -ne 0 ]; then
+            echo "Reescreva os commits sem essas marcas, conferindo também --author e --committer."
+            exit 1
+          fi
           echo "✅ Commits sem referências a IA."
 
-      - name: Verificar corpo do PR
+      - name: Verificar título e corpo do PR
         if: github.event_name == 'pull_request'
         env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          AI='claude\.ai|anthropic\.com|openai\.com|chatgpt\.com|gemini\.google\.com|grok\.x\.com|mistral\.ai|perplexity\.ai|[Gg]enerated by (AI|Claude|ChatGPT|Copilot|Gemini|GPT)|[Pp]owered by (AI|Claude|OpenAI|ChatGPT)'
-          if echo "$PR_BODY" | grep -qiE "$AI"; then
-            echo "❌ Descrição do PR contém referência a IA:"
-            echo "$PR_BODY" | grep -iE "$AI"
+          FOUND=0
+          conferir() {
+            if printf '%s\n' "$2" | grep -qiE "$AI_PATTERN"; then
+              echo "❌ $1 do PR contém referência a IA:"
+              printf '%s\n' "$2" | grep -iE "$AI_PATTERN" | sed 's/^/    /'
+              FOUND=1
+            fi
+          }
+          conferir "Título" "$PR_TITLE"
+          conferir "Corpo" "$PR_BODY"
+          if [ "$FOUND" -ne 0 ]; then
+            echo "Edite o PR removendo as marcas. O rodapé automático reaparece a"
+            echo "cada publicação, então confira de novo depois de salvar."
             exit 1
           fi
           echo "✅ PR sem referências a IA."

@@ -8,6 +8,7 @@ MSG=$(cat "$COMMIT_MSG_FILE")
 # Padrões de URLs de serviços de IA
 URL_PATTERNS=(
     "claude\.ai"
+    "claude\.com"
     "anthropic\.com"
     "openai\.com"
     "chatgpt\.com"
@@ -27,13 +28,14 @@ URL_PATTERNS=(
 # Padrões de atribuição a IA no texto do commit
 TEXT_PATTERNS=(
     "[Gg]erado por IA"
-    "[Gg]enerated by (AI|Claude|ChatGPT|Copilot|Gemini|Grok|GPT)"
-    "[Cc]reated by (AI|Claude|ChatGPT|Copilot|Gemini|Grok|GPT)"
+    "[Gg]enerated (by|with) *\[?(AI|Claude|ChatGPT|Copilot|Gemini|Grok|GPT)"
+    "[Cc]reated (by|with) *\[?(AI|Claude|ChatGPT|Copilot|Gemini|Grok|GPT)"
     "[Cc]o-[Aa]uthored-[Bb]y.*[Cc]opilot"
     "[Cc]o-[Aa]uthored-[Bb]y.*[Cc]laude"
     "[Cc]o-[Aa]uthored-[Bb]y.*ChatGPT"
     "[Cc]o-[Aa]uthored-[Bb]y.*Gemini"
-    "[Pp]owered by (AI|Claude|OpenAI|ChatGPT)"
+    "[Pp]owered by *\[?(AI|Claude|OpenAI|ChatGPT)"
+    "[Cc]laude-[Ss]ession"
 )
 
 FOUND=0
