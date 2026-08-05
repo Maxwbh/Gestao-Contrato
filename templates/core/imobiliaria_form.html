@@ -50,6 +50,25 @@
     /* Tabela de contas */
     .contas-table { font-size: 0.875rem; }
     .contas-table th { background: #f8f9fa; font-weight: 600; }
+
+    /* Grid de métodos de pagamento (checkbox estilizado) */
+    .metodos-grid { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+    .metodos-grid ul { list-style: none; margin: 0; padding: 0; display: contents; }
+    .metodo-chip {
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        border: 2px solid #dfe3e8; border-radius: 0.6rem;
+        padding: 0.55rem 0.9rem; cursor: pointer; user-select: none;
+        background: #fff; transition: all .15s ease; margin: 0; font-weight: 500;
+    }
+    .metodo-chip:hover { border-color: #9b59b6; }
+    .metodo-chip input[type=checkbox] { width: 1.05rem; height: 1.05rem; margin: 0; cursor: pointer; accent-color: #9b59b6; }
+    .metodo-chip.is-checked { border-color: #9b59b6; background: #f6effa; color: #6c3483; }
+    .metodo-chip .metodo-chip-lock { display: none; color: #b0b0b0; font-size: .8rem; }
+    .metodo-chip.is-disabled {
+        opacity: .5; cursor: not-allowed; background: #f5f5f5; border-style: dashed;
+    }
+    .metodo-chip.is-disabled input { pointer-events: none; }
+    .metodo-chip.is-disabled .metodo-chip-lock { display: inline; }
     .badge-principal { background: #27ae60; }
     .btn-add-conta { border-style: dashed; }
 
@@ -365,32 +384,44 @@
                         <i class="fas fa-hand-holding-usd me-2"></i><strong>Métodos de Cobrança &amp; Link de pagamento</strong>
                     </div>
                     <div class="card-body">
-                        <div class="mb-3">
-                            <label class="form-label">Métodos de Cobrança Disponíveis</label>
-                            {{ form.metodos_cobranca }}
-                            {% if form.metodos_cobranca.help_text %}<small class="text-muted d-block">{{ form.metodos_cobranca.help_text }}</small>{% endif %}
-                            {% if form.metodos_cobranca.errors %}<div class="text-danger small mt-1">{% for e in form.metodos_cobranca.errors %}{{ e }}{% endfor %}</div>{% endif %}
+                        <label class="form-label d-block mb-1">Métodos de pagamento disponíveis</label>
+                        <small class="text-muted d-block mb-2">Marque os métodos que esta imobiliária oferece. Os métodos ficam habilitados conforme as contas bancárias (Banco/Provedor) cadastradas abaixo.</small>
+                        <div class="metodos-grid" id="metodos-grid"
+                             data-metodos-map='{{ form.metodos_por_provider_json }}'
+                             data-metodos-disponiveis='{{ form.metodos_disponiveis_json }}'>
+                            {% for cb in form.metodos_cobranca %}
+                            <label class="metodo-chip" data-value="{{ cb.data.value }}" title="">
+                                {{ cb.tag }}
+                                <span class="metodo-chip-label">{{ cb.choice_label }}</span>
+                                <i class="fas fa-lock metodo-chip-lock" title="Requer conta compatível"></i>
+                            </label>
+                            {% endfor %}
                         </div>
-                        <hr>
-                        <h6 class="text-muted mb-3"><i class="fas fa-credit-card me-1"></i>Link de pagamento (cartão / Pix)</h6>
-                        <div class="row">
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Juros do parcelamento</label>
-                                {{ form.checkout_juros_por }}
-                                <small class="text-muted d-block">{{ form.checkout_juros_por.help_text }}</small>
-                                {% if form.checkout_juros_por.errors %}<div class="text-danger small mt-1">{% for e in form.checkout_juros_por.errors %}{{ e }}{% endfor %}</div>{% endif %}
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Máximo de parcelas no cartão</label>
-                                {{ form.checkout_max_parcelas }}
-                                <small class="text-muted d-block">{{ form.checkout_max_parcelas.help_text }}</small>
-                                {% if form.checkout_max_parcelas.errors %}<div class="text-danger small mt-1">{% for e in form.checkout_max_parcelas.errors %}{{ e }}{% endfor %}</div>{% endif %}
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Valor mínimo por parcela</label>
-                                {{ form.checkout_valor_minimo_parcela }}
-                                <small class="text-muted d-block">{{ form.checkout_valor_minimo_parcela.help_text }}</small>
-                                {% if form.checkout_valor_minimo_parcela.errors %}<div class="text-danger small mt-1">{% for e in form.checkout_valor_minimo_parcela.errors %}{{ e }}{% endfor %}</div>{% endif %}
+                        {% if form.metodos_cobranca.errors %}<div class="text-danger small mt-1">{% for e in form.metodos_cobranca.errors %}{{ e }}{% endfor %}</div>{% endif %}
+
+                        <!-- Config do Link de pagamento: só quando "Cartão de crédito / Link" está marcado -->
+                        <div id="checkout-config" class="mt-3" style="display:none;">
+                            <hr>
+                            <h6 class="text-muted mb-3"><i class="fas fa-credit-card me-1"></i>Cartão de crédito — parcelamento no link</h6>
+                            <div class="row align-items-start">
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label">Juros do parcelamento</label>
+                                    {{ form.checkout_juros_por }}
+                                    <small class="text-muted d-block">{{ form.checkout_juros_por.help_text }}</small>
+                                    {% if form.checkout_juros_por.errors %}<div class="text-danger small mt-1">{% for e in form.checkout_juros_por.errors %}{{ e }}{% endfor %}</div>{% endif %}
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label">Máximo de parcelas</label>
+                                    {{ form.checkout_max_parcelas }}
+                                    <small class="text-muted d-block">{{ form.checkout_max_parcelas.help_text }}</small>
+                                    {% if form.checkout_max_parcelas.errors %}<div class="text-danger small mt-1">{% for e in form.checkout_max_parcelas.errors %}{{ e }}{% endfor %}</div>{% endif %}
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label">Valor mínimo por parcela</label>
+                                    {{ form.checkout_valor_minimo_parcela }}
+                                    <small class="text-muted d-block">{{ form.checkout_valor_minimo_parcela.help_text }}</small>
+                                    {% if form.checkout_valor_minimo_parcela.errors %}<div class="text-danger small mt-1">{% for e in form.checkout_valor_minimo_parcela.errors %}{{ e }}{% endfor %}</div>{% endif %}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -941,6 +972,9 @@ function atualizarTabelaLocal() {
 
     // Atualizar campo hidden com JSON
     document.getElementById('contas_bancarias_json').value = JSON.stringify(contasLocais);
+
+    // Recalcula métodos disponíveis conforme as contas (Banco/Provider)
+    if (typeof sincronizarMetodosPorContas === 'function') sincronizarMetodosPorContas();
 }
 
 async function carregarContas() {
@@ -971,6 +1005,7 @@ async function carregarContas() {
                     </td>
                 </tr>
             `).join('');
+            window.__contasProviders = data.contas.map(function (c) { return c.provider || 'pycobranca'; });
         } else {
             tbody.innerHTML = `
                 <tr>
@@ -980,7 +1015,9 @@ async function carregarContas() {
                     </td>
                 </tr>
             `;
+            window.__contasProviders = [];
         }
+        if (typeof sincronizarMetodosPorContas === 'function') sincronizarMetodosPorContas();
     } catch (error) {
         console.error('Erro ao carregar contas:', error);
         document.getElementById('contas-lista').innerHTML = `
@@ -1352,5 +1389,82 @@ async function excluirConta(contaId) {
         console.error(error);
     }
 }
+
+// ===================================================================
+// Métodos de pagamento — disponibilidade por Banco/Provider + UX
+// ===================================================================
+const METODOS_MAP = (function () {
+    const el = document.getElementById('metodos-grid');
+    try { return JSON.parse((el && el.dataset.metodosMap) || '{}'); }
+    catch (e) { return {}; }
+})();
+const CHECKOUT_VALUE = 'checkout';
+
+function _mval(m) { return (typeof m === 'string') ? m : (m && m.value); }
+function _metodosDisponiveisPorProviders(providers) {
+    const base = new Set((METODOS_MAP['pycobranca'] || []).map(_mval));
+    (providers || []).forEach(function (p) {
+        (METODOS_MAP[p] || []).forEach(function (m) { base.add(_mval(m)); });
+    });
+    if (!base.size) { base.add('boleto'); base.add('carne'); }
+    return base;
+}
+
+function _providersAtuais() {
+    if (typeof contasLocais !== 'undefined' && contasLocais.length) {
+        return contasLocais.map(function (c) { return c.provider || 'pycobranca'; });
+    }
+    if (window.__contasProviders && window.__contasProviders.length) {
+        return window.__contasProviders;
+    }
+    return [];
+}
+
+function toggleCheckoutConfig() {
+    const grid = document.getElementById('metodos-grid');
+    const cfg = document.getElementById('checkout-config');
+    if (!grid || !cfg) return;
+    const chip = grid.querySelector('.metodo-chip[data-value="' + CHECKOUT_VALUE + '"]');
+    const input = chip && chip.querySelector('input[type=checkbox]');
+    const on = !!(input && input.checked && !chip.classList.contains('is-disabled'));
+    cfg.style.display = on ? '' : 'none';
+}
+
+function sincronizarMetodosPorContas() {
+    const grid = document.getElementById('metodos-grid');
+    if (!grid) return;
+    const providers = _providersAtuais();
+    let disp = _metodosDisponiveisPorProviders(providers);
+    if (!providers.length) {
+        try {
+            const serverDisp = JSON.parse(grid.dataset.metodosDisponiveis || '[]');
+            if (serverDisp.length) disp = new Set(serverDisp);
+        } catch (e) {}
+    }
+    grid.querySelectorAll('.metodo-chip').forEach(function (chip) {
+        const val = chip.dataset.value;
+        const input = chip.querySelector('input[type=checkbox]');
+        const ok = disp.has(val);
+        chip.classList.toggle('is-disabled', !ok);
+        input.disabled = !ok;
+        if (!ok) { input.checked = false; chip.title = 'Requer conta bancária compatível (C6/Sicoob)'; }
+        else { chip.title = ''; }
+        chip.classList.toggle('is-checked', input.checked);
+    });
+    toggleCheckoutConfig();
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const grid = document.getElementById('metodos-grid');
+    if (!grid) return;
+    grid.querySelectorAll('.metodo-chip').forEach(function (chip) {
+        const input = chip.querySelector('input[type=checkbox]');
+        input.addEventListener('change', function () {
+            chip.classList.toggle('is-checked', input.checked);
+            toggleCheckoutConfig();
+        });
+    });
+    sincronizarMetodosPorContas();
+});
 </script>
 {% endblock %}

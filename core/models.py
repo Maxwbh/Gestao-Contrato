@@ -167,6 +167,44 @@ PROVIDERS_POR_BANCO = {
     '756': {ProviderBoleto.SICOOB, ProviderBoleto.PYCOBRANCA},  # Sicoob / Bancoob
 }
 
+# Métodos de cobrança habilitáveis por provider (dupla Banco/Provider). O
+# método fica DENTRO da conta bancária; só os listados aqui podem ser marcados
+# conforme o provider da conta:
+#   • pycobranca (OFFLINE): Boleto off-line (Boleto/Carnê — mesmo método, muda
+#     só o layout do PDF);
+#   • C6 e Sicoob (ONLINE/registrados): Boleto on-line (BoletoPix), Pix
+#     Automático e Link de pagamento (cartão/Pix). BoletoPix exige provider
+#     online (não existe no offline).
+METODOS_POR_PROVIDER = {
+    ProviderBoleto.PYCOBRANCA: {MetodoCobranca.BOLETO, MetodoCobranca.CARNE},
+    ProviderBoleto.C6: {
+        MetodoCobranca.BOLETO_PIX, MetodoCobranca.PIX_AUTOMATICO, MetodoCobranca.CHECKOUT,
+    },
+    ProviderBoleto.SICOOB: {
+        MetodoCobranca.BOLETO_PIX, MetodoCobranca.PIX_AUTOMATICO, MetodoCobranca.CHECKOUT,
+    },
+}
+
+# Carnê não é opção independente: acompanha o Boleto off-line (mesmo método).
+# Rótulos dos métodos no contexto da CONTA (grade e modal).
+METODO_LABEL_CONTA = {
+    MetodoCobranca.BOLETO: 'Boleto off-line (Boleto/Carnê)',
+    MetodoCobranca.BOLETO_PIX: 'Boleto on-line (BoletoPix)',
+    MetodoCobranca.PIX_AUTOMATICO: 'Pix Automático',
+    MetodoCobranca.CHECKOUT: 'Link de pagamento (cartão/Pix)',
+}
+
+
+def metodos_por_provider_serializavel() -> dict:
+    """Mapa {provider: [{value,label}...]} para o front montar os checkboxes."""
+    out = {}
+    for prov, metodos in METODOS_POR_PROVIDER.items():
+        itens = [m for m in metodos if m != MetodoCobranca.CARNE]
+        out[str(prov)] = sorted(
+            ({'value': str(m), 'label': METODO_LABEL_CONTA.get(m, str(m))} for m in itens),
+            key=lambda d: d['value'])
+    return out
+
 # account_config (sem segredos) por provider: chaves obrigatórias e opcionais.
 # Usado como schema de referência e por ContaBancaria.account_config_faltando()
 # (validação branda para onboarding — NÃO é enforced no clean()).
@@ -506,6 +544,21 @@ class Imobiliaria(TimeStampedModel):
     def metodo_habilitado(self, metodo) -> bool:
         """True se o método de cobrança está habilitado nesta imobiliária."""
         return metodo in (self.metodos_cobranca or [])
+
+    def metodos_disponiveis(self) -> set:
+        """
+        Métodos de cobrança tecnicamente possíveis para esta imobiliária, dado
+        o(s) provider(s) das suas contas ativas (dupla Banco/Provider). Boleto e
+        carnê (offline) são sempre possíveis; BoletoPix/Pix Automático/Link de
+        pagamento dependem de conta C6/Sicoob. Usado para filtrar os métodos
+        oferecidos no cadastro.
+        """
+        disponiveis = set(METODOS_POR_PROVIDER[ProviderBoleto.PYCOBRANCA])
+        if self.pk:
+            for prov in (self.contas_bancarias.filter(ativo=True)
+                         .values_list('provider', flat=True).distinct()):
+                disponiveis |= METODOS_POR_PROVIDER.get(prov, set())
+        return {str(m) for m in disponiveis}
 
     def clean(self):
         from django.core.exceptions import ValidationError

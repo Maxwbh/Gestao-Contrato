@@ -610,8 +610,13 @@ class ImovelForm(forms.ModelForm):
 class ImobiliariaForm(forms.ModelForm):
     """Formulário para cadastro de Imobiliária"""
 
+    # Carnê é o MESMO método do Boleto (muda só o layout do PDF), por isso não
+    # aparece como opção separada — é vinculado ao Boleto no clean().
     metodos_cobranca = forms.MultipleChoiceField(
-        choices=MetodoCobranca.choices,
+        choices=[
+            (v, 'Boleto / Carnê' if v == MetodoCobranca.BOLETO else l)
+            for v, l in MetodoCobranca.choices if v != MetodoCobranca.CARNE
+        ],
         widget=forms.CheckboxSelectMultiple,
         required=False,
         label='Métodos de Cobrança Disponíveis',
@@ -701,6 +706,44 @@ class ImobiliariaForm(forms.ModelForm):
                 'maxlength': '60',
             }),
         }
+
+    @property
+    def metodos_por_provider_json(self):
+        """Mapa {provider: [metodos]} para o front habilitar métodos por conta."""
+        import json
+        from core.models import metodos_por_provider_serializavel
+        return json.dumps(metodos_por_provider_serializavel())
+
+    @property
+    def metodos_disponiveis_json(self):
+        """Métodos já possíveis para a imobiliária editada (contas atuais)."""
+        import json
+        inst = getattr(self, 'instance', None)
+        if inst and inst.pk:
+            return json.dumps(sorted(inst.metodos_disponiveis()))
+        return json.dumps([])
+
+    def clean_metodos_cobranca(self):
+        """
+        Não permite habilitar método sem conta que o suporte (Banco/Provider).
+        Carnê acompanha o Boleto (mesmo método, só muda o layout).
+        """
+        from core.models import MetodoCobranca
+        selecionados = list(self.cleaned_data.get('metodos_cobranca') or [])
+        # Boleto e Carnê são o mesmo método: guarda os dois juntos.
+        if MetodoCobranca.BOLETO in selecionados and MetodoCobranca.CARNE not in selecionados:
+            selecionados.append(MetodoCobranca.CARNE)
+        inst = getattr(self, 'instance', None)
+        if inst and inst.pk:
+            disponiveis = inst.metodos_disponiveis()
+            invalidos = [m for m in selecionados if m not in disponiveis]
+            if invalidos:
+                labels = dict(MetodoCobranca.choices)
+                nomes = ', '.join(labels.get(m, m) for m in invalidos)
+                raise forms.ValidationError(
+                    f'Método(s) sem conta bancária compatível: {nomes}. '
+                    f'Cadastre uma conta C6/Sicoob para habilitá-los.')
+        return selecionados
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

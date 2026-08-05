@@ -1689,6 +1689,7 @@ def api_listar_contas_bancarias(request, imobiliaria_id):
                 'id': conta.id,
                 'banco': conta.banco,
                 'banco_nome': conta.get_banco_display(),
+                'provider': conta.provider,
                 'descricao': conta.descricao,
                 'agencia': conta.agencia,
                 'conta': conta.conta,
