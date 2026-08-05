@@ -9623,7 +9623,7 @@ def gerar_link_pagamento_parcela(request, parcela_id):
         tipo=request.POST.get('tipo', 'credito'),
         parcelas=parcelas,
         oferecer_pix=request.POST.get('pix', '1') not in ('0', 'false', 'False'),
-        juros_por=request.POST.get('juros_por', 'emissor'),
+        juros_por=request.POST.get('juros_por') or None,  # None → política da imobiliária
         redirect_url=request.POST.get('redirect_url') or None,
     )
     return JsonResponse(r, status=200 if r.get('sucesso') else 422)

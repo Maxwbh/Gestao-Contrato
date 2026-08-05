@@ -636,7 +636,7 @@ class ImobiliariaForm(forms.ModelForm):
             'tipo_valor_desconto2', 'desconto2_padrao', 'dias_para_desconto2_padrao',
             'tipo_valor_desconto3', 'desconto3_padrao', 'dias_para_desconto3_padrao',
             'instrucao_padrao', 'tipo_titulo', 'aceite',
-            'metodos_cobranca',
+            'metodos_cobranca', 'checkout_juros_por',
         ]
         widgets = {
             'nome': forms.TextInput(attrs={'placeholder': 'Nome fantasia da imobiliária'}),
@@ -858,7 +858,8 @@ class ImobiliariaForm(forms.ModelForm):
             ),
             HTML('<hr><h6 class="text-muted mb-3"><i class="fas fa-hand-holding-usd me-1"></i>Métodos de Cobrança Disponíveis</h6>'),
             Row(
-                Column(Field('metodos_cobranca'), css_class='col-md-12'),
+                Column(Field('metodos_cobranca'), css_class='col-md-8'),
+                Column(Field('checkout_juros_por', wrapper_class='mb-2'), css_class='col-md-4'),
             ),
             HTML('<hr><h6 class="text-muted mb-3"><i class="fas fa-cog me-1"></i>Opções do Boleto</h6>'),
             Row(

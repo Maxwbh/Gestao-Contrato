@@ -163,6 +163,28 @@ class TestGerarLinkPagamento:
         r = p.gerar_link_pagamento()
         assert r['sucesso'] is False
 
+    def test_juros_por_default_da_imobiliaria(self):
+        from core.models import JurosParcelamento
+        p = _parcela_c6()
+        imob = p.contrato.imobiliaria
+        imob.checkout_juros_por = JurosParcelamento.LOJA
+        imob.save(update_fields=['checkout_juros_por'])
+        ok = {'sucesso': True, 'checkout_id': 'c', 'url': 'u', 'status': 'pendente'}
+        with patch(f'{CLIENT}.criar_checkout', return_value=ok) as m:
+            p.gerar_link_pagamento()  # sem juros_por → usa a política da imobiliária
+        assert m.call_args.args[3]['juros_por'] == 'loja'
+
+    def test_juros_por_explicito_sobrepoe_imobiliaria(self):
+        from core.models import JurosParcelamento
+        p = _parcela_c6()
+        imob = p.contrato.imobiliaria
+        imob.checkout_juros_por = JurosParcelamento.LOJA
+        imob.save(update_fields=['checkout_juros_por'])
+        ok = {'sucesso': True, 'checkout_id': 'c', 'url': 'u', 'status': 'pendente'}
+        with patch(f'{CLIENT}.criar_checkout', return_value=ok) as m:
+            p.gerar_link_pagamento(juros_por='emissor')
+        assert m.call_args.args[3]['juros_por'] == 'emissor'
+
     @pytest.mark.parametrize('kw', [{'tipo': 'x'}, {'juros_por': 'z'}])
     def test_parametros_invalidos(self, kw):
         p = _parcela_c6()

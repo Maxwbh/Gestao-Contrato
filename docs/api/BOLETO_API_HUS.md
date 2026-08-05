@@ -458,8 +458,9 @@ parcela; BRCobrança → fluxo legado `POST /api/boleto/multi` intacto.
 crédito/débito parcelável, com Pix opcional no mesmo link — **para** o comprador
 pagar sem boleto e ser redirecionado de volta.
 - `POST /checkout` (`CheckoutIn`): `checkout.valor`, `tipo` (`credito`/`debito`),
-  `parcelas`, `juros_por` (`emissor` = pagador paga o juro, default; `loja` =
-  imobiliária absorve), `parcelas_fixas`, `pix`, `external_reference_id`,
+  `parcelas`, `juros_por` (`emissor` = pagador paga o juro; `loja` =
+  imobiliária absorve — default por imobiliária em
+  `Imobiliaria.checkout_juros_por`), `parcelas_fixas`, `pix`, `external_reference_id`,
   `redirect_url`, `pagador`.
 - Resposta `CheckoutOut`: `url` (link), `id` (gravado em `Parcela.cobranca_id`),
   `status`. A URL é persistida em `Parcela.checkout_url`.

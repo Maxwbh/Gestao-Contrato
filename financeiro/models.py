@@ -1267,7 +1267,7 @@ class Parcela(TimeStampedModel):
                 'pix_copia_cola': self.pix_copia_cola}
 
     def gerar_link_pagamento(self, tipo='credito', parcelas=1, oferecer_pix=True,
-                             juros_por='emissor', parcelas_fixas=False,
+                             juros_por=None, parcelas_fixas=False,
                              redirect_url=None):
         """
         Cria um link de pagamento hospedado (checkout V2.2) para esta parcela:
@@ -1276,8 +1276,9 @@ class Parcela(TimeStampedModel):
         sem substituir o boleto já emitido. Retorna {sucesso, url, ...}.
 
         juros_por: 'emissor' (o pagador paga o juro do parcelamento — a
-        imobiliária recebe o valor cheio, default) ou 'loja' (a imobiliária
-        absorve o juro; o pagador vê "sem juros").
+        imobiliária recebe o valor cheio) ou 'loja' (a imobiliária absorve o
+        juro; o pagador vê "sem juros"). Quando None (default), usa a política
+        configurada na imobiliária (Imobiliaria.checkout_juros_por).
         """
         from financeiro.services.boleto_api_client import BoletoApiClient
 
@@ -1285,6 +1286,9 @@ class Parcela(TimeStampedModel):
             return {'sucesso': False, 'erro': 'Parcela já paga.'}
         if tipo not in ('credito', 'debito'):
             return {'sucesso': False, 'erro': "tipo deve ser 'credito' ou 'debito'."}
+        if juros_por is None:
+            juros_por = getattr(self.contrato.imobiliaria, 'checkout_juros_por',
+                                'emissor') or 'emissor'
         if juros_por not in ('emissor', 'loja'):
             return {'sucesso': False, 'erro': "juros_por deve ser 'emissor' ou 'loja'."}
 

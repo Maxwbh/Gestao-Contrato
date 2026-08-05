@@ -146,6 +146,12 @@ class MetodoCobranca(models.TextChoices):
     CHECKOUT = 'checkout', 'Link de pagamento (cartão/Pix)'
 
 
+class JurosParcelamento(models.TextChoices):
+    """Quem paga o juro do parcelamento no cartão (checkout — juros_por)."""
+    EMISSOR = 'emissor', 'Pagador paga o juro (imobiliária recebe o valor cheio)'
+    LOJA = 'loja', 'Imobiliária absorve (pagador vê "sem juros")'
+
+
 def default_metodos_cobranca():
     """Default do campo Imobiliaria.metodos_cobranca (mutável → callable)."""
     return [MetodoCobranca.BOLETO]
@@ -454,6 +460,14 @@ class Imobiliaria(TimeStampedModel):
         blank=True,
         verbose_name='Métodos de Cobrança Disponíveis',
         help_text='Métodos habilitados: boleto, carne, bolepix, pix_automatico.',
+    )
+    checkout_juros_por = models.CharField(
+        max_length=10,
+        choices=JurosParcelamento.choices,
+        default=JurosParcelamento.EMISSOR,
+        verbose_name='Juros do parcelamento no cartão',
+        help_text='No link de pagamento (checkout): quem paga o juro do '
+                  'parcelamento no cartão de crédito.',
     )
 
     ativo = models.BooleanField(default=True, verbose_name='Ativo')
