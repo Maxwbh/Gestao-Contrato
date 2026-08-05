@@ -6,7 +6,10 @@ Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
 from django.db import models
-from django.core.validators import EmailValidator, RegexValidator
+from decimal import Decimal
+from django.core.validators import (
+    EmailValidator, RegexValidator, MinValueValidator, MaxValueValidator,
+)
 
 
 class TimeStampedModel(models.Model):
@@ -468,6 +471,21 @@ class Imobiliaria(TimeStampedModel):
         verbose_name='Juros do parcelamento no cartão',
         help_text='No link de pagamento (checkout): quem paga o juro do '
                   'parcelamento no cartão de crédito.',
+    )
+    checkout_max_parcelas = models.PositiveSmallIntegerField(
+        default=12,
+        validators=[MinValueValidator(1), MaxValueValidator(24)],
+        verbose_name='Máximo de parcelas no cartão',
+        help_text='Limite de parcelas oferecido no link de pagamento (1 a 24).',
+    )
+    checkout_valor_minimo_parcela = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name='Valor mínimo por parcela (cartão)',
+        help_text='Valor mínimo de cada parcela no link. O nº de parcelas é '
+                  'reduzido para respeitar este piso. 0 = sem piso.',
     )
 
     ativo = models.BooleanField(default=True, verbose_name='Ativo')

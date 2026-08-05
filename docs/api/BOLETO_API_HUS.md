@@ -467,6 +467,9 @@ pagar sem boleto e ser redirecionado de volta.
 - Método de cobrança: `MetodoCobranca.CHECKOUT`. Serviço:
   `Parcela.gerar_link_pagamento(...)`. Endpoint interno:
   `POST /financeiro/parcelas/{id}/link-pagamento/`.
+- Guard-rails por imobiliária (no cadastro): `checkout_max_parcelas` (teto) e
+  `checkout_valor_minimo_parcela` (piso por parcela). O nº de parcelas é
+  reduzido para respeitar ambos (mínimo 1).
 
 ### BAPI-43 — Conciliar pagamento do checkout por webhook 🆕 ✅
 **Como** sistema, **quero** dar baixa automática quando o checkout é liquidado.

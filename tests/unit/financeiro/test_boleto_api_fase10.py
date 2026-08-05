@@ -185,6 +185,54 @@ class TestGerarLinkPagamento:
             p.gerar_link_pagamento(juros_por='emissor')
         assert m.call_args.args[3]['juros_por'] == 'emissor'
 
+    def test_teto_de_parcelas_da_imobiliaria(self):
+        from decimal import Decimal
+        p = _parcela_c6(valor_atual=Decimal('6000'))
+        imob = p.contrato.imobiliaria
+        imob.checkout_max_parcelas = 6
+        imob.checkout_valor_minimo_parcela = Decimal('0')
+        imob.save()
+        ok = {'sucesso': True, 'checkout_id': 'c', 'url': 'u', 'status': 'pendente'}
+        with patch(f'{CLIENT}.criar_checkout', return_value=ok) as m:
+            r = p.gerar_link_pagamento(parcelas=12)  # pediu 12, teto é 6
+        assert m.call_args.args[3]['parcelas'] == 6
+        assert r['parcelas'] == 6
+
+    def test_piso_por_parcela_reduz_parcelas(self):
+        from decimal import Decimal
+        p = _parcela_c6(valor_atual=Decimal('1000'))
+        imob = p.contrato.imobiliaria
+        imob.checkout_max_parcelas = 24
+        imob.checkout_valor_minimo_parcela = Decimal('200')  # 1000/200 = 5
+        imob.save()
+        ok = {'sucesso': True, 'checkout_id': 'c', 'url': 'u', 'status': 'pendente'}
+        with patch(f'{CLIENT}.criar_checkout', return_value=ok) as m:
+            p.gerar_link_pagamento(parcelas=12)
+        assert m.call_args.args[3]['parcelas'] == 5
+
+    def test_piso_zero_sem_limite_por_valor(self):
+        from decimal import Decimal
+        p = _parcela_c6(valor_atual=Decimal('100'))
+        imob = p.contrato.imobiliaria
+        imob.checkout_max_parcelas = 12
+        imob.checkout_valor_minimo_parcela = Decimal('0')
+        imob.save()
+        ok = {'sucesso': True, 'checkout_id': 'c', 'url': 'u', 'status': 'pendente'}
+        with patch(f'{CLIENT}.criar_checkout', return_value=ok) as m:
+            p.gerar_link_pagamento(parcelas=10)
+        assert m.call_args.args[3]['parcelas'] == 10
+
+    def test_parcelas_nunca_abaixo_de_um(self):
+        from decimal import Decimal
+        p = _parcela_c6(valor_atual=Decimal('50'))
+        imob = p.contrato.imobiliaria
+        imob.checkout_valor_minimo_parcela = Decimal('200')  # piso > valor total
+        imob.save()
+        ok = {'sucesso': True, 'checkout_id': 'c', 'url': 'u', 'status': 'pendente'}
+        with patch(f'{CLIENT}.criar_checkout', return_value=ok) as m:
+            p.gerar_link_pagamento(parcelas=6)
+        assert m.call_args.args[3]['parcelas'] == 1
+
     @pytest.mark.parametrize('kw', [{'tipo': 'x'}, {'juros_por': 'z'}])
     def test_parametros_invalidos(self, kw):
         p = _parcela_c6()

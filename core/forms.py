@@ -637,6 +637,7 @@ class ImobiliariaForm(forms.ModelForm):
             'tipo_valor_desconto3', 'desconto3_padrao', 'dias_para_desconto3_padrao',
             'instrucao_padrao', 'tipo_titulo', 'aceite',
             'metodos_cobranca', 'checkout_juros_por',
+            'checkout_max_parcelas', 'checkout_valor_minimo_parcela',
         ]
         widgets = {
             'nome': forms.TextInput(attrs={'placeholder': 'Nome fantasia da imobiliária'}),
@@ -860,6 +861,11 @@ class ImobiliariaForm(forms.ModelForm):
             Row(
                 Column(Field('metodos_cobranca'), css_class='col-md-8'),
                 Column(Field('checkout_juros_por', wrapper_class='mb-2'), css_class='col-md-4'),
+            ),
+            HTML('<small class="text-muted d-block mb-2"><i class="fas fa-credit-card me-1"></i>Link de pagamento (cartão): limites do parcelamento</small>'),
+            Row(
+                Column(Field('checkout_max_parcelas', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('checkout_valor_minimo_parcela', wrapper_class='mb-2'), css_class='col-md-6'),
             ),
             HTML('<hr><h6 class="text-muted mb-3"><i class="fas fa-cog me-1"></i>Opções do Boleto</h6>'),
             Row(

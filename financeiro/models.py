@@ -1292,6 +1292,12 @@ class Parcela(TimeStampedModel):
         if juros_por not in ('emissor', 'loja'):
             return {'sucesso': False, 'erro': "juros_por deve ser 'emissor' ou 'loja'."}
 
+        # Guard-rails da imobiliária: teto de parcelas e piso por parcela.
+        imobiliaria = self.contrato.imobiliaria
+        valor_total = self.valor_atual or self.valor_boleto or Decimal('0')
+        parcelas_efetivas = self._parcelas_permitidas(
+            int(parcelas or 1), valor_total, imobiliaria)
+
         conta = self.conta_bancaria
         if not conta or getattr(conta, 'provider', '') in ('', ProviderBoleto.PYCOBRANCA):
             imob = self.contrato.imobiliaria
@@ -1310,7 +1316,7 @@ class Parcela(TimeStampedModel):
         checkout = {
             'valor': float(self.valor_atual or self.valor_boleto or 0),
             'tipo': tipo,
-            'parcelas': int(parcelas or 1),
+            'parcelas': parcelas_efetivas,
             'juros_por': juros_por,
             'parcelas_fixas': bool(parcelas_fixas),
             'pix': bool(oferecer_pix),
@@ -1338,7 +1344,25 @@ class Parcela(TimeStampedModel):
                                ext_ref=ext_ref)
         self.save()
         return {'sucesso': True, 'url': self.checkout_url,
-                'checkout_id': r.get('checkout_id'), 'status': r.get('status')}
+                'checkout_id': r.get('checkout_id'), 'status': r.get('status'),
+                'parcelas': parcelas_efetivas}
+
+    @staticmethod
+    def _parcelas_permitidas(parcelas, valor_total, imobiliaria):
+        """
+        Aplica os guard-rails da imobiliária ao nº de parcelas do cartão:
+        teto (checkout_max_parcelas) e piso por parcela
+        (checkout_valor_minimo_parcela). Retorna ao menos 1.
+        """
+        n = max(1, int(parcelas or 1))
+        teto = int(getattr(imobiliaria, 'checkout_max_parcelas', 0) or 0)
+        if teto:
+            n = min(n, teto)
+        piso = getattr(imobiliaria, 'checkout_valor_minimo_parcela', None) or Decimal('0')
+        if piso and piso > 0 and valor_total and valor_total > 0:
+            max_por_valor = int(Decimal(str(valor_total)) // Decimal(str(piso)))
+            n = min(n, max(1, max_por_valor))
+        return max(1, n)
 
     def estornar_cobranca(self, valor=None, e2eid='', devolucao_id=''):
         """
