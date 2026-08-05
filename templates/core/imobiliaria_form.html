@@ -69,6 +69,16 @@
     }
     .metodo-chip.is-disabled input { pointer-events: none; }
     .metodo-chip.is-disabled .metodo-chip-lock { display: inline; }
+
+    /* Badges de métodos na grade de contas */
+    .badge-metodo {
+        display: inline-block; padding: 0.15rem 0.5rem; border-radius: 0.4rem;
+        font-size: 0.72rem; font-weight: 600; line-height: 1.4; white-space: nowrap;
+    }
+    .badge-boleto { background: #e7f1ff; color: #0d6efd; }
+    .badge-bolepix { background: #e6f7f0; color: #1a9e6a; }
+    .badge-pix_automatico { background: #fff3e0; color: #e07b00; }
+    .badge-checkout { background: #f6effa; color: #7d3ac1; }
     .badge-principal { background: #27ae60; }
     .btn-add-conta { border-style: dashed; }
 
@@ -375,34 +385,11 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Card: Métodos de Cobrança & Link de pagamento -->
-                <div class="card mb-3" style="border-color: #9b59b6;">
-                    <div class="card-header py-2">
-                        <i class="fas fa-hand-holding-usd me-2"></i><strong>Métodos de Cobrança &amp; Link de pagamento</strong>
-                    </div>
-                    <div class="card-body">
-                        <label class="form-label d-block mb-1">Métodos de pagamento disponíveis</label>
-                        <small class="text-muted d-block mb-2">Marque os métodos que esta imobiliária oferece. Os métodos ficam habilitados conforme as contas bancárias (Banco/Provedor) cadastradas abaixo.</small>
-                        <div class="metodos-grid" id="metodos-grid"
-                             data-metodos-map='{{ form.metodos_por_provider_json }}'
-                             data-metodos-disponiveis='{{ form.metodos_disponiveis_json }}'>
-                            {% for cb in form.metodos_cobranca %}
-                            <label class="metodo-chip" data-value="{{ cb.data.value }}" title="">
-                                {{ cb.tag }}
-                                <span class="metodo-chip-label">{{ cb.choice_label }}</span>
-                                <i class="fas fa-lock metodo-chip-lock" title="Requer conta compatível"></i>
-                            </label>
-                            {% endfor %}
-                        </div>
-                        {% if form.metodos_cobranca.errors %}<div class="text-danger small mt-1">{% for e in form.metodos_cobranca.errors %}{{ e }}{% endfor %}</div>{% endif %}
-
-                        <!-- Config do Link de pagamento: só quando "Cartão de crédito / Link" está marcado -->
-                        <div id="checkout-config" class="mt-3" style="display:none;">
+                        <!-- Política do cartão: aparece só quando alguma conta habilita o Link de pagamento -->
+                        <div id="checkout-config" style="display:none;">
                             <hr>
-                            <h6 class="text-muted mb-3"><i class="fas fa-credit-card me-1"></i>Cartão de crédito — parcelamento no link</h6>
+                            <h6 class="text-muted mb-3"><i class="fas fa-credit-card me-1"></i>Cartão de crédito — parcelamento no Link de pagamento</h6>
                             <div class="row align-items-start">
                                 <div class="col-md-4 mb-3">
                                     <label class="form-label">Juros do parcelamento</label>
@@ -448,12 +435,13 @@
                                         <th>Agência</th>
                                         <th>Conta</th>
                                         <th>Chave PIX</th>
+                                        <th>Métodos</th>
                                         <th class="text-center" style="width: 100px;">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody id="contas-lista">
                                     <tr id="sem-contas">
-                                        <td colspan="6" class="text-center text-muted py-3">
+                                        <td colspan="7" class="text-center text-muted py-3">
                                             <i class="fas fa-university fa-2x mb-2 d-block opacity-50"></i>
                                             Nenhuma conta bancária cadastrada
                                         </td>
@@ -603,15 +591,26 @@
                                 <option value="pycobranca" selected>pyCobrança — motor offline (CNAB padrão)</option>
                                 <option value="c6">C6 Bank (cobrança registrada)</option>
                                 <option value="sicoob">Sicoob (cobrança registrada)</option>
+                                <option value="inter">Banco Inter (cobrança registrada)</option>
                             </select>
                             <small class="text-muted">
-                                Vazio = pyCobrança, motor offline (fluxo CNAB). C6/Sicoob usam o Boleto-API
+                                Vazio = pyCobrança, motor offline (fluxo CNAB). C6/Sicoob/Inter usam o Boleto-API
                                 (integração ainda em validação).
                             </small>
                         </div>
                         <!-- tenant_id é identificador interno do gateway (não é
                              credencial do provedor): gerado automaticamente. -->
                         <input type="hidden" id="tenant_id" name="tenant_id" value="">
+                    </div>
+
+                    <!-- Métodos de cobrança habilitados nesta conta (por provider) -->
+                    <div class="row">
+                        <div class="col-12 mb-3">
+                            <label class="form-label"><i class="fas fa-hand-holding-usd me-1"></i>Métodos de cobrança habilitados</label>
+                            <div id="conta-metodos" class="metodos-grid"
+                                 data-metodos-map='{{ form.metodos_por_provider_json }}'></div>
+                            <small class="text-muted d-block mt-1">Limitados ao provedor: offline → Boleto/Carnê; online → BoletoPix, Pix Automático, Link de pagamento (cartão/Pix).</small>
+                        </div>
                     </div>
 
                     <!-- Cobrança Registrada via Boleto-API (C6/Sicoob) -->
@@ -949,6 +948,7 @@ function atualizarTabelaLocal() {
                 <td>${conta.agencia}</td>
                 <td>${conta.conta}</td>
                 <td>${conta.chave_pix || '-'}</td>
+                <td>${_metodoBadges(conta.metodos)}</td>
                 <td class="text-center">
                     <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editarContaLocal(${index})" title="Editar">
                         <i class="fas fa-edit"></i>
@@ -962,7 +962,7 @@ function atualizarTabelaLocal() {
     } else {
         tbody.innerHTML = `
             <tr id="sem-contas">
-                <td colspan="6" class="text-center text-muted py-3">
+                <td colspan="7" class="text-center text-muted py-3">
                     <i class="fas fa-university fa-2x mb-2 d-block opacity-50"></i>
                     Nenhuma conta bancária cadastrada
                 </td>
@@ -995,6 +995,7 @@ async function carregarContas() {
                     <td>${conta.agencia}</td>
                     <td>${conta.conta}</td>
                     <td>${conta.chave_pix || '-'}</td>
+                    <td>${_metodoBadges(conta.metodos)}</td>
                     <td class="text-center">
                         <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editarConta(${conta.id})" title="Editar">
                             <i class="fas fa-edit"></i>
@@ -1006,22 +1007,24 @@ async function carregarContas() {
                 </tr>
             `).join('');
             window.__contasProviders = data.contas.map(function (c) { return c.provider || 'pycobranca'; });
+            window.__contasMetodos = data.contas.map(function (c) { return c.metodos || []; });
         } else {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" class="text-center text-muted py-4">
+                    <td colspan="7" class="text-center text-muted py-4">
                         <i class="fas fa-university fa-2x mb-2 d-block opacity-50"></i>
                         Nenhuma conta bancária cadastrada
                     </td>
                 </tr>
             `;
             window.__contasProviders = [];
+            window.__contasMetodos = [];
         }
         if (typeof sincronizarMetodosPorContas === 'function') sincronizarMetodosPorContas();
     } catch (error) {
         console.error('Erro ao carregar contas:', error);
         document.getElementById('contas-lista').innerHTML = `
-            <tr><td colspan="6" class="text-center text-danger py-3">Erro ao carregar contas</td></tr>
+            <tr><td colspan="7" class="text-center text-danger py-3">Erro ao carregar contas</td></tr>
         `;
     }
 }
@@ -1039,6 +1042,7 @@ function abrirModalConta() {
     const cs = document.getElementById('cred_status');
     if (cs) cs.style.display = 'none';
     atualizarVisibilidadeProvider();
+    renderContaMetodos('pycobranca', DEFAULT_METODO['pycobranca']);
     editandoIndex = -1;
     atualizarCamposBanco('');
     _getModalContaBancaria()?.open();
@@ -1048,7 +1052,7 @@ function abrirModalConta() {
 // registrada (Boleto-API) e escondem o CNAB; BRCobrança faz o inverso.
 function atualizarVisibilidadeProvider() {
     const prov = document.getElementById('provider').value || 'pycobranca';
-    const isApi = (prov === 'c6' || prov === 'sicoob');
+    const isApi = (prov === 'c6' || prov === 'sicoob' || prov === 'inter');
     const boletoApi = document.getElementById('boletoapi_section');
     const cnab = document.getElementById('cnab_section');
     if (boletoApi) boletoApi.style.display = isApi ? '' : 'none';
@@ -1118,6 +1122,7 @@ function editarContaLocal(index) {
     document.getElementById('provider').value = conta.provider || 'pycobranca';
     document.getElementById('tenant_id').value = conta.tenant_id || '';
     atualizarVisibilidadeProvider();
+    renderContaMetodos(conta.provider || 'pycobranca', conta.metodos || []);
     document.getElementById('agencia').value = conta.agencia;
     document.getElementById('conta').value = conta.conta;
     document.getElementById('convenio').value = conta.convenio || '';
@@ -1157,8 +1162,9 @@ function salvarContaLocal() {
         byte_idt: document.getElementById('byte_idt').value,
         emissao: document.getElementById('emissao').value,
         codigo_beneficiario: document.getElementById('codigo_beneficiario').value,
+        metodos: getContaMetodosSelecionados(),
     };
-    if (_prov === 'c6' || _prov === 'sicoob') {
+    if (_prov === 'c6' || _prov === 'sicoob' || _prov === 'inter') {
         contaData.account_config = _coletarAccountConfig(_prov);
         contaData.credenciais = _coletarCredenciais();
     }
@@ -1226,6 +1232,7 @@ async function editarConta(contaId) {
             document.getElementById('provider').value = conta.provider || 'pycobranca';
             document.getElementById('tenant_id').value = conta.tenant_id || '';
             atualizarVisibilidadeProvider();
+            renderContaMetodos(conta.provider || 'pycobranca', conta.metodos || []);
             document.getElementById('agencia').value = conta.agencia;
             document.getElementById('conta').value = conta.conta;
             document.getElementById('convenio').value = conta.convenio || '';
@@ -1297,11 +1304,12 @@ async function salvarConta() {
         byte_idt: document.getElementById('byte_idt').value,
         emissao: document.getElementById('emissao').value,
         codigo_beneficiario: document.getElementById('codigo_beneficiario').value,
+        metodos: getContaMetodosSelecionados(),
     };
 
-    // Cobrança registrada (C6/Sicoob): account_config + credenciais cifradas.
+    // Cobrança registrada (C6/Sicoob/Inter): account_config + credenciais cifradas.
     const prov = formData.provider;
-    if (prov === 'c6' || prov === 'sicoob') {
+    if (prov === 'c6' || prov === 'sicoob' || prov === 'inter') {
         formData.account_config = _coletarAccountConfig(prov);
         formData.credenciais = _coletarCredenciais();
     }
@@ -1391,80 +1399,80 @@ async function excluirConta(contaId) {
 }
 
 // ===================================================================
-// Métodos de pagamento — disponibilidade por Banco/Provider + UX
+// Métodos de cobrança — DENTRO da conta (Banco/Provider): grade + modal
 // ===================================================================
 const METODOS_MAP = (function () {
-    const el = document.getElementById('metodos-grid');
+    const el = document.getElementById('conta-metodos');
     try { return JSON.parse((el && el.dataset.metodosMap) || '{}'); }
     catch (e) { return {}; }
 })();
-const CHECKOUT_VALUE = 'checkout';
+const BADGE_SHORT = {boleto: 'Boleto/Carnê', bolepix: 'BoletoPix', pix_automatico: 'Pix Auto', checkout: 'Link'};
+const DEFAULT_METODO = {pycobranca: ['boleto'], c6: ['bolepix'], sicoob: ['bolepix'], inter: ['bolepix']};
 
-function _mval(m) { return (typeof m === 'string') ? m : (m && m.value); }
-function _metodosDisponiveisPorProviders(providers) {
-    const base = new Set((METODOS_MAP['pycobranca'] || []).map(_mval));
-    (providers || []).forEach(function (p) {
-        (METODOS_MAP[p] || []).forEach(function (m) { base.add(_mval(m)); });
-    });
-    if (!base.size) { base.add('boleto'); base.add('carne'); }
-    return base;
+// Badges dos métodos habilitados (grade de contas). Boleto/Carnê = um badge.
+function _metodoBadges(metodos) {
+    const set = new Set(metodos || []);
+    if (!set.size) return '<span class="text-muted">—</span>';
+    return ['boleto', 'bolepix', 'pix_automatico', 'checkout']
+        .filter(function (v) { return set.has(v); })
+        .map(function (v) { return '<span class="badge-metodo badge-' + v + '">' + (BADGE_SHORT[v] || v) + '</span>'; })
+        .join(' ');
 }
 
-function _providersAtuais() {
-    if (typeof contasLocais !== 'undefined' && contasLocais.length) {
-        return contasLocais.map(function (c) { return c.provider || 'pycobranca'; });
-    }
-    if (window.__contasProviders && window.__contasProviders.length) {
-        return window.__contasProviders;
-    }
-    return [];
-}
-
-function toggleCheckoutConfig() {
-    const grid = document.getElementById('metodos-grid');
-    const cfg = document.getElementById('checkout-config');
-    if (!grid || !cfg) return;
-    const chip = grid.querySelector('.metodo-chip[data-value="' + CHECKOUT_VALUE + '"]');
-    const input = chip && chip.querySelector('input[type=checkbox]');
-    const on = !!(input && input.checked && !chip.classList.contains('is-disabled'));
-    cfg.style.display = on ? '' : 'none';
-}
-
-function sincronizarMetodosPorContas() {
-    const grid = document.getElementById('metodos-grid');
-    if (!grid) return;
-    const providers = _providersAtuais();
-    let disp = _metodosDisponiveisPorProviders(providers);
-    if (!providers.length) {
-        try {
-            const serverDisp = JSON.parse(grid.dataset.metodosDisponiveis || '[]');
-            if (serverDisp.length) disp = new Set(serverDisp);
-        } catch (e) {}
-    }
-    grid.querySelectorAll('.metodo-chip').forEach(function (chip) {
-        const val = chip.dataset.value;
-        const input = chip.querySelector('input[type=checkbox]');
-        const ok = disp.has(val);
-        chip.classList.toggle('is-disabled', !ok);
-        input.disabled = !ok;
-        if (!ok) { input.checked = false; chip.title = 'Requer conta bancária compatível (C6/Sicoob)'; }
-        else { chip.title = ''; }
-        chip.classList.toggle('is-checked', input.checked);
-    });
-    toggleCheckoutConfig();
-}
-
-document.addEventListener('DOMContentLoaded', function () {
-    const grid = document.getElementById('metodos-grid');
-    if (!grid) return;
-    grid.querySelectorAll('.metodo-chip').forEach(function (chip) {
-        const input = chip.querySelector('input[type=checkbox]');
-        input.addEventListener('change', function () {
-            chip.classList.toggle('is-checked', input.checked);
-            toggleCheckoutConfig();
+// Modal: renderiza os checkboxes de métodos suportados pelo provider.
+function renderContaMetodos(provider, selected) {
+    const box = document.getElementById('conta-metodos');
+    if (!box) return;
+    const sel = new Set(selected || []);
+    const itens = METODOS_MAP[provider] || METODOS_MAP['pycobranca'] || [];
+    box.innerHTML = itens.map(function (it) {
+        const chk = sel.has(it.value) ? 'checked' : '';
+        return '<label class="metodo-chip' + (chk ? ' is-checked' : '') + '" data-value="' + it.value + '">' +
+               '<input type="checkbox" value="' + it.value + '" ' + chk + '>' +
+               '<span class="metodo-chip-label">' + it.label + '</span></label>';
+    }).join('');
+    box.querySelectorAll('.metodo-chip input').forEach(function (inp) {
+        inp.addEventListener('change', function () {
+            inp.closest('.metodo-chip').classList.toggle('is-checked', inp.checked);
         });
     });
-    sincronizarMetodosPorContas();
+}
+
+function getContaMetodosSelecionados() {
+    const box = document.getElementById('conta-metodos');
+    if (!box) return [];
+    const vals = [];
+    box.querySelectorAll('.metodo-chip input:checked').forEach(function (i) { vals.push(i.value); });
+    if (vals.indexOf('boleto') >= 0 && vals.indexOf('carne') < 0) vals.push('carne'); // andam juntos
+    return vals;
+}
+
+// Política do cartão (imobiliária): visível só se alguma conta habilita 'checkout'.
+function _todasContasMetodos() {
+    if (typeof contasLocais !== 'undefined' && contasLocais.length) {
+        return contasLocais.map(function (c) { return c.metodos || []; });
+    }
+    return window.__contasMetodos || [];
+}
+function atualizarPoliticaCartao() {
+    const cfg = document.getElementById('checkout-config');
+    if (!cfg) return;
+    const tem = _todasContasMetodos().some(function (ms) { return (ms || []).indexOf('checkout') >= 0; });
+    cfg.style.display = tem ? '' : 'none';
+}
+// Compat: os renders de conta existentes chamam este nome.
+function sincronizarMetodosPorContas() { atualizarPoliticaCartao(); }
+
+document.addEventListener('DOMContentLoaded', function () {
+    const provSel = document.getElementById('provider');
+    if (provSel) {
+        provSel.addEventListener('change', function () {
+            const p = provSel.value || 'pycobranca';
+            const atuais = getContaMetodosSelecionados();
+            renderContaMetodos(p, atuais.length ? atuais : DEFAULT_METODO[p]);
+        });
+    }
+    atualizarPoliticaCartao();
 });
 </script>
 {% endblock %}

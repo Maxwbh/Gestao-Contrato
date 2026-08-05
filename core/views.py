@@ -1579,6 +1579,11 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
                     _tenant = (conta_data.get('tenant_id') or '').strip()
                     if _prov != ProviderBoleto.PYCOBRANCA and not _tenant:
                         _tenant = f'imob{self.object.id}-{_prov}'
+                    # bulk_create pula save(): sanear métodos aqui.
+                    from core.models import sanitizar_metodos_conta, metodos_default_provider
+                    _metodos = sanitizar_metodos_conta(_prov, conta_data.get('metodos'))
+                    if not _metodos:
+                        _metodos = metodos_default_provider(_prov)
                     _conta = ContaBancaria(
                         imobiliaria=self.object,
                         banco=conta_data.get('banco', ''),
@@ -1586,6 +1591,7 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
                         provider=_prov,
                         tenant_id=_tenant if _prov != ProviderBoleto.PYCOBRANCA else '',
                         account_config=conta_data.get('account_config'),
+                        metodos_habilitados=_metodos,
                         agencia=agencia_completa,
                         conta=conta_completa,
                         convenio=conta_data.get('convenio', ''),
@@ -1690,6 +1696,7 @@ def api_listar_contas_bancarias(request, imobiliaria_id):
                 'banco': conta.banco,
                 'banco_nome': conta.get_banco_display(),
                 'provider': conta.provider,
+                'metodos': conta.metodos_habilitados or [],
                 'descricao': conta.descricao,
                 'agencia': conta.agencia,
                 'conta': conta.conta,
@@ -1724,6 +1731,7 @@ def api_obter_conta_bancaria(request, conta_id):
             'provider': conta.provider,
             'tenant_id': conta.tenant_id,
             'account_config': conta.account_config,
+            'metodos': conta.metodos_habilitados or [],
             # Segredos nunca voltam ao cliente — só a indicação de que existem.
             'tem_credenciais': bool(conta.credenciais_cifradas),
             'tem_bapi_token': bool(conta.bapi_token_cifrado),
@@ -1793,6 +1801,7 @@ def api_criar_conta_bancaria(request):
             provider=provider,
             tenant_id=tenant_id,
             account_config=account_config,
+            metodos_habilitados=data.get('metodos') or [],
             agencia=data.get('agencia', ''),
             conta=data.get('conta', ''),
             convenio=data.get('convenio', ''),
@@ -1875,6 +1884,8 @@ def api_atualizar_conta_bancaria(request, conta_id):
         conta.prazo_protesto = data.get('prazo_protesto', conta.prazo_protesto)
         conta.layout_cnab = data.get('layout_cnab', conta.layout_cnab)
         conta.numero_remessa_cnab_atual = data.get('numero_remessa_cnab_atual', conta.numero_remessa_cnab_atual)
+        if 'metodos' in data:
+            conta.metodos_habilitados = data.get('metodos') or []
         conta.save()
 
         return JsonResponse({

@@ -48,6 +48,54 @@ class TestMetodosDisponiveis:
 
 
 @pytest.mark.django_db
+class TestMetodosPorConta:
+    """Métodos ficam DENTRO da conta (metodos_habilitados), saneados por provider."""
+
+    def _conta(self, provider, banco, metodos=None):
+        from tests.fixtures.factories import ContaBancariaApiFactory
+        return ContaBancariaApiFactory(provider=provider, banco=banco,
+                                       metodos_habilitados=metodos if metodos is not None else [])
+
+    def test_provider_inter_online(self):
+        from core.models import METODOS_POR_PROVIDER, ProviderBoleto
+        s = METODOS_POR_PROVIDER[ProviderBoleto.INTER]
+        assert M.BOLETO_PIX in s and M.CHECKOUT in s and M.PIX_AUTOMATICO in s
+
+    def test_default_offline_boleto_carne(self):
+        c = self._conta('pycobranca', '001')
+        assert set(c.metodos_habilitados) == {'boleto', 'carne'}
+
+    def test_default_online_bolepix(self):
+        c = self._conta('c6', '336')
+        assert c.metodos_habilitados == ['bolepix']
+
+    def test_sanear_remove_metodo_nao_suportado(self):
+        # checkout não existe no offline → é removido; boleto puxa carnê.
+        c = self._conta('pycobranca', '001', metodos=['boleto', 'checkout'])
+        assert set(c.metodos_habilitados) == {'boleto', 'carne'}
+
+    def test_boleto_puxa_carne(self):
+        c = self._conta('pycobranca', '001', metodos=['boleto'])
+        assert 'carne' in c.metodos_habilitados
+
+    def test_metodos_oferecidos_uniao_das_contas(self):
+        from tests.fixtures.factories import ImobiliariaFactory, ContaBancariaApiFactory
+        imob = ImobiliariaFactory()
+        ContaBancariaApiFactory(imobiliaria=imob, provider='pycobranca', banco='001',
+                                metodos_habilitados=['boleto'])
+        ContaBancariaApiFactory(imobiliaria=imob, provider='c6', banco='336',
+                                metodos_habilitados=['bolepix', 'checkout'])
+        assert imob.metodos_oferecidos() == {'boleto', 'carne', 'bolepix', 'checkout'}
+
+    def test_inter_habilita_checkout(self):
+        from tests.fixtures.factories import ImobiliariaFactory, ContaBancariaApiFactory
+        imob = ImobiliariaFactory()
+        ContaBancariaApiFactory(imobiliaria=imob, provider='inter', banco='077',
+                                metodos_habilitados=['bolepix', 'checkout'])
+        assert imob.metodo_habilitado('checkout') is True
+
+
+@pytest.mark.django_db
 class TestFormValidaMetodosPorConta:
     def _form_data(self, imob, metodos):
         # campos mínimos exigidos pelo ImobiliariaForm
