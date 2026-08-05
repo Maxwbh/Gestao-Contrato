@@ -448,4 +448,27 @@ parcela; BRCobrança → fluxo legado `POST /api/boleto/multi` intacto.
 | POST | `/pix-automatico/cobrancas/{txid}/retentativa/{data}` | BAPI-36 |
 | POST | `/carne` | BAPI-37 |
 | GET | `/conciliacao`, `/extrato` | BAPI-32 |
+| POST/GET/DELETE | `/checkout`, `/checkout/{id}` | BAPI-42, BAPI-43 |
 | (webhook) | `POST /financeiro/webhooks/boleto-api/` | BAPI-17..22, BAPI-40 |
+
+## Checkout — link de pagamento hospedado (cobranca-api V2.2)
+
+### BAPI-42 — Gerar link de pagamento (cartão + Pix) 🆕 ✅
+**Como** operador, **quero** gerar um link hospedado para a parcela — cartão de
+crédito/débito parcelável, com Pix opcional no mesmo link — **para** o comprador
+pagar sem boleto e ser redirecionado de volta.
+- `POST /checkout` (`CheckoutIn`): `checkout.valor`, `tipo` (`credito`/`debito`),
+  `parcelas`, `juros_por` (`emissor` = pagador paga o juro, default; `loja` =
+  imobiliária absorve), `parcelas_fixas`, `pix`, `external_reference_id`,
+  `redirect_url`, `pagador`.
+- Resposta `CheckoutOut`: `url` (link), `id` (gravado em `Parcela.cobranca_id`),
+  `status`. A URL é persistida em `Parcela.checkout_url`.
+- Método de cobrança: `MetodoCobranca.CHECKOUT`. Serviço:
+  `Parcela.gerar_link_pagamento(...)`. Endpoint interno:
+  `POST /financeiro/parcelas/{id}/link-pagamento/`.
+
+### BAPI-43 — Conciliar pagamento do checkout por webhook 🆕 ✅
+**Como** sistema, **quero** dar baixa automática quando o checkout é liquidado.
+- O webhook (`WebhookEvent.id` = checkout id) casa a parcela por `cobranca_id`
+  no receptor existente (`_processar_evento_cobranca`), sem alterações; `status`
+  `liquidado` → `StatusCobranca.LIQUIDADA` → baixa idempotente por `event_id`.

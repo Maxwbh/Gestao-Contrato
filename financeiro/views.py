@@ -9603,6 +9603,33 @@ def emitir_pix_parcela(request, parcela_id):
 
 
 @login_required
+@require_POST
+def gerar_link_pagamento_parcela(request, parcela_id):
+    """
+    Checkout V2.2 — gera um link de pagamento hospedado (cartão de crédito/
+    débito parcelável, com Pix opcional no mesmo link) para a parcela e retorna
+    a URL. POST: tipo ('credito'|'debito'), parcelas, pix ('1'/'0'),
+    juros_por ('emissor'|'loja').
+    """
+    imobs = list(_imobs_para_usuario(request.user).values_list('id', flat=True))
+    parcela = get_object_or_404(
+        Parcela, pk=parcela_id, contrato__imobiliaria_id__in=imobs)
+
+    try:
+        parcelas = int(request.POST.get('parcelas', '1') or '1')
+    except (TypeError, ValueError):
+        parcelas = 1
+    r = parcela.gerar_link_pagamento(
+        tipo=request.POST.get('tipo', 'credito'),
+        parcelas=parcelas,
+        oferecer_pix=request.POST.get('pix', '1') not in ('0', 'false', 'False'),
+        juros_por=request.POST.get('juros_por', 'emissor'),
+        redirect_url=request.POST.get('redirect_url') or None,
+    )
+    return JsonResponse(r, status=200 if r.get('sucesso') else 422)
+
+
+@login_required
 def relatorio_conciliacao_financeira(request):
     """
     BAPI-32 — relatório de conciliação financeira: cruza os recebíveis do

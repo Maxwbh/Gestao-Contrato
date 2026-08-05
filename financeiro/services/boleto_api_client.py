@@ -268,6 +268,93 @@ class BoletoApiClient:
         return self._classificar_erro(resp, 'emitir_pix')
 
     # ------------------------------------------------------------------ #
+    # Checkout — link de pagamento hospedado (cartão + Pix) — V2.2
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _normalizar_checkout(data: dict) -> dict:
+        """Converte CheckoutOut do Boleto-API para o dict padrão do Django."""
+        return {
+            'sucesso': True,
+            'checkout_id': str(data.get('id') or ''),
+            'url': str(data.get('url') or ''),
+            'status': str(data.get('status') or ''),
+            'expira_em': str(data.get('expira_em') or ''),
+            'raw': data.get('raw'),
+        }
+
+    def criar_checkout(self, tenant_id, provider, account_config, checkout,
+                       credentials=None, bapi_token=None) -> dict:
+        """
+        POST /checkout — cria um link de pagamento hospedado (cartão de crédito/
+        débito, parcelado, com Pix opcional no mesmo link) e retorna a URL.
+
+        checkout = {
+            valor*, tipo? ('credito'|'debito'), parcelas?, juros_por? ('loja'|
+            'emissor'), parcelas_fixas?, autenticacao?, recorrente?, pix?,
+            descricao?, expira_em?, redirect_url?, external_reference_id?,
+            pagador?: {nome*, documento*, endereco?}
+        }
+        """
+        payload: dict[str, Any] = {
+            'tenant_id': tenant_id,
+            'provider': provider,
+            'account_config': account_config or {},
+            'checkout': checkout,
+        }
+        if credentials:
+            payload['credentials'] = credentials
+        logger.info(
+            '[BoletoAPI] criar_checkout tenant=%s provider=%s tipo=%s parcelas=%s valor=%s',
+            tenant_id, provider, checkout.get('tipo'), checkout.get('parcelas'),
+            checkout.get('valor'),
+        )
+        try:
+            resp = self._request('POST', '/checkout', json=payload,
+                                 headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 201):
+            try:
+                data = resp.json()
+            except ValueError:
+                return {'sucesso': False, 'erro': 'Resposta não-JSON do Boleto-API'}
+            if str(data.get('status')) == 'erro':
+                return {'sucesso': False, 'erro': data.get('detail', 'Erro no checkout')}
+            return self._normalizar_checkout(data)
+        return self._classificar_erro(resp, 'criar_checkout')
+
+    def consultar_checkout(self, checkout_id, bapi_token=None) -> dict:
+        """GET /checkout/{checkout_id} — consulta o status atual do link."""
+        try:
+            resp = self._request('GET', f'/checkout/{checkout_id}',
+                                 headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code == 200:
+            try:
+                return self._normalizar_checkout(resp.json())
+            except ValueError:
+                return {'sucesso': False, 'erro': 'Resposta não-JSON do Boleto-API'}
+        return self._classificar_erro(resp, 'consultar_checkout')
+
+    def cancelar_checkout(self, checkout_id, bapi_token=None) -> dict:
+        """DELETE /checkout/{checkout_id} — cancela o link de pagamento."""
+        try:
+            resp = self._request('DELETE', f'/checkout/{checkout_id}',
+                                 headers=self._headers(bapi_token))
+        except requests.RequestException as exc:
+            return {'sucesso': False, 'erro': f'Falha de conexão com Boleto-API: {exc}'}
+        if resp.status_code in (200, 204):
+            data = {}
+            try:
+                data = resp.json()
+            except ValueError:
+                pass
+            return self._normalizar_checkout(data) if data else {'sucesso': True}
+        return self._classificar_erro(resp, 'cancelar_checkout')
+
+    # ------------------------------------------------------------------ #
     # Pix Automático (débito recorrente)
     # ------------------------------------------------------------------ #
 

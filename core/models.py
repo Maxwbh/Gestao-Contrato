@@ -143,6 +143,7 @@ class MetodoCobranca(models.TextChoices):
     CARNE = 'carne', 'Carnê'
     BOLETO_PIX = 'bolepix', 'Boleto + Pix (BoletoPix)'
     PIX_AUTOMATICO = 'pix_automatico', 'Pix Automático (débito recorrente)'
+    CHECKOUT = 'checkout', 'Link de pagamento (cartão/Pix)'
 
 
 def default_metodos_cobranca():

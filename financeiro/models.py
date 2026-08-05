@@ -451,6 +451,13 @@ class Parcela(TimeStampedModel):
         verbose_name='Referência Externa (bolepix)',
         help_text='ext_ref devolvido pelo gateway para BoletoPix. Usado no casamento do webhook.',
     )
+    checkout_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default='',
+        verbose_name='Link de pagamento (checkout)',
+        help_text='URL do checkout hospedado (cartão/Pix) devolvida pela cobranca-api V2.2.',
+    )
     status_cobranca = models.CharField(
         max_length=20,
         choices=StatusCobranca.choices,
@@ -1258,6 +1265,76 @@ class Parcela(TimeStampedModel):
         self.save()
         return {'sucesso': True, 'txid': self.pix_txid,
                 'pix_copia_cola': self.pix_copia_cola}
+
+    def gerar_link_pagamento(self, tipo='credito', parcelas=1, oferecer_pix=True,
+                             juros_por='emissor', parcelas_fixas=False,
+                             redirect_url=None):
+        """
+        Cria um link de pagamento hospedado (checkout V2.2) para esta parcela:
+        cartão de crédito/débito (parcelável) com Pix opcional no mesmo link.
+        Persiste a URL e o id do checkout (em cobranca_id, casado pelo webhook)
+        sem substituir o boleto já emitido. Retorna {sucesso, url, ...}.
+
+        juros_por: 'emissor' (o pagador paga o juro do parcelamento — a
+        imobiliária recebe o valor cheio, default) ou 'loja' (a imobiliária
+        absorve o juro; o pagador vê "sem juros").
+        """
+        from financeiro.services.boleto_api_client import BoletoApiClient
+
+        if self.pago:
+            return {'sucesso': False, 'erro': 'Parcela já paga.'}
+        if tipo not in ('credito', 'debito'):
+            return {'sucesso': False, 'erro': "tipo deve ser 'credito' ou 'debito'."}
+        if juros_por not in ('emissor', 'loja'):
+            return {'sucesso': False, 'erro': "juros_por deve ser 'emissor' ou 'loja'."}
+
+        conta = self.conta_bancaria
+        if not conta or getattr(conta, 'provider', '') in ('', ProviderBoleto.PYCOBRANCA):
+            imob = self.contrato.imobiliaria
+            conta = imob.contas_bancarias.filter(ativo=True).exclude(
+                provider=ProviderBoleto.PYCOBRANCA).order_by('-principal').first()
+        if not conta:
+            return {'sucesso': False,
+                    'erro': 'Nenhuma conta bancária com provedor de API (checkout) disponível.'}
+
+        comprador = self.contrato.comprador
+        documento = (getattr(comprador, 'cnpj', '') or getattr(comprador, 'cpf', '') or '')
+        documento = documento.replace('.', '').replace('/', '').replace('-', '')
+        # Chave de casamento estável (mesma convenção do pix_txid) — echoada
+        # pelo gateway como ext_ref e usada como fallback no webhook.
+        ext_ref = self.ext_ref or f'GC{self.contrato_id:07d}P{self.numero_parcela:04d}'
+        checkout = {
+            'valor': float(self.valor_atual or self.valor_boleto or 0),
+            'tipo': tipo,
+            'parcelas': int(parcelas or 1),
+            'juros_por': juros_por,
+            'parcelas_fixas': bool(parcelas_fixas),
+            'pix': bool(oferecer_pix),
+            'descricao': f'{self.contrato.numero_contrato} — parcela {self.numero_parcela}',
+            'external_reference_id': ext_ref,
+            'pagador': {'nome': comprador.nome[:60], 'documento': documento},
+        }
+        if redirect_url:
+            checkout['redirect_url'] = redirect_url
+
+        r = BoletoApiClient().criar_checkout(
+            conta.tenant_id, conta.provider,
+            getattr(conta, 'account_config', None) or {}, checkout,
+            bapi_token=(conta.bapi_token or None))
+        if not r.get('sucesso'):
+            return r
+
+        self.conta_bancaria = conta
+        self.checkout_url = r.get('url') or ''
+        # id do checkout em cobranca_id → o webhook casa por payload['id'].
+        self.registrar_emissao(provider=conta.provider,
+                               metodo=MetodoCobranca.CHECKOUT,
+                               status=StatusCobranca.REGISTRADA,
+                               cobranca_id=r.get('checkout_id') or self.cobranca_id,
+                               ext_ref=ext_ref)
+        self.save()
+        return {'sucesso': True, 'url': self.checkout_url,
+                'checkout_id': r.get('checkout_id'), 'status': r.get('status')}
 
     def estornar_cobranca(self, valor=None, e2eid='', devolucao_id=''):
         """
