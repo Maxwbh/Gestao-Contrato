@@ -156,6 +156,12 @@ class JurosParcelamento(models.TextChoices):
     LOJA = 'loja', 'Imobiliária absorve (pagador vê "sem juros")'
 
 
+class ModeloBoleto(models.TextChoices):
+    """Layout do PDF do boleto emitido pela conta."""
+    SIMPLES = 'simples', 'Simples'
+    MODERNO = 'moderno', 'Moderno'
+
+
 def default_metodos_cobranca():
     """Default do campo Imobiliaria.metodos_cobranca (mutável → callable)."""
     return [MetodoCobranca.BOLETO]
@@ -777,6 +783,37 @@ class ContaBancaria(TimeStampedModel):
         help_text='Métodos que esta conta oferece (limitados ao provider): '
                   'offline → Boleto/Carnê; online → BoletoPix, Pix Automático, Link de pagamento.',
     )
+    # --- Configuração dos meios de pagamento (por conta) ---
+    # Boleto: modelo do PDF.
+    modelo_boleto = models.CharField(
+        max_length=10,
+        choices=ModeloBoleto.choices,
+        default=ModeloBoleto.SIMPLES,
+        verbose_name='Modelo do boleto',
+        help_text='Layout do PDF do boleto emitido por esta conta.',
+    )
+    # Pix: formas de oferta.
+    pix_na_tela = models.BooleanField(
+        default=False, verbose_name='Pix na tela',
+        help_text='Exibe QR/copia-e-cola do Pix direto na tela / 2ª via.')
+    pix_no_link = models.BooleanField(
+        default=False, verbose_name='Oferecer Pix no link de pagamento',
+        help_text='Inclui o Pix junto no link de pagamento (checkout).')
+    # Cartão (Link de pagamento): política de parcelamento por conta. Vazio/0 →
+    # herda o padrão da imobiliária.
+    card_max_parcelas = models.PositiveSmallIntegerField(
+        default=0, validators=[MaxValueValidator(24)],
+        verbose_name='Máximo de parcelas (cartão)',
+        help_text='0 = herda o padrão da imobiliária.')
+    card_juros_por = models.CharField(
+        max_length=10, choices=JurosParcelamento.choices, blank=True, default='',
+        verbose_name='Juros do parcelamento (cartão)',
+        help_text='Vazio = herda o padrão da imobiliária.')
+    card_valor_minimo = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name='Valor mínimo por parcela (cartão)',
+        help_text='0 = herda o padrão da imobiliária.')
     account_config = models.JSONField(
         null=True,
         blank=True,

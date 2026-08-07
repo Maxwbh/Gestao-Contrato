@@ -76,9 +76,33 @@
         font-size: 0.72rem; font-weight: 600; line-height: 1.4; white-space: nowrap;
     }
     .badge-boleto { background: #e7f1ff; color: #0d6efd; }
-    .badge-bolepix { background: #e6f7f0; color: #1a9e6a; }
+    .badge-bolepix, .badge-pix { background: #e6f7f0; color: #1a9e6a; }
     .badge-pix_automatico { background: #fff3e0; color: #e07b00; }
-    .badge-checkout { background: #f6effa; color: #7d3ac1; }
+    .badge-checkout, .badge-cartao { background: #f6effa; color: #7d3ac1; }
+
+    /* Cards de meios de pagamento (modal da conta) */
+    .meio-card { border: 1px solid #e3e7ec; border-radius: 0.6rem; margin-bottom: 0.6rem; overflow: hidden; }
+    .meio-card.is-on { border-color: #9b59b6; box-shadow: 0 0 0 1px #9b59b6 inset; }
+    .meio-card.is-locked { opacity: .55; }
+    .meio-head { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.85rem; background: #fafbfc; }
+    .meio-title { font-weight: 600; }
+    .meio-lock { display: none; color: #b0b0b0; font-size: .8rem; margin-left: .25rem; }
+    .meio-card.is-locked .meio-lock { display: inline; }
+    .meio-body { padding: 0.75rem 0.85rem; border-top: 1px dashed #e3e7ec; }
+    .meio-body[hidden] { display: none; }
+    /* switch */
+    .switch { position: relative; display: inline-block; width: 42px; height: 24px; margin: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch .slider { position: absolute; cursor: pointer; inset: 0; background: #cfd4da; border-radius: 24px; transition: .2s; }
+    .switch .slider:before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+    .switch input:checked + .slider { background: #9b59b6; }
+    .switch input:checked + .slider:before { transform: translateX(18px); }
+    .switch input:disabled + .slider { cursor: not-allowed; opacity: .5; }
+    /* modelo do boleto */
+    .modelo-opts { display: flex; gap: 0.6rem; }
+    .modelo-opt { flex: 1; border: 2px solid #dfe3e8; border-radius: 0.5rem; padding: 0.5rem 0.75rem; cursor: pointer; text-align: center; margin: 0; }
+    .modelo-opt input { margin-right: 0.35rem; accent-color: #9b59b6; }
+    .modelo-opt:has(input:checked) { border-color: #9b59b6; background: #f6effa; color: #6c3483; }
     .badge-principal { background: #27ae60; }
     .btn-add-conta { border-style: dashed; }
 
@@ -434,8 +458,8 @@
                                         <th>Descrição</th>
                                         <th>Agência</th>
                                         <th>Conta</th>
-                                        <th>Chave PIX</th>
-                                        <th>Métodos</th>
+                                        <th>Modo</th>
+                                        <th>Meios de pagamento</th>
                                         <th class="text-center" style="width: 100px;">Ações</th>
                                     </tr>
                                 </thead>
@@ -603,14 +627,72 @@
                         <input type="hidden" id="tenant_id" name="tenant_id" value="">
                     </div>
 
-                    <!-- Métodos de cobrança habilitados nesta conta (por provider) -->
-                    <div class="row">
-                        <div class="col-12 mb-3">
-                            <label class="form-label"><i class="fas fa-hand-holding-usd me-1"></i>Métodos de cobrança habilitados</label>
-                            <div id="conta-metodos" class="metodos-grid"
-                                 data-metodos-map='{{ form.metodos_por_provider_json }}'></div>
-                            <small class="text-muted d-block mt-1">Limitados ao provedor: offline → Boleto/Carnê; online → BoletoPix, Pix Automático, Link de pagamento (cartão/Pix).</small>
+                    <!-- Meios de pagamento (por conta), com config em cada card -->
+                    <div class="meios-secao" data-metodos-map='{{ form.metodos_por_provider_json }}'>
+                        <label class="form-label d-block"><i class="fas fa-hand-holding-usd me-1"></i>Meios de pagamento</label>
+
+                        <!-- BOLETO -->
+                        <div class="meio-card" data-meio="boleto" id="meio_card_boleto">
+                            <div class="meio-head">
+                                <span class="meio-title"><i class="fas fa-barcode me-2"></i>Boleto <i class="fas fa-lock meio-lock" title="Requer provedor compatível"></i></span>
+                                <label class="switch"><input type="checkbox" id="meio_boleto"><span class="slider"></span></label>
+                            </div>
+                            <div class="meio-body" id="meio_boleto_body">
+                                <label class="form-label mb-1">Modelo do boleto</label>
+                                <div class="modelo-opts">
+                                    <label class="modelo-opt"><input type="radio" name="modelo_boleto" value="simples" checked><span><i class="fas fa-file-alt me-1"></i>Simples</span></label>
+                                    <label class="modelo-opt"><input type="radio" name="modelo_boleto" value="moderno"><span><i class="fas fa-file-invoice me-1"></i>Moderno</span></label>
+                                </div>
+                                <small class="text-muted d-block mt-2">Encargos (multa/juros/desconto) e instruções são herdados dos padrões da imobiliária.</small>
+                            </div>
                         </div>
+
+                        <!-- PIX -->
+                        <div class="meio-card" data-meio="pix" id="meio_card_pix">
+                            <div class="meio-head">
+                                <span class="meio-title"><i class="fas fa-qrcode me-2"></i>Pix <i class="fas fa-lock meio-lock" title="Requer provedor on-line"></i></span>
+                                <label class="switch"><input type="checkbox" id="meio_pix"><span class="slider"></span></label>
+                            </div>
+                            <div class="meio-body" id="meio_pix_body">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="pix_na_tela">
+                                    <label class="form-check-label" for="pix_na_tela">Pix na tela (QR / copia-e-cola na 2ª via)</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="pix_no_link">
+                                    <label class="form-check-label" for="pix_no_link">Oferecer Pix no link de pagamento</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- CARTÃO -->
+                        <div class="meio-card" data-meio="cartao" id="meio_card_cartao">
+                            <div class="meio-head">
+                                <span class="meio-title"><i class="fas fa-credit-card me-2"></i>Cartão — Link de pagamento <i class="fas fa-lock meio-lock" title="Requer provedor on-line"></i></span>
+                                <label class="switch"><input type="checkbox" id="meio_cartao"><span class="slider"></span></label>
+                            </div>
+                            <div class="meio-body" id="meio_cartao_body">
+                                <div class="row">
+                                    <div class="col-md-4 mb-2">
+                                        <label class="form-label">Máx. parcelas</label>
+                                        <input type="number" class="form-control" id="card_max_parcelas" min="0" max="24" placeholder="herda imob.">
+                                    </div>
+                                    <div class="col-md-4 mb-2">
+                                        <label class="form-label">Juros do parcelamento</label>
+                                        <select class="form-select" id="card_juros_por">
+                                            <option value="">Herda da imobiliária</option>
+                                            <option value="emissor">Cliente paga o juro</option>
+                                            <option value="loja">Loja absorve (sem juros)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4 mb-2">
+                                        <label class="form-label">Valor mín. / parcela</label>
+                                        <input type="number" class="form-control" id="card_valor_minimo" min="0" step="0.01" placeholder="herda imob.">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <small class="text-muted d-block mt-1" id="meios-hint"></small>
                     </div>
 
                     <!-- Cobrança Registrada via Boleto-API (C6/Sicoob) -->
@@ -947,8 +1029,8 @@ function atualizarTabelaLocal() {
                 <td>${conta.descricao}</td>
                 <td>${conta.agencia}</td>
                 <td>${conta.conta}</td>
-                <td>${conta.chave_pix || '-'}</td>
-                <td>${_metodoBadges(conta.metodos)}</td>
+                <td>${_modoBadge(conta)}</td>
+                <td>${_meioBadges(conta)}</td>
                 <td class="text-center">
                     <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editarContaLocal(${index})" title="Editar">
                         <i class="fas fa-edit"></i>
@@ -994,8 +1076,8 @@ async function carregarContas() {
                     <td>${conta.descricao}</td>
                     <td>${conta.agencia}</td>
                     <td>${conta.conta}</td>
-                    <td>${conta.chave_pix || '-'}</td>
-                    <td>${_metodoBadges(conta.metodos)}</td>
+                    <td>${_modoBadge(conta)}</td>
+                    <td>${_meioBadges(conta)}</td>
                     <td class="text-center">
                         <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editarConta(${conta.id})" title="Editar">
                             <i class="fas fa-edit"></i>
@@ -1042,7 +1124,7 @@ function abrirModalConta() {
     const cs = document.getElementById('cred_status');
     if (cs) cs.style.display = 'none';
     atualizarVisibilidadeProvider();
-    renderContaMetodos('pycobranca', DEFAULT_METODO['pycobranca']);
+    configurarMeios('pycobranca', {}, true);
     editandoIndex = -1;
     atualizarCamposBanco('');
     _getModalContaBancaria()?.open();
@@ -1122,7 +1204,7 @@ function editarContaLocal(index) {
     document.getElementById('provider').value = conta.provider || 'pycobranca';
     document.getElementById('tenant_id').value = conta.tenant_id || '';
     atualizarVisibilidadeProvider();
-    renderContaMetodos(conta.provider || 'pycobranca', conta.metodos || []);
+    configurarMeios(conta.provider || 'pycobranca', conta, false);
     document.getElementById('agencia').value = conta.agencia;
     document.getElementById('conta').value = conta.conta;
     document.getElementById('convenio').value = conta.convenio || '';
@@ -1162,7 +1244,7 @@ function salvarContaLocal() {
         byte_idt: document.getElementById('byte_idt').value,
         emissao: document.getElementById('emissao').value,
         codigo_beneficiario: document.getElementById('codigo_beneficiario').value,
-        metodos: getContaMetodosSelecionados(),
+        ...getMeiosPayload(),
     };
     if (_prov === 'c6' || _prov === 'sicoob' || _prov === 'inter') {
         contaData.account_config = _coletarAccountConfig(_prov);
@@ -1232,7 +1314,7 @@ async function editarConta(contaId) {
             document.getElementById('provider').value = conta.provider || 'pycobranca';
             document.getElementById('tenant_id').value = conta.tenant_id || '';
             atualizarVisibilidadeProvider();
-            renderContaMetodos(conta.provider || 'pycobranca', conta.metodos || []);
+            configurarMeios(conta.provider || 'pycobranca', conta, false);
             document.getElementById('agencia').value = conta.agencia;
             document.getElementById('conta').value = conta.conta;
             document.getElementById('convenio').value = conta.convenio || '';
@@ -1304,7 +1386,7 @@ async function salvarConta() {
         byte_idt: document.getElementById('byte_idt').value,
         emissao: document.getElementById('emissao').value,
         codigo_beneficiario: document.getElementById('codigo_beneficiario').value,
-        metodos: getContaMetodosSelecionados(),
+        ...getMeiosPayload(),
     };
 
     // Cobrança registrada (C6/Sicoob/Inter): account_config + credenciais cifradas.
@@ -1399,55 +1481,130 @@ async function excluirConta(contaId) {
 }
 
 // ===================================================================
-// Métodos de cobrança — DENTRO da conta (Banco/Provider): grade + modal
+// Meios de pagamento — DENTRO da conta (Boleto / Pix / Cartão): grade + modal
 // ===================================================================
 const METODOS_MAP = (function () {
-    const el = document.getElementById('conta-metodos');
+    const el = document.querySelector('.meios-secao');
     try { return JSON.parse((el && el.dataset.metodosMap) || '{}'); }
     catch (e) { return {}; }
 })();
-const BADGE_SHORT = {boleto: 'Boleto/Carnê', bolepix: 'BoletoPix', pix_automatico: 'Pix Auto', checkout: 'Link'};
-const DEFAULT_METODO = {pycobranca: ['boleto'], c6: ['bolepix'], sicoob: ['bolepix'], inter: ['bolepix']};
+const MEIOS = ['boleto', 'pix', 'cartao'];
+const BADGE_MEIO = {boleto: 'Boleto', pix: 'Pix', cartao: 'Cartão/Link'};
 
-// Badges dos métodos habilitados (grade de contas). Boleto/Carnê = um badge.
-function _metodoBadges(metodos) {
-    const set = new Set(metodos || []);
-    if (!set.size) return '<span class="text-muted">—</span>';
-    return ['boleto', 'bolepix', 'pix_automatico', 'checkout']
-        .filter(function (v) { return set.has(v); })
-        .map(function (v) { return '<span class="badge-metodo badge-' + v + '">' + (BADGE_SHORT[v] || v) + '</span>'; })
+function _isOnline(p) { return !!p && p !== 'pycobranca'; }
+function meiosDoProvider(p) {
+    if (!_isOnline(p)) return ['boleto'];                 // offline → só Boleto
+    const vals = (METODOS_MAP[p] || []).map(function (x) { return x.value; });
+    const m = ['boleto', 'pix'];
+    if (vals.indexOf('checkout') >= 0) m.push('cartao');  // online com Link → Cartão
+    return m;
+}
+
+// Meios derivados da conta (para badges na grade).
+function _meiosDaConta(c) {
+    if (c.meios && c.meios.length) return c.meios;
+    const s = new Set(c.metodos || []);
+    const out = [];
+    if (s.has('boleto') || s.has('bolepix')) out.push('boleto');
+    if (s.has('bolepix') || c.pix_na_tela || c.pix_no_link) out.push('pix');
+    if (s.has('checkout')) out.push('cartao');
+    return out;
+}
+function _meioBadges(c) {
+    const meios = new Set(_meiosDaConta(c));
+    if (!meios.size) return '<span class="text-muted">—</span>';
+    return MEIOS.filter(function (v) { return meios.has(v); })
+        .map(function (v) { return '<span class="badge-metodo badge-' + v + '">' + BADGE_MEIO[v] + '</span>'; })
         .join(' ');
 }
+function _modoBadge(c) {
+    const online = (c.modo === 'online') || _isOnline(c.provider);
+    return online
+        ? '<span class="badge-metodo badge-cartao">On-line</span>'
+        : '<span class="badge-metodo badge-boleto">Off-line</span>';
+}
 
-// Modal: renderiza os checkboxes de métodos suportados pelo provider.
-function renderContaMetodos(provider, selected) {
-    const box = document.getElementById('conta-metodos');
-    if (!box) return;
-    const sel = new Set(selected || []);
-    const itens = METODOS_MAP[provider] || METODOS_MAP['pycobranca'] || [];
-    box.innerHTML = itens.map(function (it) {
-        const chk = sel.has(it.value) ? 'checked' : '';
-        return '<label class="metodo-chip' + (chk ? ' is-checked' : '') + '" data-value="' + it.value + '">' +
-               '<input type="checkbox" value="' + it.value + '" ' + chk + '>' +
-               '<span class="metodo-chip-label">' + it.label + '</span></label>';
-    }).join('');
-    box.querySelectorAll('.metodo-chip input').forEach(function (inp) {
-        inp.addEventListener('change', function () {
-            inp.closest('.metodo-chip').classList.toggle('is-checked', inp.checked);
-        });
+function _setMeio(meio, on) {
+    const card = document.getElementById('meio_card_' + meio);
+    const sw = document.getElementById('meio_' + meio);
+    const body = document.getElementById('meio_' + meio + '_body');
+    if (!card || !sw) return;
+    sw.checked = !!on;
+    card.classList.toggle('is-on', !!on);
+    if (body) body.hidden = !on;
+}
+
+// Configura os cards de meios ao abrir/editar a conta.
+function configurarMeios(provider, conta, isNew) {
+    conta = conta || {};
+    const disp = new Set(meiosDoProvider(provider));
+    const m = new Set(conta.metodos || []);
+    MEIOS.forEach(function (meio) {
+        const card = document.getElementById('meio_card_' + meio);
+        const sw = document.getElementById('meio_' + meio);
+        const ok = disp.has(meio);
+        card.classList.toggle('is-locked', !ok);
+        sw.disabled = !ok;
+        let on = false;
+        if (ok) {
+            if (isNew) on = (meio === 'boleto');            // nova conta: Boleto ligado
+            else if (meio === 'boleto') on = m.has('boleto') || m.has('bolepix');
+            else if (meio === 'pix') on = !!conta.pix_na_tela || !!conta.pix_no_link || m.has('bolepix');
+            else if (meio === 'cartao') on = m.has('checkout');
+        }
+        _setMeio(meio, on);
     });
+    const modelo = conta.modelo_boleto || 'simples';
+    const mr = document.querySelector('input[name=modelo_boleto][value="' + modelo + '"]');
+    if (mr) mr.checked = true;
+    document.getElementById('pix_na_tela').checked = !!conta.pix_na_tela;
+    document.getElementById('pix_no_link').checked = !!conta.pix_no_link;
+    document.getElementById('card_max_parcelas').value = conta.card_max_parcelas ? conta.card_max_parcelas : '';
+    document.getElementById('card_juros_por').value = conta.card_juros_por || '';
+    document.getElementById('card_valor_minimo').value =
+        (conta.card_valor_minimo && parseFloat(conta.card_valor_minimo) > 0) ? conta.card_valor_minimo : '';
+    document.getElementById('meios-hint').textContent = _isOnline(provider)
+        ? 'Provedor on-line: Boleto (BoletoPix), Pix e Cartão disponíveis.'
+        : 'Provedor off-line: apenas Boleto/Carnê.';
 }
 
-function getContaMetodosSelecionados() {
-    const box = document.getElementById('conta-metodos');
-    if (!box) return [];
-    const vals = [];
-    box.querySelectorAll('.metodo-chip input:checked').forEach(function (i) { vals.push(i.value); });
-    if (vals.indexOf('boleto') >= 0 && vals.indexOf('carne') < 0) vals.push('carne'); // andam juntos
-    return vals;
+// Ao trocar o provedor, re-tranca meios incompatíveis (mantém o resto).
+function regatearMeios(provider) {
+    const disp = new Set(meiosDoProvider(provider));
+    MEIOS.forEach(function (meio) {
+        const card = document.getElementById('meio_card_' + meio);
+        const sw = document.getElementById('meio_' + meio);
+        const ok = disp.has(meio);
+        card.classList.toggle('is-locked', !ok);
+        sw.disabled = !ok;
+        if (!ok) _setMeio(meio, false);
+    });
+    document.getElementById('meios-hint').textContent = _isOnline(provider)
+        ? 'Provedor on-line: Boleto (BoletoPix), Pix e Cartão disponíveis.'
+        : 'Provedor off-line: apenas Boleto/Carnê.';
 }
 
-// Política do cartão (imobiliária): visível só se alguma conta habilita 'checkout'.
+// Coleta a config dos meios para o payload de salvamento.
+function getMeiosPayload() {
+    const prov = document.getElementById('provider').value || 'pycobranca';
+    const online = _isOnline(prov);
+    const on = function (m) { const el = document.getElementById('meio_' + m); return !!(el && el.checked && !el.disabled); };
+    const metodos = [];
+    if (on('boleto')) { if (online) metodos.push('bolepix'); else { metodos.push('boleto'); metodos.push('carne'); } }
+    if (on('cartao')) metodos.push('checkout');
+    const modeloEl = document.querySelector('input[name=modelo_boleto]:checked');
+    return {
+        metodos: metodos,
+        modelo_boleto: (modeloEl && modeloEl.value) || 'simples',
+        pix_na_tela: on('pix') && document.getElementById('pix_na_tela').checked,
+        pix_no_link: on('pix') && document.getElementById('pix_no_link').checked,
+        card_max_parcelas: parseInt(document.getElementById('card_max_parcelas').value) || 0,
+        card_juros_por: document.getElementById('card_juros_por').value || '',
+        card_valor_minimo: parseFloat(document.getElementById('card_valor_minimo').value) || 0,
+    };
+}
+
+// Política do cartão (imobiliária): visível se alguma conta habilita 'checkout'.
 function _todasContasMetodos() {
     if (typeof contasLocais !== 'undefined' && contasLocais.length) {
         return contasLocais.map(function (c) { return c.metodos || []; });
@@ -1460,18 +1617,22 @@ function atualizarPoliticaCartao() {
     const tem = _todasContasMetodos().some(function (ms) { return (ms || []).indexOf('checkout') >= 0; });
     cfg.style.display = tem ? '' : 'none';
 }
-// Compat: os renders de conta existentes chamam este nome.
 function sincronizarMetodosPorContas() { atualizarPoliticaCartao(); }
 
 document.addEventListener('DOMContentLoaded', function () {
-    const provSel = document.getElementById('provider');
-    if (provSel) {
-        provSel.addEventListener('change', function () {
-            const p = provSel.value || 'pycobranca';
-            const atuais = getContaMetodosSelecionados();
-            renderContaMetodos(p, atuais.length ? atuais : DEFAULT_METODO[p]);
+    // switches dos meios: alternam corpo + realce
+    MEIOS.forEach(function (meio) {
+        const sw = document.getElementById('meio_' + meio);
+        if (!sw) return;
+        sw.addEventListener('change', function () {
+            const card = document.getElementById('meio_card_' + meio);
+            const body = document.getElementById('meio_' + meio + '_body');
+            card.classList.toggle('is-on', sw.checked);
+            if (body) body.hidden = !sw.checked;
         });
-    }
+    });
+    const provSel = document.getElementById('provider');
+    if (provSel) provSel.addEventListener('change', function () { regatearMeios(provSel.value || 'pycobranca'); });
     atualizarPoliticaCartao();
 });
 </script>

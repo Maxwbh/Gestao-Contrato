@@ -163,6 +163,35 @@ class TestGerarLinkPagamento:
         r = p.gerar_link_pagamento()
         assert r['sucesso'] is False
 
+    def test_config_do_cartao_da_conta_sobrepoe_imobiliaria(self):
+        from decimal import Decimal
+        p = _parcela_c6(valor_atual=Decimal('6000'))
+        imob = p.contrato.imobiliaria
+        imob.checkout_max_parcelas = 12
+        imob.checkout_juros_por = 'emissor'
+        imob.save()
+        # conta define política própria (override): teto 6, juros 'loja'
+        conta = p.conta_bancaria
+        conta.card_max_parcelas = 6
+        conta.card_juros_por = 'loja'
+        conta.save()
+        ok = {'sucesso': True, 'checkout_id': 'c', 'url': 'u', 'status': 'pendente'}
+        with patch(f'{CLIENT}.criar_checkout', return_value=ok) as m:
+            p.gerar_link_pagamento(parcelas=12)  # sem juros_por → usa a conta
+        chk = m.call_args.args[3]
+        assert chk['parcelas'] == 6          # teto da conta
+        assert chk['juros_por'] == 'loja'    # juros da conta
+
+    def test_pix_no_link_default_da_conta(self):
+        p = _parcela_c6()
+        conta = p.conta_bancaria
+        conta.pix_no_link = True
+        conta.save()
+        ok = {'sucesso': True, 'checkout_id': 'c', 'url': 'u', 'status': 'pendente'}
+        with patch(f'{CLIENT}.criar_checkout', return_value=ok) as m:
+            p.gerar_link_pagamento(parcelas=1)  # sem oferecer_pix → usa a conta
+        assert m.call_args.args[3]['pix'] is True
+
     def test_juros_por_default_da_imobiliaria(self):
         from core.models import JurosParcelamento
         p = _parcela_c6()
