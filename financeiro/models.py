@@ -451,6 +451,13 @@ class Parcela(TimeStampedModel):
         verbose_name='Referência Externa (bolepix)',
         help_text='ext_ref devolvido pelo gateway para BoletoPix. Usado no casamento do webhook.',
     )
+    checkout_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default='',
+        verbose_name='Link de pagamento (checkout)',
+        help_text='URL do checkout hospedado (cartão/Pix) devolvida pela cobranca-api V2.2.',
+    )
     status_cobranca = models.CharField(
         max_length=20,
         choices=StatusCobranca.choices,
@@ -1258,6 +1265,116 @@ class Parcela(TimeStampedModel):
         self.save()
         return {'sucesso': True, 'txid': self.pix_txid,
                 'pix_copia_cola': self.pix_copia_cola}
+
+    def gerar_link_pagamento(self, tipo='credito', parcelas=1, oferecer_pix=None,
+                             juros_por=None, parcelas_fixas=False,
+                             redirect_url=None):
+        """
+        Cria um link de pagamento hospedado (checkout V2.2) para esta parcela:
+        cartão de crédito/débito (parcelável) com Pix opcional no mesmo link.
+        Persiste a URL e o id do checkout (em cobranca_id, casado pelo webhook)
+        sem substituir o boleto já emitido. Retorna {sucesso, url, ...}.
+
+        juros_por: 'emissor' (o pagador paga o juro do parcelamento — a
+        imobiliária recebe o valor cheio) ou 'loja' (a imobiliária absorve o
+        juro; o pagador vê "sem juros"). Quando None (default), usa a política
+        configurada na imobiliária (Imobiliaria.checkout_juros_por).
+        """
+        from financeiro.services.boleto_api_client import BoletoApiClient
+
+        if self.pago:
+            return {'sucesso': False, 'erro': 'Parcela já paga.'}
+        if tipo not in ('credito', 'debito'):
+            return {'sucesso': False, 'erro': "tipo deve ser 'credito' ou 'debito'."}
+
+        conta = self.conta_bancaria
+        if not conta or getattr(conta, 'provider', '') in ('', ProviderBoleto.PYCOBRANCA):
+            imob = self.contrato.imobiliaria
+            conta = imob.contas_bancarias.filter(ativo=True).exclude(
+                provider=ProviderBoleto.PYCOBRANCA).order_by('-principal').first()
+        if not conta:
+            return {'sucesso': False,
+                    'erro': 'Nenhuma conta bancária com provedor de API (checkout) disponível.'}
+
+        # Política do cartão: config da CONTA com fallback ao padrão da imobiliária.
+        imobiliaria = self.contrato.imobiliaria
+        if juros_por is None:
+            juros_por = (getattr(conta, 'card_juros_por', '')
+                         or getattr(imobiliaria, 'checkout_juros_por', '') or 'emissor')
+        if juros_por not in ('emissor', 'loja'):
+            return {'sucesso': False, 'erro': "juros_por deve ser 'emissor' ou 'loja'."}
+        if oferecer_pix is None:
+            oferecer_pix = bool(getattr(conta, 'pix_no_link', False))
+
+        valor_total = self.valor_atual or self.valor_boleto or Decimal('0')
+        teto = (int(getattr(conta, 'card_max_parcelas', 0) or 0)
+                or int(getattr(imobiliaria, 'checkout_max_parcelas', 0) or 0))
+        piso = getattr(conta, 'card_valor_minimo', None) or Decimal('0')
+        if not piso or piso <= 0:
+            piso = getattr(imobiliaria, 'checkout_valor_minimo_parcela', None) or Decimal('0')
+        parcelas_efetivas = self._parcelas_permitidas_valores(
+            int(parcelas or 1), valor_total, teto, piso)
+
+        comprador = self.contrato.comprador
+        documento = (getattr(comprador, 'cnpj', '') or getattr(comprador, 'cpf', '') or '')
+        documento = documento.replace('.', '').replace('/', '').replace('-', '')
+        # Chave de casamento estável (mesma convenção do pix_txid) — echoada
+        # pelo gateway como ext_ref e usada como fallback no webhook.
+        ext_ref = self.ext_ref or f'GC{self.contrato_id:07d}P{self.numero_parcela:04d}'
+        checkout = {
+            'valor': float(self.valor_atual or self.valor_boleto or 0),
+            'tipo': tipo,
+            'parcelas': parcelas_efetivas,
+            'juros_por': juros_por,
+            'parcelas_fixas': bool(parcelas_fixas),
+            'pix': bool(oferecer_pix),
+            'descricao': f'{self.contrato.numero_contrato} — parcela {self.numero_parcela}',
+            'external_reference_id': ext_ref,
+            'pagador': {'nome': comprador.nome[:60], 'documento': documento},
+        }
+        if redirect_url:
+            checkout['redirect_url'] = redirect_url
+
+        r = BoletoApiClient().criar_checkout(
+            conta.tenant_id, conta.provider,
+            getattr(conta, 'account_config', None) or {}, checkout,
+            bapi_token=(conta.bapi_token or None))
+        if not r.get('sucesso'):
+            return r
+
+        self.conta_bancaria = conta
+        self.checkout_url = r.get('url') or ''
+        # id do checkout em cobranca_id → o webhook casa por payload['id'].
+        self.registrar_emissao(provider=conta.provider,
+                               metodo=MetodoCobranca.CHECKOUT,
+                               status=StatusCobranca.REGISTRADA,
+                               cobranca_id=r.get('checkout_id') or self.cobranca_id,
+                               ext_ref=ext_ref)
+        self.save()
+        return {'sucesso': True, 'url': self.checkout_url,
+                'checkout_id': r.get('checkout_id'), 'status': r.get('status'),
+                'parcelas': parcelas_efetivas}
+
+    @staticmethod
+    def _parcelas_permitidas_valores(parcelas, valor_total, teto, piso):
+        """Aplica teto (máx parcelas) e piso (valor mínimo/parcela). Retorna ≥ 1."""
+        n = max(1, int(parcelas or 1))
+        teto = int(teto or 0)
+        if teto:
+            n = min(n, teto)
+        piso = piso or Decimal('0')
+        if piso and piso > 0 and valor_total and valor_total > 0:
+            max_por_valor = int(Decimal(str(valor_total)) // Decimal(str(piso)))
+            n = min(n, max(1, max_por_valor))
+        return max(1, n)
+
+    @classmethod
+    def _parcelas_permitidas(cls, parcelas, valor_total, imobiliaria):
+        """Guard-rails a partir do padrão da imobiliária (compat)."""
+        return cls._parcelas_permitidas_valores(
+            parcelas, valor_total,
+            getattr(imobiliaria, 'checkout_max_parcelas', 0),
+            getattr(imobiliaria, 'checkout_valor_minimo_parcela', None) or Decimal('0'))
 
     def estornar_cobranca(self, valor=None, e2eid='', devolucao_id=''):
         """

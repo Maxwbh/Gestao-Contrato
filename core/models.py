@@ -6,7 +6,10 @@ Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
 from django.db import models
-from django.core.validators import EmailValidator, RegexValidator
+from decimal import Decimal
+from django.core.validators import (
+    EmailValidator, RegexValidator, MinValueValidator, MaxValueValidator,
+)
 
 
 class TimeStampedModel(models.Model):
@@ -120,6 +123,7 @@ class ProviderBoleto(models.TextChoices):
     PYCOBRANCA = 'pycobranca', 'pyCobrança (motor offline — boleto/CNAB)'
     C6 = 'c6', 'C6 Bank (cobrança registrada)'
     SICOOB = 'sicoob', 'Sicoob (cobrança registrada)'
+    INTER = 'inter', 'Banco Inter (cobrança registrada)'
 
 
 # Valor legado do modo offline (antes do motor migrar de BRCobrança/Ruby para
@@ -143,6 +147,19 @@ class MetodoCobranca(models.TextChoices):
     CARNE = 'carne', 'Carnê'
     BOLETO_PIX = 'bolepix', 'Boleto + Pix (BoletoPix)'
     PIX_AUTOMATICO = 'pix_automatico', 'Pix Automático (débito recorrente)'
+    CHECKOUT = 'checkout', 'Link de pagamento (cartão/Pix)'
+
+
+class JurosParcelamento(models.TextChoices):
+    """Quem paga o juro do parcelamento no cartão (checkout — juros_por)."""
+    EMISSOR = 'emissor', 'Pagador paga o juro (imobiliária recebe o valor cheio)'
+    LOJA = 'loja', 'Imobiliária absorve (pagador vê "sem juros")'
+
+
+class ModeloBoleto(models.TextChoices):
+    """Layout do PDF do boleto emitido pela conta."""
+    SIMPLES = 'simples', 'Simples'
+    MODERNO = 'moderno', 'Moderno'
 
 
 def default_metodos_cobranca():
@@ -155,7 +172,77 @@ def default_metodos_cobranca():
 PROVIDERS_POR_BANCO = {
     '336': {ProviderBoleto.C6, ProviderBoleto.PYCOBRANCA},      # C6 Bank
     '756': {ProviderBoleto.SICOOB, ProviderBoleto.PYCOBRANCA},  # Sicoob / Bancoob
+    '077': {ProviderBoleto.INTER, ProviderBoleto.PYCOBRANCA},   # Banco Inter
 }
+
+# Métodos de cobrança habilitáveis por provider (dupla Banco/Provider). O
+# método fica DENTRO da conta bancária; só os listados aqui podem ser marcados
+# conforme o provider da conta:
+#   • pycobranca (OFFLINE): Boleto off-line (Boleto/Carnê — mesmo método, muda
+#     só o layout do PDF);
+#   • C6 e Sicoob (ONLINE/registrados): Boleto on-line (BoletoPix), Pix
+#     Automático e Link de pagamento (cartão/Pix). BoletoPix exige provider
+#     online (não existe no offline).
+METODOS_POR_PROVIDER = {
+    ProviderBoleto.PYCOBRANCA: {MetodoCobranca.BOLETO, MetodoCobranca.CARNE},
+    ProviderBoleto.C6: {
+        MetodoCobranca.BOLETO_PIX, MetodoCobranca.PIX_AUTOMATICO, MetodoCobranca.CHECKOUT,
+    },
+    ProviderBoleto.SICOOB: {
+        MetodoCobranca.BOLETO_PIX, MetodoCobranca.PIX_AUTOMATICO, MetodoCobranca.CHECKOUT,
+    },
+    ProviderBoleto.INTER: {
+        MetodoCobranca.BOLETO_PIX, MetodoCobranca.PIX_AUTOMATICO, MetodoCobranca.CHECKOUT,
+    },
+}
+
+
+def metodos_default_provider(provider) -> list:
+    """
+    Métodos habilitados por padrão ao cadastrar uma conta desse provider:
+    o boleto do provider (offline → boleto+carnê; online → BoletoPix). Pix
+    Automático e Link de pagamento ficam como opt-in no modal.
+    """
+    prov = normalizar_provider(provider)
+    if prov == ProviderBoleto.PYCOBRANCA:
+        return [MetodoCobranca.BOLETO, MetodoCobranca.CARNE]
+    if MetodoCobranca.BOLETO_PIX in METODOS_POR_PROVIDER.get(prov, set()):
+        return [MetodoCobranca.BOLETO_PIX]
+    return []
+
+
+def sanitizar_metodos_conta(provider, metodos) -> list:
+    """
+    Filtra a lista de métodos para os suportados pelo provider e mantém a regra
+    Boleto↔Carnê (andam juntos). Retorna lista ordenada e sem duplicatas.
+    """
+    prov = normalizar_provider(provider)
+    suportados = METODOS_POR_PROVIDER.get(prov, set())
+    sel = {m for m in (metodos or []) if m in suportados}
+    if MetodoCobranca.BOLETO in suportados:
+        if MetodoCobranca.BOLETO in sel or MetodoCobranca.CARNE in sel:
+            sel |= {MetodoCobranca.BOLETO, MetodoCobranca.CARNE}
+    return sorted(str(m) for m in sel)
+
+# Carnê não é opção independente: acompanha o Boleto off-line (mesmo método).
+# Rótulos dos métodos no contexto da CONTA (grade e modal).
+METODO_LABEL_CONTA = {
+    MetodoCobranca.BOLETO: 'Boleto off-line (Boleto/Carnê)',
+    MetodoCobranca.BOLETO_PIX: 'Boleto on-line (BoletoPix)',
+    MetodoCobranca.PIX_AUTOMATICO: 'Pix Automático',
+    MetodoCobranca.CHECKOUT: 'Link de pagamento (cartão/Pix)',
+}
+
+
+def metodos_por_provider_serializavel() -> dict:
+    """Mapa {provider: [{value,label}...]} para o front montar os checkboxes."""
+    out = {}
+    for prov, metodos in METODOS_POR_PROVIDER.items():
+        itens = [m for m in metodos if m != MetodoCobranca.CARNE]
+        out[str(prov)] = sorted(
+            ({'value': str(m), 'label': METODO_LABEL_CONTA.get(m, str(m))} for m in itens),
+            key=lambda d: d['value'])
+    return out
 
 # account_config (sem segredos) por provider: chaves obrigatórias e opcionais.
 # Usado como schema de referência e por ContaBancaria.account_config_faltando()
@@ -454,6 +541,29 @@ class Imobiliaria(TimeStampedModel):
         verbose_name='Métodos de Cobrança Disponíveis',
         help_text='Métodos habilitados: boleto, carne, bolepix, pix_automatico.',
     )
+    checkout_juros_por = models.CharField(
+        max_length=10,
+        choices=JurosParcelamento.choices,
+        default=JurosParcelamento.EMISSOR,
+        verbose_name='Juros do parcelamento no cartão',
+        help_text='No link de pagamento (checkout): quem paga o juro do '
+                  'parcelamento no cartão de crédito.',
+    )
+    checkout_max_parcelas = models.PositiveSmallIntegerField(
+        default=12,
+        validators=[MinValueValidator(1), MaxValueValidator(24)],
+        verbose_name='Máximo de parcelas no cartão',
+        help_text='Limite de parcelas oferecido no link de pagamento (1 a 24).',
+    )
+    checkout_valor_minimo_parcela = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name='Valor mínimo por parcela (cartão)',
+        help_text='Valor mínimo de cada parcela no link. O nº de parcelas é '
+                  'reduzido para respeitar este piso. 0 = sem piso.',
+    )
 
     ativo = models.BooleanField(default=True, verbose_name='Ativo')
 
@@ -470,9 +580,45 @@ class Imobiliaria(TimeStampedModel):
         """Compatibilidade: retorna razao_social como nome_fantasia"""
         return self.razao_social or ''
 
+    def metodos_oferecidos(self) -> set:
+        """
+        Métodos efetivamente oferecidos pela imobiliária = união dos métodos
+        habilitados nas suas contas ativas. Fonte de verdade após mover a
+        seleção de métodos para dentro de cada conta (Banco/Provider).
+        """
+        oferecidos = set()
+        if self.pk:
+            for lst in (self.contas_bancarias.filter(ativo=True)
+                        .values_list('metodos_habilitados', flat=True)):
+                oferecidos |= {str(m) for m in (lst or [])}
+        # Fallback legado: imobiliárias ainda não migradas (sem métodos nas
+        # contas) usam o antigo campo Imobiliaria.metodos_cobranca.
+        if not oferecidos:
+            oferecidos = {str(m) for m in (self.metodos_cobranca or [])}
+        # BoletoPix é um boleto (com QR Pix): quem oferece BoletoPix também pode
+        # emitir boleto/carnê comuns. Expande para a família do boleto.
+        if str(MetodoCobranca.BOLETO_PIX) in oferecidos:
+            oferecidos |= {str(MetodoCobranca.BOLETO), str(MetodoCobranca.CARNE)}
+        return oferecidos
+
     def metodo_habilitado(self, metodo) -> bool:
-        """True se o método de cobrança está habilitado nesta imobiliária."""
-        return metodo in (self.metodos_cobranca or [])
+        """True se o método está habilitado em alguma conta desta imobiliária."""
+        return str(metodo) in self.metodos_oferecidos()
+
+    def metodos_disponiveis(self) -> set:
+        """
+        Métodos de cobrança tecnicamente possíveis para esta imobiliária, dado
+        o(s) provider(s) das suas contas ativas (dupla Banco/Provider). Boleto e
+        carnê (offline) são sempre possíveis; BoletoPix/Pix Automático/Link de
+        pagamento dependem de conta C6/Sicoob. Usado para filtrar os métodos
+        oferecidos no cadastro.
+        """
+        disponiveis = set(METODOS_POR_PROVIDER[ProviderBoleto.PYCOBRANCA])
+        if self.pk:
+            for prov in (self.contas_bancarias.filter(ativo=True)
+                         .values_list('provider', flat=True).distinct()):
+                disponiveis |= METODOS_POR_PROVIDER.get(prov, set())
+        return {str(m) for m in disponiveis}
 
     def clean(self):
         from django.core.exceptions import ValidationError
@@ -628,8 +774,46 @@ class ContaBancaria(TimeStampedModel):
         choices=ProviderBoleto.choices,
         default=ProviderBoleto.PYCOBRANCA,
         verbose_name='Provedor de Cobrança',
-        help_text='BRCobrança = fluxo CNAB atual; C6/Sicoob = cobrança registrada via Boleto-API.',
+        help_text='BRCobrança = fluxo CNAB atual; C6/Sicoob/Inter = cobrança registrada via Boleto-API.',
     )
+    metodos_habilitados = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Métodos de cobrança habilitados',
+        help_text='Métodos que esta conta oferece (limitados ao provider): '
+                  'offline → Boleto/Carnê; online → BoletoPix, Pix Automático, Link de pagamento.',
+    )
+    # --- Configuração dos meios de pagamento (por conta) ---
+    # Boleto: modelo do PDF.
+    modelo_boleto = models.CharField(
+        max_length=10,
+        choices=ModeloBoleto.choices,
+        default=ModeloBoleto.SIMPLES,
+        verbose_name='Modelo do boleto',
+        help_text='Layout do PDF do boleto emitido por esta conta.',
+    )
+    # Pix: formas de oferta.
+    pix_na_tela = models.BooleanField(
+        default=False, verbose_name='Pix na tela',
+        help_text='Exibe QR/copia-e-cola do Pix direto na tela / 2ª via.')
+    pix_no_link = models.BooleanField(
+        default=False, verbose_name='Oferecer Pix no link de pagamento',
+        help_text='Inclui o Pix junto no link de pagamento (checkout).')
+    # Cartão (Link de pagamento): política de parcelamento por conta. Vazio/0 →
+    # herda o padrão da imobiliária.
+    card_max_parcelas = models.PositiveSmallIntegerField(
+        default=0, validators=[MaxValueValidator(24)],
+        verbose_name='Máximo de parcelas (cartão)',
+        help_text='0 = herda o padrão da imobiliária.')
+    card_juros_por = models.CharField(
+        max_length=10, choices=JurosParcelamento.choices, blank=True, default='',
+        verbose_name='Juros do parcelamento (cartão)',
+        help_text='Vazio = herda o padrão da imobiliária.')
+    card_valor_minimo = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name='Valor mínimo por parcela (cartão)',
+        help_text='0 = herda o padrão da imobiliária.')
     account_config = models.JSONField(
         null=True,
         blank=True,
@@ -742,6 +926,13 @@ class ContaBancaria(TimeStampedModel):
                 imobiliaria=self.imobiliaria,
                 principal=True
             ).exclude(pk=self.pk).update(principal=False)
+        # Métodos habilitados: filtra ao provider (Boleto↔Carnê juntos). Vazio →
+        # default do provider (boleto do provider).
+        if self.metodos_habilitados:
+            self.metodos_habilitados = sanitizar_metodos_conta(
+                self.provider, self.metodos_habilitados)
+        if not self.metodos_habilitados:
+            self.metodos_habilitados = metodos_default_provider(self.provider)
         super().save(*args, **kwargs)
 
     @property

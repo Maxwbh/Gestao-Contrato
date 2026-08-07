@@ -828,7 +828,7 @@ class Contrato(TimeStampedModel):
         # Método de cobrança deve estar habilitado na imobiliária.
         # Lenient: só valida quando a imobiliária tem métodos definidos.
         if self.imobiliaria_id and self.metodo_cobranca:
-            metodos = getattr(self.imobiliaria, 'metodos_cobranca', None) or []
+            metodos = self.imobiliaria.metodos_oferecidos()
             if metodos and self.metodo_cobranca not in metodos:
                 errors['metodo_cobranca'] = (
                     f'O método de cobrança "{self.get_metodo_cobranca_display()}" '

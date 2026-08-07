@@ -1579,6 +1579,11 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
                     _tenant = (conta_data.get('tenant_id') or '').strip()
                     if _prov != ProviderBoleto.PYCOBRANCA and not _tenant:
                         _tenant = f'imob{self.object.id}-{_prov}'
+                    # bulk_create pula save(): sanear métodos aqui.
+                    from core.models import sanitizar_metodos_conta, metodos_default_provider
+                    _metodos = sanitizar_metodos_conta(_prov, conta_data.get('metodos'))
+                    if not _metodos:
+                        _metodos = metodos_default_provider(_prov)
                     _conta = ContaBancaria(
                         imobiliaria=self.object,
                         banco=conta_data.get('banco', ''),
@@ -1586,6 +1591,13 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
                         provider=_prov,
                         tenant_id=_tenant if _prov != ProviderBoleto.PYCOBRANCA else '',
                         account_config=conta_data.get('account_config'),
+                        metodos_habilitados=_metodos,
+                        modelo_boleto=conta_data.get('modelo_boleto') or 'simples',
+                        pix_na_tela=bool(conta_data.get('pix_na_tela')),
+                        pix_no_link=bool(conta_data.get('pix_no_link')),
+                        card_max_parcelas=int(conta_data.get('card_max_parcelas') or 0),
+                        card_juros_por=conta_data.get('card_juros_por') or '',
+                        card_valor_minimo=conta_data.get('card_valor_minimo') or 0,
                         agencia=agencia_completa,
                         conta=conta_completa,
                         convenio=conta_data.get('convenio', ''),
@@ -1689,6 +1701,10 @@ def api_listar_contas_bancarias(request, imobiliaria_id):
                 'id': conta.id,
                 'banco': conta.banco,
                 'banco_nome': conta.get_banco_display(),
+                'provider': conta.provider,
+                'modo': 'offline' if conta.provider == ProviderBoleto.PYCOBRANCA else 'online',
+                'metodos': conta.metodos_habilitados or [],
+                'meios': _meios_da_conta(conta),
                 'descricao': conta.descricao,
                 'agencia': conta.agencia,
                 'conta': conta.conta,
@@ -1723,6 +1739,13 @@ def api_obter_conta_bancaria(request, conta_id):
             'provider': conta.provider,
             'tenant_id': conta.tenant_id,
             'account_config': conta.account_config,
+            'metodos': conta.metodos_habilitados or [],
+            'modelo_boleto': conta.modelo_boleto,
+            'pix_na_tela': conta.pix_na_tela,
+            'pix_no_link': conta.pix_no_link,
+            'card_max_parcelas': conta.card_max_parcelas,
+            'card_juros_por': conta.card_juros_por,
+            'card_valor_minimo': str(conta.card_valor_minimo),
             # Segredos nunca voltam ao cliente — só a indicação de que existem.
             'tem_credenciais': bool(conta.credenciais_cifradas),
             'tem_bapi_token': bool(conta.bapi_token_cifrado),
@@ -1751,6 +1774,19 @@ def api_obter_conta_bancaria(request, conta_id):
     except Exception as e:
         logger.exception("Erro ao obter conta bancaria conta_id=%s: %s", conta_id, e)
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+def _meios_da_conta(conta) -> list:
+    """Resumo dos meios de pagamento da conta p/ badges na grade: boleto/pix/cartao."""
+    m = set(conta.metodos_habilitados or [])
+    meios = []
+    if 'boleto' in m or 'bolepix' in m:
+        meios.append('boleto')
+    if 'bolepix' in m or getattr(conta, 'pix_na_tela', False) or getattr(conta, 'pix_no_link', False):
+        meios.append('pix')
+    if 'checkout' in m:
+        meios.append('cartao')
+    return meios
 
 
 def _derivar_account_config(provider, account_config, conta):
@@ -1792,6 +1828,13 @@ def api_criar_conta_bancaria(request):
             provider=provider,
             tenant_id=tenant_id,
             account_config=account_config,
+            metodos_habilitados=data.get('metodos') or [],
+            modelo_boleto=data.get('modelo_boleto') or 'simples',
+            pix_na_tela=bool(data.get('pix_na_tela')),
+            pix_no_link=bool(data.get('pix_no_link')),
+            card_max_parcelas=int(data.get('card_max_parcelas') or 0),
+            card_juros_por=data.get('card_juros_por') or '',
+            card_valor_minimo=data.get('card_valor_minimo') or 0,
             agencia=data.get('agencia', ''),
             conta=data.get('conta', ''),
             convenio=data.get('convenio', ''),
@@ -1874,6 +1917,20 @@ def api_atualizar_conta_bancaria(request, conta_id):
         conta.prazo_protesto = data.get('prazo_protesto', conta.prazo_protesto)
         conta.layout_cnab = data.get('layout_cnab', conta.layout_cnab)
         conta.numero_remessa_cnab_atual = data.get('numero_remessa_cnab_atual', conta.numero_remessa_cnab_atual)
+        if 'metodos' in data:
+            conta.metodos_habilitados = data.get('metodos') or []
+        if 'modelo_boleto' in data:
+            conta.modelo_boleto = data.get('modelo_boleto') or 'simples'
+        if 'pix_na_tela' in data:
+            conta.pix_na_tela = bool(data.get('pix_na_tela'))
+        if 'pix_no_link' in data:
+            conta.pix_no_link = bool(data.get('pix_no_link'))
+        if 'card_max_parcelas' in data:
+            conta.card_max_parcelas = int(data.get('card_max_parcelas') or 0)
+        if 'card_juros_por' in data:
+            conta.card_juros_por = data.get('card_juros_por') or ''
+        if 'card_valor_minimo' in data:
+            conta.card_valor_minimo = data.get('card_valor_minimo') or 0
         conta.save()
 
         return JsonResponse({

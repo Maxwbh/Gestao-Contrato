@@ -105,6 +105,8 @@ urlpatterns = [
     # BAPI-14/15 — Pix avulso (2ª via / quitação) via Boleto-API
     path('parcelas/<int:parcela_id>/emitir-pix/', views.emitir_pix_parcela,
          name='emitir_pix_parcela'),
+    path('parcelas/<int:parcela_id>/link-pagamento/', views.gerar_link_pagamento_parcela,
+         name='gerar_link_pagamento_parcela'),
     path('api/remessa/validar/', views.api_remessa_validar, name='api_remessa_validar'),
     path('cnab/remessa/download-lote/', views.remessa_download_lote, name='remessa_download_lote'),
     path('cnab/remessa/<str:hid>/cancelar-envio/', views.remessa_cancelar_envio, name='remessa_cancelar_envio'),
