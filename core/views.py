@@ -1052,6 +1052,7 @@ class ContabilidadeUpdateView(LoginRequiredMixin, UpdateView):
 class ContabilidadeDeleteView(LoginRequiredMixin, DeleteView):
     """Desativa uma contabilidade (soft delete)"""
     model = Contabilidade
+    template_name = 'core/confirmar_exclusao.html'
     success_url = reverse_lazy('core:listar_contabilidades')
 
     def get_queryset(self):

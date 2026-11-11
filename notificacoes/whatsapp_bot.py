@@ -642,7 +642,7 @@ class WhatsAppBotService:
         from django.db.models import Prefetch
 
         contratos = list(Contrato.objects.filter(
-            comprador=sessao.comprador, ativo=True
+            comprador=sessao.comprador, status='ATIVO'
         ).prefetch_related(
             Prefetch(
                 'parcelas',
@@ -695,7 +695,7 @@ class WhatsAppBotService:
 
         try:
             contrato = Contrato.objects.filter(
-                comprador=sessao.comprador, ativo=True
+                comprador=sessao.comprador, status='ATIVO'
             ).first()
             imob = contrato.imobiliaria if contrato else None
             if imob and imob.email:

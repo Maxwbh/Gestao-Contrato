@@ -95,6 +95,7 @@ def usuario_cli(db, dominio):
         username='hu360user',
         password='HU360pass!',
         email='hu360@test.com',
+        is_staff=True,  # operador com acesso à imobiliária do teste
     )
     c = Client()
     c.force_login(u)

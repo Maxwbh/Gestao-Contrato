@@ -80,6 +80,7 @@ class TestImobiliariaUpdateView:
     def test_authenticated_returns_200(self):
         user = UserFactory.create()
         imob = ImobiliariaFactory.create()
+        AcessoUsuarioFactory(usuario=user, contabilidade=imob.contabilidade, imobiliaria=imob)
         response = sget(make_client(user), reverse('core:editar_imobiliaria', args=[imob.pk]))
         assert response.status_code == 200
 
@@ -98,6 +99,7 @@ class TestImobiliariaDeleteView:
     def test_post_authenticated_redirects(self):
         user = UserFactory.create()
         imob = ImobiliariaFactory.create()
+        AcessoUsuarioFactory(usuario=user, contabilidade=imob.contabilidade, imobiliaria=imob)
         client = make_client(user)
         response = client.post(reverse('core:excluir_imobiliaria', args=[imob.pk]))
         assert response.status_code == 302

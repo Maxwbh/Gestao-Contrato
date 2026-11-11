@@ -831,6 +831,37 @@ class Parcela(TimeStampedModel):
         # Se não tiver conta bancária, retornar com 10 dígitos (padrão)
         return nosso_numero.zfill(10)
 
+    def get_nosso_numero_sequencial(self, conta_bancaria=None):
+        """
+        Sequencial bruto do nosso número (sem carteira, convênio nem DV).
+
+        `nosso_numero` guarda o valor FORMATADO devolvido pelo motor
+        (BB: convênio+seq · Bradesco: "06/00000000023-1" · C6: "0000000024-8" ·
+        Sicoob: seq+DV). Reenviá-lo ao motor (2ª via, remessa) estoura o tamanho
+        do campo ou registra outro título — por isso o sequencial é extraído aqui.
+        """
+        bruto = str(self.nosso_numero_formatado or self.nosso_numero or '').strip()
+        if not bruto:
+            return ''
+        conta = conta_bancaria or self.conta_bancaria
+        banco = getattr(conta, 'banco', '') or ''
+        tem_dv_explicito = '-' in bruto
+        if '/' in bruto:                      # "carteira/sequencial-dv"
+            bruto = bruto.split('/', 1)[1]
+        if tem_dv_explicito:                  # "sequencial-dv"
+            bruto = bruto.rsplit('-', 1)[0]
+        digitos = ''.join(ch for ch in bruto if ch.isdigit())
+        if not digitos:
+            return ''
+        if not tem_dv_explicito:
+            convenio = ''.join(ch for ch in str(getattr(conta, 'convenio', '') or '') if ch.isdigit())
+            if banco == '001' and convenio and len(digitos) > 10 and digitos.startswith(convenio):
+                digitos = digitos[len(convenio):]          # BB: convênio + sequencial
+            elif (banco == '756' and len(digitos) == 8 and self.nosso_numero_dv
+                    and digitos.endswith(self.nosso_numero_dv)):
+                digitos = digitos[:-1]                     # Sicoob: sequencial(7) + DV
+        return digitos.lstrip('0') or '0'
+
     def calcular_valores_hoje(self):
         """
         Calcula os valores de multa, juros e desconto para pagamento hoje.
@@ -1342,8 +1373,19 @@ class Parcela(TimeStampedModel):
         if not r.get('sucesso'):
             return r
 
-        self.conta_bancaria = conta
         self.checkout_url = r.get('url') or ''
+        if self.status_boleto in (StatusBoleto.GERADO, StatusBoleto.REGISTRADO) and self.nosso_numero:
+            # Já existe boleto vivo nesta parcela: o link é um meio ADICIONAL.
+            # Não troca conta/provider/cobranca_id (quebraria cancelamento,
+            # webhook do boleto e elegibilidade de remessa) — o pagamento do
+            # checkout casa pelo ext_ref.
+            if not self.ext_ref:
+                self.ext_ref = ext_ref
+            self.save(update_fields=['checkout_url', 'ext_ref'])
+            return {'sucesso': True, 'url': self.checkout_url,
+                    'checkout_id': r.get('checkout_id'), 'status': r.get('status'),
+                    'parcelas': parcelas_efetivas}
+        self.conta_bancaria = conta
         # id do checkout em cobranca_id → o webhook casa por payload['id'].
         self.registrar_emissao(provider=conta.provider,
                                metodo=MetodoCobranca.CHECKOUT,
@@ -1602,11 +1644,14 @@ class Reajuste(TimeStampedModel):
 
     @property
     def percentual_liquido(self):
-        """Percentual efetivamente aplicado após desconto em p.p."""
-        perc = self.percentual
-        if self.desconto_percentual:
-            perc = max(Decimal('0'), perc - self.desconto_percentual)
-        return perc
+        """
+        Percentual efetivamente aplicado.
+
+        `percentual` já é gravado LÍQUIDO (índice + spread − desconto, com
+        piso/teto); `desconto_percentual` fica só como registro do abatimento.
+        Subtrair de novo aqui aplicava o desconto em dobro (HU-05).
+        """
+        return self.percentual
 
     # ------------------------------------------------------------------
     # Métodos de classe para cálculo automático

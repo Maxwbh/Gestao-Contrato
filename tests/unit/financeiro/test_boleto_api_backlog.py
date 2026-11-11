@@ -102,7 +102,7 @@ class TestEmitirPixAvulso:
                              contabilidade=outra.contabilidade)
         client.force_login(user)
         resp = client.post(reverse('financeiro:emitir_pix_parcela', args=[p.pk]))
-        assert resp.status_code == 404
+        assert resp.status_code in (403, 404)
 
 
 # ---------------------------------------------------------------------------

@@ -48,6 +48,9 @@ class FiltroRelatorio:
     """Filtros para geração de relatórios"""
     contrato_id: Optional[int] = None
     imobiliaria_id: Optional[int] = None
+    # Isolamento por tenant: quando definido (lista de ids), restringe TODOS os
+    # relatórios às imobiliárias do usuário. None = sem restrição (admin).
+    imobiliaria_ids: Optional[list] = None
     comprador_id: Optional[int] = None
     data_inicio: Optional[date] = None
     data_fim: Optional[date] = None
@@ -302,6 +305,8 @@ class RelatorioService:
             queryset = queryset.filter(id=filtro.contrato_id)
         if filtro.imobiliaria_id:
             queryset = queryset.filter(imobiliaria_id=filtro.imobiliaria_id)
+        if filtro.imobiliaria_ids is not None:
+            queryset = queryset.filter(imobiliaria_id__in=filtro.imobiliaria_ids)
         if filtro.comprador_id:
             queryset = queryset.filter(comprador_id=filtro.comprador_id)
 
@@ -398,7 +403,8 @@ class RelatorioService:
 
     def gerar_relatorio_previsao_reajustes(
         self,
-        dias_antecedencia: int = 30
+        dias_antecedencia: int = 30,
+        imobiliaria_ids: Optional[list] = None,
     ) -> Dict[str, Any]:
         """
         Gera relatório de contratos com reajuste próximo.
@@ -420,11 +426,14 @@ class RelatorioService:
         from financeiro.models import Parcela
 
         # Buscar contratos ativos que não usam valor fixo
-        contratos = list(Contrato.objects.filter(
+        qs_contratos = Contrato.objects.filter(
             status=StatusContrato.ATIVO
         ).exclude(
             tipo_correcao=TipoCorrecao.FIXO
-        ).select_related('comprador', 'imobiliaria'))
+        )
+        if imobiliaria_ids is not None:   # isolamento por tenant
+            qs_contratos = qs_contratos.filter(imobiliaria_id__in=imobiliaria_ids)
+        contratos = list(qs_contratos.select_related('comprador', 'imobiliaria'))
 
         # Filtrar candidatos dentro do período de alerta (Python — evita N+1)
         candidatos = [
@@ -473,6 +482,7 @@ class RelatorioService:
                 'contrato_id': contrato.pk,
                 'contrato_numero': contrato.numero_contrato,
                 'comprador_nome': contrato.comprador.nome,
+                'imobiliaria_id': contrato.imobiliaria_id,
                 'imobiliaria_nome': contrato.imobiliaria.nome if contrato.imobiliaria else '',
                 'tipo_correcao': contrato.tipo_correcao,
                 'data_proximo_reajuste': data_proximo,
@@ -515,6 +525,8 @@ class RelatorioService:
 
         if filtro.imobiliaria_id:
             queryset = queryset.filter(contrato__imobiliaria_id=filtro.imobiliaria_id)
+        if filtro.imobiliaria_ids is not None:
+            queryset = queryset.filter(contrato__imobiliaria_id__in=filtro.imobiliaria_ids)
 
         if filtro.comprador_id:
             queryset = queryset.filter(contrato__comprador_id=filtro.comprador_id)
@@ -621,6 +633,50 @@ class RelatorioService:
                         f'{item.valor_pago:.2f}' if item.valor_pago else '',
                     ])
                 writer.writerow(linha)
+
+        elif tipo == TipoRelatorio.POSICAO_CONTRATOS.value:
+            # HU-18: antes o CSV destes relatórios saía vazio (só prestações eram tratadas)
+            def _data(v):
+                return v.strftime('%d/%m/%Y') if hasattr(v, 'strftime') else (v or '')
+
+            writer.writerow([
+                'Contrato', 'Comprador', 'Imóvel', 'Data Contrato',
+                'Valor Total', 'Entrada', 'Financiado', 'Total Parcelas',
+                'Pagas', 'A Pagar', 'Vencidas', 'Total Pago',
+                'Saldo Devedor', 'Progresso %', 'Próximo Vencimento',
+            ])
+            for item in relatorio.get('itens', []):
+                writer.writerow([
+                    item['contrato_numero'], item['comprador_nome'], item['imovel'],
+                    _data(item['data_contrato']),
+                    f"{item['valor_total']:.2f}", f"{item['valor_entrada']:.2f}",
+                    f"{item['valor_financiado']:.2f}", item['total_parcelas'],
+                    item['parcelas_pagas'], item['parcelas_a_pagar'],
+                    item['parcelas_vencidas'], f"{item['total_pago']:.2f}",
+                    f"{item['saldo_devedor']:.2f}",
+                    f"{item['progresso_percentual']:.2f}",
+                    _data(item['proxima_parcela_vencimento']),
+                ])
+
+        elif tipo == TipoRelatorio.PREVISAO_REAJUSTES.value:
+            def _data(v):
+                return v.strftime('%d/%m/%Y') if hasattr(v, 'strftime') else (v or '')
+
+            writer.writerow([
+                'Contrato', 'Comprador', 'Imobiliária', 'Índice',
+                'Próximo Reajuste', 'Dias', 'Ciclo', 'Status',
+                'Parcelas Afetadas', 'Bloqueio Ativo', 'Último Reajuste',
+            ])
+            for item in relatorio.get('itens', []):
+                writer.writerow([
+                    item['contrato_numero'], item['comprador_nome'],
+                    item.get('imobiliaria_nome', ''), item['tipo_correcao'],
+                    _data(item['data_proximo_reajuste']), item['dias_para_reajuste'],
+                    item['proximo_ciclo'], item['status_reajuste'],
+                    item['parcelas_afetadas'],
+                    'Sim' if item['bloqueio_ativo'] else 'Não',
+                    _data(item.get('ultimo_reajuste')),
+                ])
 
         return output.getvalue()
 

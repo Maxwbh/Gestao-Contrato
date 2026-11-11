@@ -484,7 +484,7 @@ class BoletoService:
 
         return dados_filtrados
 
-    def _montar_dados_boleto(self, parcela, conta_bancaria):
+    def _montar_dados_boleto(self, parcela, conta_bancaria, nosso_numero=None):
         """
         Monta os dados do boleto no formato esperado pelo BRCobranca.
 
@@ -502,8 +502,10 @@ class BoletoService:
         # Obter configuracoes de boleto do contrato (personalizadas ou da imobiliaria)
         config_boleto = contrato.get_config_boleto()
 
-        # Obter proximo nosso numero
-        nosso_numero = parcela.obter_proximos_nosso_numero(conta_bancaria)
+        # Obter proximo nosso numero — ou reutilizar o informado (2ª via: não
+        # consome sequencial da conta)
+        if nosso_numero is None:
+            nosso_numero = parcela.obter_proximos_nosso_numero(conta_bancaria)
 
         # Documento do pagador (CPF ou CNPJ)
         documento_pagador = self._formatar_cpf_cnpj(
@@ -988,15 +990,23 @@ class BoletoService:
 
             valor_total = parcela.valor_atual + valor_juros + valor_multa
 
-            # Montar dados base do boleto (instrucao1 já tem "1a Via")
-            dados_boleto, _ = self._montar_dados_boleto(parcela, conta_bancaria)
+            # HU-08: 2ª via é do boleto já emitido — mesmo nosso número, sem
+            # consumir sequencial da conta.
+            sequencial = parcela.get_nosso_numero_sequencial(conta_bancaria)
+            if not sequencial:
+                return {
+                    'sucesso': False,
+                    'erro': 'Esta parcela ainda não tem boleto emitido. Gere o boleto antes da 2ª via.',
+                }
+
+            # Montar dados base do boleto (instrucao1 já tem "1a Via"); o
+            # sequencial passa pela mesma formatação por banco da 1ª via.
+            dados_boleto, _ = self._montar_dados_boleto(
+                parcela, conta_bancaria, nosso_numero=int(sequencial)
+            )
 
             # Sobrepor valor com total atualizado
-            dados_boleto['valor'] = float(valor_total)
-
-            # Reutilizar nosso_número existente se disponível
-            if parcela.nosso_numero:
-                dados_boleto['nosso_numero'] = str(parcela.nosso_numero)
+            dados_boleto['valor'] = float(valor_total.quantize(Decimal('0.01')))
 
             # ── Slot 1: trocar "1a Via" por "2a Via" ──────────────────────────
             dados_boleto['instrucao1'] = dados_boleto.get('instrucao1', '').replace('1a Via', '2a Via')

@@ -38,6 +38,13 @@ def _imobs_para_usuario(user):
     return get_imobiliarias_usuario(user)
 
 
+def _imob_ids_restritos(user):
+    """Ids das imobiliárias do usuário para filtrar relatórios; None = sem restrição (admin)."""
+    if usuario_tem_permissao_total(user):
+        return None
+    return list(get_imobiliarias_usuario(user).values_list('id', flat=True))
+
+
 def _origem_baixa(event):
     """
     Origem da baixa no painel de conciliação Boleto-API, a partir de
@@ -868,6 +875,11 @@ def registrar_pagamento(request, hid):
         ('CHEQUE', 'Cheque'),
     ]
 
+    if request.method == 'POST' and parcela.pago:
+        # HU-04: parcela paga não recebe segundo pagamento (evita histórico duplicado)
+        messages.warning(request, f'Parcela {parcela.numero_parcela} já está paga.')
+        return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
+
     if request.method == 'POST':
         valor_pago_str = request.POST.get('valor_pago', '0')
         data_pagamento_str = request.POST.get('data_pagamento', '')
@@ -881,7 +893,10 @@ def registrar_pagamento(request, hid):
             if data_pagamento_str:
                 data_pagamento = datetime.strptime(data_pagamento_str, '%Y-%m-%d').date()
             else:
-                data_pagamento = timezone.now().date()
+                data_pagamento = timezone.localdate()
+            if data_pagamento > timezone.localdate():
+                # HU-04 RN-01: data de pagamento não pode ser futura
+                raise ValueError('A data de pagamento não pode ser futura.')
 
             # Calcular juros/multa para o HistoricoPagamento
             valor_juros = Decimal('0.00')
@@ -1623,9 +1638,10 @@ def segunda_via_boleto(request, hid):
     valor_total = parcela.valor_atual + valor_juros + valor_multa
 
     if request.GET.get('download') == '1':
-        # Obter conta bancária
-        conta_bancaria = None
-        if hasattr(contrato, 'get_conta_bancaria'):
+        # Obter conta bancária — a que EMITIU o boleto vem primeiro (a 2ª via
+        # precisa do mesmo banco/convênio do título original)
+        conta_bancaria = parcela.conta_bancaria
+        if not conta_bancaria and hasattr(contrato, 'get_conta_bancaria'):
             conta_bancaria = contrato.get_conta_bancaria()
         if not conta_bancaria:
             conta_bancaria = contrato.imobiliaria.contas_bancarias.filter(principal=True, ativo=True).first()
@@ -2115,7 +2131,22 @@ def excluir_arquivo_remessa(request, hid):
         }, status=400)
 
     try:
-        arquivo.delete()
+        from django.db import transaction
+        with transaction.atomic():
+            # HU-23 RN-14: boletos da remessa excluída voltam ao pool (REGISTRADO → GERADO),
+            # exceto os que já estão em outra remessa.
+            parcela_ids = list(arquivo.itens.values_list('parcela_id', flat=True))
+            arquivo.delete()
+            if parcela_ids:
+                from .models import ItemRemessa
+                em_outra = set(ItemRemessa.objects.filter(
+                    parcela_id__in=parcela_ids
+                ).values_list('parcela_id', flat=True))
+                Parcela.objects.filter(
+                    pk__in=[i for i in parcela_ids if i not in em_outra],
+                    status_boleto=StatusBoleto.REGISTRADO, pago=False,
+                    cobranca_id='',
+                ).update(status_boleto=StatusBoleto.GERADO)
         return JsonResponse({'sucesso': True, 'mensagem': 'Remessa excluída com sucesso.'})
     except Exception as e:
         logger.exception("Erro ao excluir remessa pk=%s: %s", pk, e)
@@ -3566,7 +3597,8 @@ def pagar_parcela_ajax(request, hid):
     pk = _hid_to_pk(hid)
     from .models import HistoricoPagamento
 
-    parcela = get_object_or_404(Parcela, pk=pk)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     if parcela.pago:
         return JsonResponse({
@@ -3576,17 +3608,37 @@ def pagar_parcela_ajax(request, hid):
 
     try:
         from datetime import date as _date
-        data_pagamento_str = request.POST.get('data_pagamento', '').strip()
+        # Aceita formulário e corpo JSON (antes o JSON era ignorado e a parcela
+        # era baixada com valor R$ 0,00).
+        dados = request.POST
+        if (request.content_type or '').startswith('application/json'):
+            import json as _json
+            try:
+                dados = _json.loads(request.body or b'{}')
+            except ValueError:
+                return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
+        data_pagamento_str = str(dados.get('data_pagamento') or '').strip()
         try:
             data_pagamento = _date.fromisoformat(data_pagamento_str) if data_pagamento_str else timezone.localdate()
         except ValueError:
             data_pagamento = timezone.localdate()
-        valor_pago = Decimal(request.POST.get('valor_pago', 0))
-        valor_juros = Decimal(request.POST.get('valor_juros', 0))
-        valor_multa = Decimal(request.POST.get('valor_multa', 0))
-        valor_desconto = Decimal(request.POST.get('valor_desconto', 0))
-        forma_pagamento = request.POST.get('forma_pagamento', 'DINHEIRO')
-        observacoes = request.POST.get('observacoes', '')
+        if data_pagamento > timezone.localdate():
+            # HU-04 RN-01: data de pagamento não pode ser futura
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'A data de pagamento não pode ser futura.'
+            }, status=400)
+        valor_pago = Decimal(str(dados.get('valor_pago') or 0))
+        if valor_pago <= 0:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'Informe um valor pago válido.'
+            }, status=400)
+        valor_juros = Decimal(str(dados.get('valor_juros') or 0))
+        valor_multa = Decimal(str(dados.get('valor_multa') or 0))
+        valor_desconto = Decimal(str(dados.get('valor_desconto') or 0))
+        forma_pagamento = dados.get('forma_pagamento') or 'DINHEIRO'
+        observacoes = dados.get('observacoes') or ''
 
         # Atualizar parcela
         parcela.valor_juros = valor_juros
@@ -3620,6 +3672,9 @@ def pagar_parcela_ajax(request, hid):
             observacoes=observacoes,
             origem_pagamento='MANUAL',
         )
+
+        # HU-04: última parcela paga → contrato QUITADO
+        parcela.contrato.sincronizar_quitacao()
 
         return JsonResponse({
             'sucesso': True,
@@ -4688,6 +4743,28 @@ def aplicar_reajuste_contrato(request, contrato_id):
         # ── Modo automático ──────────────────────────────────────────────────
         if ciclo_param:
             ciclo = int(ciclo_param)
+            # HU-05 RN-03: ciclos em ordem, sem repetir nem pular (mesma regra da tela)
+            # (a API permite antecipar o ciclo; por isso valida a sequência
+            # pelos reajustes já aplicados, não pela data.)
+            aplicados = set(Reajuste.objects.filter(
+                contrato=contrato, aplicado=True).values_list('ciclo', flat=True))
+            if ciclo < 2:
+                return JsonResponse({
+                    'sucesso': False,
+                    'erro': 'O ciclo 1 não possui reajuste.',
+                }, status=400)
+            if ciclo in aplicados:
+                return JsonResponse({
+                    'sucesso': False,
+                    'erro': f'Ciclo {ciclo} já foi aplicado anteriormente.',
+                }, status=400)
+            faltando = [c for c in range(2, ciclo) if c not in aplicados]
+            if faltando:
+                return JsonResponse({
+                    'sucesso': False,
+                    'erro': (f'Sequência incorreta: aplique o ciclo {faltando[0]} '
+                             f'antes do {ciclo}.'),
+                }, status=400)
             preview = Reajuste.preview_reajuste(
                 contrato, ciclo,
                 desconto_percentual=desconto_percentual,
@@ -4734,11 +4811,16 @@ def aplicar_reajuste_contrato(request, contrato_id):
 
             ciclo = contrato.ciclo_reajuste_atual + 1
 
+            # `percentual` é gravado líquido (bruto − desconto em p.p.)
+            percentual_liq = percentual
+            if desconto_percentual:
+                percentual_liq = max(Decimal('0'), percentual - Decimal(str(desconto_percentual)))
+
             reajuste = Reajuste.objects.create(
                 contrato=contrato,
                 data_reajuste=timezone.now().date(),
                 indice_tipo=indice_tipo,
-                percentual=percentual,
+                percentual=percentual_liq,
                 percentual_bruto=percentual,
                 desconto_percentual=Decimal(str(desconto_percentual)) if desconto_percentual else None,
                 desconto_valor=Decimal(str(desconto_valor)) if desconto_valor else None,
@@ -5157,8 +5239,8 @@ def aplicar_reajuste_informado_lote(request):
         parcela_final = min(ciclo * prazo, contrato.numero_parcelas)
 
         # Aplica piso/teto ao percentual informado
-        piso = contrato.reajuste_piso or Decimal('-100')
-        teto = contrato.reajuste_teto or Decimal('999')
+        piso = contrato.reajuste_piso if contrato.reajuste_piso is not None else Decimal('-100')
+        teto = contrato.reajuste_teto if contrato.reajuste_teto is not None else Decimal('999')
         perc_final = max(piso, min(teto, percentual_informado))
 
         # Desconto
@@ -6074,6 +6156,7 @@ class RelatorioPrestacoesAPagarView(LoginRequiredMixin, TemplateView):
 
         # Criar filtro
         filtro = FiltroRelatorio()
+        filtro.imobiliaria_ids = _imob_ids_restritos(self.request.user)
         if contrato_id:
             filtro.contrato_id = int(contrato_id)
         if imobiliaria_id:
@@ -6132,6 +6215,7 @@ class RelatorioPrestacoesPageasView(LoginRequiredMixin, TemplateView):
 
         # Criar filtro
         filtro = FiltroRelatorio()
+        filtro.imobiliaria_ids = _imob_ids_restritos(self.request.user)
         if contrato_id:
             filtro.contrato_id = int(contrato_id)
         if imobiliaria_id:
@@ -6187,6 +6271,7 @@ class RelatorioPosicaoContratosView(LoginRequiredMixin, TemplateView):
 
         # Criar filtro
         filtro = FiltroRelatorio()
+        filtro.imobiliaria_ids = _imob_ids_restritos(self.request.user)
         if imobiliaria_id:
             filtro.imobiliaria_id = int(imobiliaria_id)
 
@@ -6233,7 +6318,8 @@ class RelatorioPrevisaoReajustesView(LoginRequiredMixin, TemplateView):
 
         # Gerar relatório
         service = RelatorioService()
-        relatorio = service.gerar_relatorio_previsao_reajustes(dias_antecedencia)
+        relatorio = service.gerar_relatorio_previsao_reajustes(
+            dias_antecedencia, imobiliaria_ids=_imob_ids_restritos(self.request.user))
 
         # Filtrar por imobiliária se necessário
         if imobiliaria_id:
@@ -6275,6 +6361,7 @@ def exportar_relatorio(request, tipo):
 
     # Criar filtro com base nos parâmetros
     filtro = FiltroRelatorio()
+    filtro.imobiliaria_ids = _imob_ids_restritos(request.user)
     contrato_id = request.GET.get('contrato')
     imobiliaria_id = request.GET.get('imobiliaria')
     data_inicio = request.GET.get('data_inicio')
@@ -6311,7 +6398,8 @@ def exportar_relatorio(request, tipo):
             dias = max(1, int(request.GET.get('dias', 60)))
         except (ValueError, TypeError):
             dias = 60
-        relatorio = service.gerar_relatorio_previsao_reajustes(dias)
+        relatorio = service.gerar_relatorio_previsao_reajustes(
+            dias, imobiliaria_ids=_imob_ids_restritos(request.user))
     else:
         return HttpResponse('Tipo de relatório inválido', status=400)
 
@@ -6379,6 +6467,7 @@ def exportar_relatorio_consolidado(request):
     hoje = tz.now().date()
 
     filtro = FiltroRelatorio()
+    filtro.imobiliaria_ids = _imob_ids_restritos(request.user)
     if imobiliaria_id:
         try:
             filtro.imobiliaria_id = int(imobiliaria_id)
@@ -6406,6 +6495,7 @@ def exportar_relatorio_consolidado(request):
     service = RelatorioService()
 
     filtro_pagar = FiltroRelatorio()
+    filtro_pagar.imobiliaria_ids = _imob_ids_restritos(request.user)
     if imobiliaria_id:
         try:
             filtro_pagar.imobiliaria_id = int(imobiliaria_id)
@@ -6518,6 +6608,7 @@ def api_relatorio_resumo(request):
     # Filtro por imobiliária
     imobiliaria_id = request.GET.get('imobiliaria')
     filtro = FiltroRelatorio()
+    filtro.imobiliaria_ids = _imob_ids_restritos(request.user)
     if imobiliaria_id:
         filtro.imobiliaria_id = int(imobiliaria_id)
 
@@ -6534,7 +6625,8 @@ def api_relatorio_resumo(request):
     relatorio_pagas = service.gerar_relatorio_prestacoes_pagas(filtro)
 
     # Previsão de reajustes
-    relatorio_reajustes = service.gerar_relatorio_previsao_reajustes(60)
+    relatorio_reajustes = service.gerar_relatorio_previsao_reajustes(
+        60, imobiliaria_ids=_imob_ids_restritos(request.user))
 
     return JsonResponse({
         'a_pagar': {
@@ -7131,7 +7223,13 @@ def api_parcela_registrar_pagamento(request, parcela_id):
             from datetime import datetime
             data_pagamento = datetime.strptime(data_pagamento, '%Y-%m-%d').date()
         else:
-            data_pagamento = timezone.now().date()
+            data_pagamento = timezone.localdate()
+        if data_pagamento > timezone.localdate():
+            # HU-04 RN-01: data de pagamento não pode ser futura
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'A data de pagamento não pode ser futura.'
+            }, status=400)
 
         observacoes = data.get('observacoes', '')
         forma_pagamento = data.get('forma_pagamento', 'DINHEIRO')
@@ -8628,6 +8726,8 @@ def simulador_antecipacao(request, contrato_id):
                      'status_boleto', 'data_pagamento_boleto', 'valor_pago_boleto'],
                 )
                 HistoricoPagamento.objects.bulk_create(historicos)
+                # HU-09: antecipação que zera o saldo quita o contrato
+                contrato.sincronizar_quitacao()
 
             messages.success(
                 request,
@@ -9347,7 +9447,10 @@ def _processar_evento_cobranca(
         )
 
     # Idempotência por event_id (o banco pode reenviar o mesmo evento)
-    if event_id and EventoCobrancaApi.objects.filter(event_id=event_id).exclude(status='recebido').exists():
+    # Só eventos que chegaram a um desfecho contam: 'sem_parcela'/'erro' são
+    # falhas reprocessáveis — o reenvio do banco não pode ser descartado.
+    if event_id and EventoCobrancaApi.objects.filter(
+            event_id=event_id, status__in=('baixado', 'atualizado', 'ignorado', 'duplicado')).exists():
         return {'status': 'duplicado', 'evento_id': _log('duplicado').pk}
 
     # Pix Automático (Fase 8): recorrência atualiza o RecorrenciaPix; a cobrança
@@ -9416,6 +9519,10 @@ def _processar_evento_cobranca(
             evt.status = 'duplicado'
             evt.save(update_fields=['status'])
             return {'status': 'duplicado', 'parcela_id': parcela.pk, 'evento_id': evt.pk}
+        if not valor or valor <= 0:
+            # Evento de liquidação sem valor: baixa pelo valor do título em vez
+            # de gravar pagamento de R$ 0,00.
+            valor = parcela.valor_boleto or parcela.valor_atual
         try:
             parcela.registrar_pagamento_boleto(
                 valor_pago=float(valor or 0), data_pagamento=paid_at,
