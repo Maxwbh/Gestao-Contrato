@@ -2355,52 +2355,61 @@ dl.row dd { margin: 0; color: var(--dark-text); font-size: 0.9rem; }
    U-01: DARK MODE
    ======================================================================== */
 body.dark-mode {
-    --light-bg: #121212;
-    --dark-text: #DDE5F2;
-    background-color: #121212;
-    color: #DDE5F2;
+    /* Modo escuro na paleta: tinta no fundo, marinho nos cartões, ciano no
+       destaque (o kit reserva o ciano para fundo escuro). Os tons de realce e
+       de linha são derivados do marinho — não constam do kit. */
+    --ms-esc-fundo: #0B1533;
+    --ms-esc-cartao: #0D1B4B;
+    --ms-esc-realce: #16286A;
+    --ms-esc-linha: #24377F;
+    --ms-esc-linha-forte: #33489A;
+    --ms-esc-apoio: #A9B6D3;
+    --light-bg: var(--ms-esc-fundo);
+    --dark-text: var(--ms-linha);
+    background-color: var(--ms-esc-fundo);
+    color: var(--ms-linha);
 }
 
 body.dark-mode .card {
-    background-color: #1e1e1e;
-    color: #DDE5F2;
+    background-color: var(--ms-esc-cartao);
+    color: var(--ms-linha);
     box-shadow: 0 2px 8px rgba(0,0,0,.5);
 }
 
 body.dark-mode .card-header,
 body.dark-mode .card-footer {
-    background-color: #2a2a2a;
-    border-color: #333;
-    color: #DDE5F2;
+    background-color: var(--ms-esc-realce);
+    border-color: var(--ms-esc-linha);
+    color: var(--ms-linha);
 }
 
 body.dark-mode .card-body {
-    background-color: #1e1e1e;
-    color: #DDE5F2;
+    background-color: var(--ms-esc-cartao);
+    color: var(--ms-linha);
 }
 
 body.dark-mode .table {
-    color: #d0d0d0;
-    border-color: #333;
+    color: var(--ms-linha);
+    border-color: var(--ms-esc-linha);
 }
 
 body.dark-mode .table thead th {
-    background-color: #2a2a2a;
-    color: #DDE5F2;
-    border-color: #444;
+    background-color: var(--ms-esc-realce);
+    color: var(--ms-linha);
+    border-color: var(--ms-esc-linha-forte);
 }
 
 body.dark-mode .table tbody tr {
-    background-color: #1e1e1e;
-    border-color: #333;
+    background-color: var(--ms-esc-cartao);
+    border-color: var(--ms-esc-linha);
 }
 
 body.dark-mode .table-hover tbody tr:hover {
-    background-color: #2a2a2a;
+    background-color: var(--ms-esc-realce);
 }
 
 body.dark-mode .table-dark thead {
-    background-color: #0d0d0d;
+    background-color: var(--ms-esc-fundo);
 }
 
 body.dark-mode .form-control,
@@ -2410,23 +2419,23 @@ body.dark-mode input[type="date"],
 body.dark-mode input[type="number"],
 body.dark-mode textarea,
 body.dark-mode select {
-    background-color: #2a2a2a;
-    border-color: #444;
-    color: #DDE5F2;
+    background-color: var(--ms-esc-realce);
+    border-color: var(--ms-esc-linha-forte);
+    color: var(--ms-linha);
 }
 
 body.dark-mode .form-control:focus,
 body.dark-mode .form-select:focus {
-    background-color: #333;
-    border-color: #1D4ED8;
-    color: #DDE5F2;
-    box-shadow: 0 0 0 0.2rem rgba(29, 78, 216,.25);
+    background-color: var(--ms-esc-linha);
+    border-color: var(--ms-ciano);
+    color: var(--ms-linha);
+    box-shadow: 0 0 0 0.2rem rgba(6, 182, 212, .28);
 }
 
 body.dark-mode .input-group-text {
-    background-color: #2a2a2a;
-    border-color: #444;
-    color: #bbb;
+    background-color: var(--ms-esc-realce);
+    border-color: var(--ms-esc-linha-forte);
+    color: var(--ms-esc-apoio);
 }
 
 body.dark-mode .alert {
@@ -2440,7 +2449,7 @@ body.dark-mode .alert-warning {
 
 body.dark-mode .alert-info {
     background-color: #002a3a;
-    color: #4dd0e1;
+    color: var(--ms-ciano);
 }
 
 body.dark-mode .alert-danger {
@@ -2454,61 +2463,157 @@ body.dark-mode .alert-success {
 }
 
 body.dark-mode .modal-content {
-    background-color: #1e1e1e;
-    color: #DDE5F2;
+    background-color: var(--ms-esc-cartao);
+    color: var(--ms-linha);
 }
 
 body.dark-mode .modal-header,
 body.dark-mode .modal-footer {
-    border-color: #333;
-    background-color: #2a2a2a;
+    border-color: var(--ms-esc-linha);
+    background-color: var(--ms-esc-realce);
 }
 
 body.dark-mode .dropdown-content,
 body.dark-mode .app-dropdown {
-    background-color: #1e1e1e !important;
+    background-color: var(--ms-esc-cartao) !important;
 }
 
 body.dark-mode .dropdown-content li > a,
 body.dark-mode .app-dropdown li > a {
-    color: #d0d0d0 !important;
+    color: var(--ms-linha) !important;
 }
 
 body.dark-mode .dropdown-content li:hover,
 body.dark-mode .app-dropdown li:hover {
-    background-color: #2a2a2a !important;
+    background-color: var(--ms-esc-realce) !important;
 }
 
 body.dark-mode .app-dropdown .dropdown-header-item {
-    color: #cbd5e1 !important;
-    background: #2a2f3a !important;
+    color: var(--ms-linha) !important;
+    background: var(--ms-esc-realce) !important;
 }
 
 body.dark-mode .sidenav {
-    background-color: #1a1a1a;
+    background-color: var(--ms-esc-cartao);
 }
 
 body.dark-mode .sidenav li > a {
-    color: #d0d0d0;
+    color: var(--ms-linha);
 }
 
 body.dark-mode hr, body.dark-mode .divider {
-    border-color: #333;
+    border-color: var(--ms-esc-linha);
 }
 
 body.dark-mode .badge.bg-light {
-    background-color: #333 !important;
-    color: #bbb !important;
+    background-color: var(--ms-esc-linha) !important;
+    color: var(--ms-esc-apoio) !important;
 }
 
 body.dark-mode .text-muted {
-    color: #888 !important;
+    color: var(--ms-esc-apoio) !important;
 }
 
 body.dark-mode code, body.dark-mode pre {
-    background-color: #2a2a2a;
-    color: #ccc;
+    background-color: var(--ms-esc-realce);
+    color: var(--ms-linha);
 }
+
+
+/* Texto, títulos e links */
+body.dark-mode h1, body.dark-mode h2, body.dark-mode h3,
+body.dark-mode h4, body.dark-mode h5, body.dark-mode h6,
+body.dark-mode label, body.dark-mode .form-label, body.dark-mode .text-dark { color: var(--ms-linha) !important; }
+body.dark-mode .main-container a:not(.btn):not(.white-text):not(.badge) { color: var(--ms-ciano); }
+body.dark-mode .text-primary, body.dark-mode .text-info { color: var(--ms-ciano) !important; }
+body.dark-mode .text-success { color: #34D399 !important; }
+body.dark-mode .text-danger { color: #FDA29B !important; }
+body.dark-mode .text-warning { color: #FDB022 !important; }
+body.dark-mode .breadcrumb-item, body.dark-mode .breadcrumb-item.active { color: var(--ms-esc-apoio); }
+
+/* Superfícies claras fixas */
+body.dark-mode .bg-light, body.dark-mode .bg-white, body.dark-mode .card-footer,
+body.dark-mode .list-group-item, body.dark-mode .collection .collection-item,
+body.dark-mode .pagination .page-link, body.dark-mode .pagination li a {
+    background-color: var(--ms-esc-cartao) !important; color: var(--ms-linha) !important; border-color: var(--ms-esc-linha) !important;
+}
+body.dark-mode .card { border: 1px solid var(--ms-esc-linha); }
+body.dark-mode .card-header { background: var(--ms-esc-realce); }
+body.dark-mode .table-striped tbody tr:nth-of-type(odd) { background-color: rgba(255, 255, 255, 0.03); }
+body.dark-mode .table td, body.dark-mode .table th { border-color: var(--ms-esc-linha); color: var(--ms-linha); }
+body.dark-mode ::placeholder { color: var(--ms-esc-apoio); opacity: .8; }
+
+/* Botões e controles */
+body.dark-mode .btn-outline-primary, body.dark-mode .btn-outline-secondary,
+body.dark-mode .btn-outline-info, body.dark-mode .btn-outline-dark {
+    color: var(--ms-linha); border-color: var(--ms-esc-linha-forte); background: transparent;
+}
+body.dark-mode .btn-outline-primary:hover, body.dark-mode .btn-outline-secondary:hover,
+body.dark-mode .btn-outline-info:hover, body.dark-mode .btn-outline-dark:hover {
+    background: var(--ms-esc-realce); color: #fff; border-color: var(--ms-ciano);
+}
+body.dark-mode .pagination li.active a, body.dark-mode .pagination .active .page-link {
+    background-color: var(--ms-azul) !important; color: #fff !important;
+}
+body.dark-mode a:focus-visible, body.dark-mode button:focus-visible,
+body.dark-mode .btn:focus-visible { outline-color: var(--ms-ciano); }
+
+/* Grades (AG Grid) */
+body.dark-mode .ag-theme-material {
+    --ag-background-color: var(--ms-esc-cartao);
+    --ag-odd-row-background-color: #10205A;
+    --ag-header-background-color: var(--ms-esc-realce);
+    --ag-foreground-color: var(--ms-linha);
+    --ag-data-color: var(--ms-linha);
+    --ag-header-foreground-color: #fff;
+    --ag-secondary-foreground-color: var(--ms-esc-apoio);
+    --ag-border-color: var(--ms-esc-linha);
+    --ag-row-border-color: var(--ms-esc-linha);
+    --ag-row-hover-color: var(--ms-esc-realce);
+    --ag-selected-row-background-color: rgba(6, 182, 212, 0.16);
+    --ag-material-primary-color: var(--ms-ciano);
+    --ag-material-accent-color: var(--ms-ciano);
+    --ag-checkbox-checked-color: var(--ms-ciano);
+}
+body.dark-mode .page-footer, body.dark-mode footer { background: #080F26; }
+
+/* Fundo da página: a classe utilitária do Materialize no <body> usa !important */
+body.dark-mode, body.dark-mode.grey.lighten-4, body.dark-mode .main-container {
+    background-color: var(--ms-esc-fundo) !important;
+}
+
+/* Campos: todos os tipos, inclusive os estilizados pelo seletor de formulário */
+body.dark-mode input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]),
+body.dark-mode select, body.dark-mode textarea,
+body.dark-mode .select-wrapper input.select-dropdown {
+    background-color: var(--ms-esc-realce) !important;
+    border-color: var(--ms-esc-linha-forte) !important;
+    color: var(--ms-linha) !important;
+}
+body.dark-mode input:focus, body.dark-mode select:focus, body.dark-mode textarea:focus {
+    border-color: var(--ms-ciano) !important;
+    box-shadow: 0 0 0 0.2rem rgba(6, 182, 212, .28) !important;
+}
+body.dark-mode input:disabled, body.dark-mode select:disabled, body.dark-mode textarea:disabled,
+body.dark-mode input[readonly] { opacity: .65; }
+body.dark-mode input[type="file"]::file-selector-button {
+    background: var(--ms-esc-linha); color: var(--ms-linha); border: 0; border-radius: 4px; padding: 4px 10px;
+}
+body.dark-mode option { background-color: var(--ms-esc-cartao); color: var(--ms-linha); }
+body.dark-mode .form-text, body.dark-mode small { color: var(--ms-esc-apoio); }
+
+/* Tabelas e cabeçalhos claros fixos */
+body.dark-mode .table-light, body.dark-mode .table-light th, body.dark-mode .table-light td,
+body.dark-mode thead.table-light th, body.dark-mode .table thead th {
+    background-color: var(--ms-esc-realce) !important; color: var(--ms-linha) !important;
+}
+body.dark-mode .table > :not(caption) > * > * { background-color: transparent; }
+body.dark-mode .btn-light, body.dark-mode .btn-outline-light {
+    background: var(--ms-esc-realce); color: var(--ms-linha); border-color: var(--ms-esc-linha-forte);
+}
+body.dark-mode .btn-outline-success { color: #34D399; border-color: #34D399; }
+body.dark-mode .btn-outline-danger { color: #FDA29B; border-color: #FDA29B; }
+body.dark-mode .modal, body.dark-mode .modal .modal-footer { background-color: var(--ms-esc-cartao); color: var(--ms-linha); }
 
 /* Dark mode toggle button */
 #dark-mode-toggle {
@@ -2558,3 +2663,15 @@ a:focus-visible, button:focus-visible, .btn:focus-visible, [tabindex]:focus-visi
 .card-header:not(.bg-light):not(.bg-white) [class*="btn-outline-"]:hover {
     background: rgba(255, 255, 255, 0.14); color: #fff; border-color: #fff;
 }
+
+/* Selo "Principal" da conta bancária */
+.badge-principal { background-color: var(--ms-sucesso) !important; color: #fff !important; }
+
+/* Modo escuro: linhas das grades e cartões com fundo claro fixo no template */
+body.dark-mode .ag-theme-material .ag-row-even { background-color: var(--ms-esc-cartao); }
+body.dark-mode .ag-theme-material .ag-row-odd { background-color: #10205A; }
+body.dark-mode .ag-theme-material .ag-row:hover { background-color: var(--ms-esc-realce) !important; }
+body.dark-mode .ag-theme-material .ag-row, body.dark-mode .ag-theme-material .ag-cell { color: var(--ms-linha); border-color: var(--ms-esc-linha); }
+body.dark-mode .ag-theme-material .ag-header { background-color: var(--ms-esc-realce); }
+body.dark-mode .ag-theme-material .ag-root-wrapper, body.dark-mode .ag-theme-material .ag-paging-panel { background-color: var(--ms-esc-cartao); color: var(--ms-linha); }
+body.dark-mode .periodo-card, body.dark-mode .periodo-card .card-body { background: var(--ms-esc-cartao) !important; }

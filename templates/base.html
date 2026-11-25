@@ -966,7 +966,18 @@
         var body = document.body;
         var icon = document.getElementById('dm-icon');
 
+        // Gráficos (Chart.js): eixos, legendas e grade na paleta do tema
+        function temaGraficos(dark) {
+            if (!window.Chart || !Chart.defaults) return;
+            Chart.defaults.color = dark ? '#A9B6D3' : '#5F6C88';
+            Chart.defaults.borderColor = dark ? 'rgba(169, 182, 211, 0.18)' : 'rgba(11, 21, 51, 0.10)';
+            var inst = Chart.instances || {};
+            Object.keys(inst).forEach(function (k) { try { inst[k].update('none'); } catch (e) {} });
+        }
+        window.addEventListener('load', function () { temaGraficos(body.classList.contains('dark-mode')); });
+
         function applyTheme(dark) {
+            temaGraficos(dark);
             if (dark) {
                 body.classList.add('dark-mode');
                 if (icon) { icon.classList.remove('fa-moon'); icon.classList.add('fa-sun'); }
@@ -1003,6 +1014,7 @@
                 e.preventDefault();
                 var isDark = body.classList.toggle('dark-mode');
                 localStorage.setItem(STORAGE_KEY, isDark ? '1' : '0');
+                temaGraficos(isDark);
                 if (icon2) {
                     icon2.classList.toggle('fa-moon', !isDark);
                     icon2.classList.toggle('fa-sun',  isDark);
