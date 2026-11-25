@@ -207,7 +207,7 @@ a:not(.btn):hover {
 }
 
 .btn-success:hover {
-    background: linear-gradient(135deg, #047857, #1e8449);
+    background: linear-gradient(135deg, #047857, #065F46);
 }
 
 .btn-danger {
@@ -216,7 +216,7 @@ a:not(.btn):hover {
 }
 
 .btn-danger:hover {
-    background: linear-gradient(135deg, #B42318, #a93226);
+    background: linear-gradient(135deg, #B42318, #912018);
 }
 
 .btn-outline-primary:hover,
@@ -1505,10 +1505,10 @@ ul.dropdown-content.app-dropdown li > a:hover {
 .btn-secondary:hover { background: #35425E; color: #fff; }
 
 .btn-success   { background: linear-gradient(135deg, var(--success-color), #047857); color: #fff; border-color: transparent; }
-.btn-success:hover { background: linear-gradient(135deg, #047857, #1e8449); color: #fff; transform: translateY(-1px); }
+.btn-success:hover { background: linear-gradient(135deg, #047857, #065F46); color: #fff; transform: translateY(-1px); }
 
 .btn-danger    { background: linear-gradient(135deg, var(--danger-color), #B42318); color: #fff; border-color: transparent; }
-.btn-danger:hover { background: linear-gradient(135deg, #B42318, #a93226); color: #fff; transform: translateY(-1px); }
+.btn-danger:hover { background: linear-gradient(135deg, #B42318, #912018); color: #fff; transform: translateY(-1px); }
 
 .btn-warning   { background: var(--warning-color); color: #212529; border-color: transparent; }
 .btn-warning:hover { background: #d68910; color: #212529; }
@@ -2056,8 +2056,8 @@ label.form-label,
 
 .card-obrigatorio { border-left: 4px solid var(--danger-color) !important; }
 .card-obrigatorio > .card-header::after { content: " (Obrigatorio)"; font-size: 0.7rem; opacity: 0.85; font-weight: normal; }
-.card-opcional { border-left: 4px solid #95a5a6 !important; }
-.card-opcional > .card-header { background: linear-gradient(135deg, #7f8c8d, #95a5a6) !important; }
+.card-opcional { border-left: 4px solid #5F6C88 !important; }
+.card-opcional > .card-header { background: linear-gradient(135deg, #0B1533, #35425E) !important; }
 .card-opcional > .card-header::after { content: " (Opcional)"; font-size: 0.7rem; opacity: 0.85; font-weight: normal; }
 
 /* ========================================================================
@@ -2104,6 +2104,12 @@ nav.app-breadcrumb a {
 .breadcrumb-item a { color: var(--secondary-color); text-decoration: none; }
 .breadcrumb-item a:hover { text-decoration: underline; }
 .breadcrumb-item.active { color: #5F6C88; }
+/* Materialize estiliza "nav i" como ícone de barra (bloco, 24 px, 56 px de altura,
+   flutuando): no breadcrumb isso empurrava o caminho para a linha de baixo */
+nav[aria-label="breadcrumb"] i, nav.app-breadcrumb i,
+nav[aria-label="Paginação"] i, nav[aria-label="Navegação de páginas"] i {
+    display: inline-block; float: none; font-size: inherit; height: auto; line-height: inherit;
+}
 
 /* ========================================================================
    DESCRIPTION LIST (dl.row) BRIDGE
@@ -2350,6 +2356,57 @@ dl.row dd { margin: 0; color: var(--dark-text); font-size: 0.9rem; }
     .stats-card h3 { font-size: 2rem; }
     .hide-on-small { display: none !important; }
 }
+
+/* ========================================================================
+   REVISÃO DO TEMA CLARO — contraste mínimo WCAG AA (4,5:1 texto, 3:1 grande)
+   ======================================================================== */
+/* Selos de status da parcela: o .badge do Materialize pinta o texto de cinza */
+.badge-pago, .badge-pendente, .badge-vencida { color: #fff; }
+/* Contadores da barra (Materialize): laranja e vermelho da paleta funcional */
+.new.badge.orange, .badge.orange { background-color: var(--ms-alerta, #B54708) !important; }
+.new.badge.red, .badge.red { background-color: var(--ms-erro, #B42318) !important; }
+/* Informação: o ciano escuro é só para gráfico; em fundo de texto usa-se #0369A1 */
+.bg-info, .badge.bg-info, .progress-bar.bg-info, .card-header.bg-info, .btn-info {
+    background-color: var(--ms-informacao, #0369A1) !important; color: #fff !important;
+}
+.btn-info:hover { background-color: #075985 !important; }
+.bg-info.text-dark, .bg-info .text-dark { color: #fff !important; }
+.text-info { color: var(--ms-informacao, #0369A1) !important; }
+.btn-outline-info { color: var(--ms-informacao, #0369A1); border-color: var(--ms-informacao, #0369A1); }
+.btn-outline-info:hover { background: var(--ms-informacao, #0369A1); color: #fff; }
+.bg-teal { background-color: #0E7490 !important; color: #fff !important; }
+/* Alerta (#B54708) é escuro: texto branco também nos botões */
+.btn-warning, .btn-warning:hover, .btn-warning:focus { color: #fff !important; }
+/* Selo claro: névoa com borda (o cinza do texto não passava sobre a linha) */
+.badge.bg-light { background-color: var(--ms-nevoa, #F4F7FC) !important; border: 1px solid var(--ms-linha, #DDE5F2); }
+/* Botão claro dentro do cabeçalho marinho: herdava o texto branco dos links */
+.card-header .btn-light, .card-header a.btn-light {
+    background: #fff !important; color: var(--ms-marinho, #0D1B4B) !important; border-color: transparent;
+}
+.card-header .btn-light:hover { background: var(--ms-nevoa, #F4F7FC) !important; }
+/* Rótulos de caixa de seleção: o Materialize usa #9e9e9e (2,7:1) */
+.form-check-label, [type="checkbox"] + span:not(.lever), [type="radio"] + span { color: var(--ms-texto, #35425E); }
+/* Texto auxiliar em linhas coloridas de tabela */
+.table-success .text-muted, .table-danger .text-muted, .table-warning .text-muted,
+.table-info .text-muted { color: var(--ms-texto, #35425E) !important; }
+/* Cabeçalho de cartão pedido claro (.bg-light/.bg-white): o gradiente marinho do
+   .card-header ficava por cima da cor de fundo e o cabeçalho saía escuro */
+.card-header.bg-light, .card-header.bg-white {
+    background-image: none !important; color: var(--ms-tinta, #0B1533);
+    border-bottom: 1px solid var(--ms-linha, #DDE5F2);
+}
+.card-header.bg-light a:not(.btn), .card-header.bg-white a:not(.btn) { color: var(--ms-azul, #1D4ED8); }
+/* Títulos de página na tinta da marca; dentro de superfícies escuras herdam a cor */
+.main-container :where(h1, h2, h3, h4, h5, h6) { color: var(--ms-tinta, #0B1533); }
+.main-container :where(.card-header:not(.bg-light):not(.bg-white), [class*="bg-"]:not(.bg-light):not(.bg-white):not(.bg-opacity-10):not(.bg-opacity-25),
+    .modal-header, .text-white, .white-text, .alert) :where(h1, h2, h3, h4, h5, h6) { color: inherit; }
+/* Especificidade: o "span.badge" do Materialize vence ".badge-*" e pinta o texto de cinza */
+span.badge.badge-pago, span.badge.badge-pendente, span.badge.badge-vencida { color: #fff; }
+/* Rótulos soltos (fora de .input-field): o "label" do Materialize é #9e9e9e */
+label.fw-semibold, label.form-label, label.fw-bold { color: var(--ms-texto, #35425E); }
+/* Texto auxiliar sobre cartões e linhas com fundo tingido */
+.kpi-card .text-muted, .kpi-card-danger .text-muted, .parcela-row .text-muted,
+.row-paga .text-muted, .linha-paga .text-muted { color: var(--ms-texto, #35425E) !important; }
 
 /* ========================================================================
    U-01: DARK MODE
@@ -2646,7 +2703,7 @@ body.dark-mode .modal, body.dark-mode .modal .modal-footer { background-color: v
    texto auxiliar continua legível sobre o marinho. */
 .card-header.bg-warning { background: var(--warning-color) !important; color: #fff !important; }
 .card-header.bg-warning.text-dark, .card-header.bg-warning .text-dark { color: #fff !important; }
-.card-header:not(.bg-light):not(.bg-white):not(.bg-warning) .text-muted { color: rgba(255, 255, 255, 0.72) !important; }
+.card-header:not(.bg-light):not(.bg-white):not(.bg-warning) .text-muted { color: rgba(255, 255, 255, 0.85) !important; }
 
 /* Anel de foco da marca: 2 px na cor de foco, com 2 px de afastamento */
 a:focus-visible, button:focus-visible, .btn:focus-visible, [tabindex]:focus-visible {
@@ -2675,3 +2732,9 @@ body.dark-mode .ag-theme-material .ag-row, body.dark-mode .ag-theme-material .ag
 body.dark-mode .ag-theme-material .ag-header { background-color: var(--ms-esc-realce); }
 body.dark-mode .ag-theme-material .ag-root-wrapper, body.dark-mode .ag-theme-material .ag-paging-panel { background-color: var(--ms-esc-cartao); color: var(--ms-linha); }
 body.dark-mode .periodo-card, body.dark-mode .periodo-card .card-body { background: var(--ms-esc-cartao) !important; }
+
+/* Selos dentro de células do AG Grid: alinhados à linha do texto */
+.ag-theme-material .ag-cell span.badge {
+    float: none; height: auto; min-width: 0; margin-left: 0;   /* "span.badge" do Materialize flutua e fixa altura */
+    line-height: 1.35; vertical-align: middle; display: inline-block;
+}

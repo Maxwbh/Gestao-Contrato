@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load l10n %}
 {% load crispy_forms_tags %}
 {% load hashid_tags %}
 {% load format_filters %}
@@ -180,7 +181,7 @@
                                                     <div class="btn-group btn-group-sm" role="group">
                                                         {% if imovel.tem_coordenadas %}
                                                         <button type="button" class="btn btn-outline-success" title="Ver no Mapa"
-                                                                onclick="verNoMapa({{ imovel.latitude }}, {{ imovel.longitude }}, '{{ imovel.identificacao }}')">
+                                                                onclick="verNoMapa({{ imovel.latitude|unlocalize }}, {{ imovel.longitude|unlocalize }}, '{{ imovel.identificacao }}')">
                                                             <i class="fas fa-map-marker-alt"></i>
                                                         </button>
                                                         {% endif %}
@@ -330,8 +331,8 @@ const imoveisData = [
     {% for imovel in todos_imoveis_mapa %}
     {
         id: {{ imovel.pk }},
-        lat: {{ imovel.latitude }},
-        lng: {{ imovel.longitude }},
+        lat: {{ imovel.latitude|unlocalize }},
+        lng: {{ imovel.longitude|unlocalize }},
         nome: "{{ imovel.identificacao|escapejs }}",
         loteamento: "{{ imovel.loteamento|default:''|escapejs }}",
         tipo: "{{ imovel.get_tipo_display|escapejs }}",

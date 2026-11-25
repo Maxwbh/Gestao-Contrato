@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load l10n %}
 {% load static %}
 {% load hashid_tags %}
 
@@ -200,8 +201,8 @@
     var imoveis = [
     {% for im in imoveis_mapa %}
         {
-            lat: {{ im.latitude }},
-            lng: {{ im.longitude }},
+            lat: {{ im.latitude|unlocalize }},
+            lng: {{ im.longitude|unlocalize }},
             id: {{ im.id }},
             label: "{{ im.identificacao|escapejs }}",
             disponivel: {{ im.disponivel|yesno:"true,false" }},

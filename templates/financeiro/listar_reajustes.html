@@ -217,7 +217,7 @@ const reajustesRowData = [
 ];
 
 function indiceBadge(tipo) {
-    const colors = { IPCA: 'bg-primary', IGPM: 'bg-success', INCC: 'bg-info text-dark', IGPDI: 'bg-teal', INPC: 'bg-danger', TR: 'bg-dark', SELIC: 'bg-warning text-dark' };
+    const colors = { IPCA: 'bg-primary', IGPM: 'bg-success', INCC: 'bg-info', IGPDI: 'bg-teal', INPC: 'bg-secondary', TR: 'bg-dark', SELIC: 'bg-warning' };
     return `<span class="badge ${colors[tipo] || 'bg-secondary'}">${tipo}</span>`;
 }
 

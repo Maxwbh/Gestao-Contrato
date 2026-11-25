@@ -9,7 +9,7 @@
   .kpi-grid > .kpi-col { flex:1 1 170px; }
   .kpi-card { border:1px solid #DDE5F2; border-radius:.5rem; box-shadow:0 4px 12px rgba(13, 27, 75,.05); }
   .kpi-value { font-size:1.5rem; font-weight:700; line-height:1.1; }
-  .kpi-label { font-size:.7rem; letter-spacing:.05em; text-transform:uppercase; color:#64748b; font-weight:600; }
+  .kpi-label { font-size:.7rem; letter-spacing:.05em; text-transform:uppercase; color:#5F6C88; font-weight:600; }
   .origem-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
   .aging-cell { border:1px solid #DDE5F2; border-radius:.5rem; padding:.75rem; text-align:center; }
   .aging-clic { cursor:pointer; transition:box-shadow .15s; }
@@ -74,7 +74,7 @@
       <div class="row g-2">
         <div class="col-3"><div class="aging-cell aging-clic" data-bucket="a_vencer" role="button"><div class="fw-bold">R$ {{ aging.a_vencer.valor|floatformat:2 }}</div><div class="small text-muted">A vencer ({{ aging.a_vencer.qtd }})</div></div></div>
         <div class="col-3"><div class="aging-cell aging-clic" data-bucket="d1_30" role="button" style="border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.05)"><div class="fw-bold text-warning">R$ {{ aging.d1_30.valor|floatformat:2 }}</div><div class="small text-muted">1–30 ({{ aging.d1_30.qtd }})</div></div></div>
-        <div class="col-3"><div class="aging-cell aging-clic" data-bucket="d31_60" role="button" style="border-color:rgba(234,88,12,.4);background:rgba(234,88,12,.05)"><div class="fw-bold" style="color:#ea580c">R$ {{ aging.d31_60.valor|floatformat:2 }}</div><div class="small text-muted">31–60 ({{ aging.d31_60.qtd }})</div></div></div>
+        <div class="col-3"><div class="aging-cell aging-clic" data-bucket="d31_60" role="button" style="border-color:rgba(234,88,12,.4);background:rgba(234,88,12,.05)"><div class="fw-bold" style="color:#B54708">R$ {{ aging.d31_60.valor|floatformat:2 }}</div><div class="small text-muted">31–60 ({{ aging.d31_60.qtd }})</div></div></div>
         <div class="col-3"><div class="aging-cell aging-clic" data-bucket="d60_mais" role="button" style="border-color:rgba(180, 35, 24,.4);background:rgba(180, 35, 24,.05)"><div class="fw-bold text-danger">R$ {{ aging.d60_mais.valor|floatformat:2 }}</div><div class="small text-muted">60+ ({{ aging.d60_mais.qtd }})</div></div></div>
       </div>
     </div></div></div>

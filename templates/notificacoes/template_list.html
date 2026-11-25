@@ -129,7 +129,7 @@ function canaisRenderer(params) {
     if (d.tem_sms)
         badges += '<span class="canal-badge bg-info text-white me-1"><i class="fas fa-sms me-1"></i>SMS</span>';
     if (d.tem_whatsapp)
-        badges += '<span class="canal-badge text-white me-1" style="background:#25D366"><i class="fab fa-whatsapp me-1"></i>WA</span>';
+        badges += '<span class="canal-badge text-white me-1" style="background:#075E54"><i class="fab fa-whatsapp me-1"></i>WA</span>';
     return badges || '<span class="badge bg-secondary">—</span>';
 }
 
@@ -200,7 +200,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 let canais = '';
                 if (data.tem_email)    canais += '<span class="badge bg-primary me-1"><i class="fas fa-envelope me-1"></i>Email</span>';
                 if (data.tem_sms)      canais += '<span class="badge bg-info me-1"><i class="fas fa-sms me-1"></i>SMS</span>';
-                if (data.tem_whatsapp) canais += '<span class="badge text-white me-1" style="background:#25D366"><i class="fab fa-whatsapp me-1"></i>WhatsApp</span>';
+                if (data.tem_whatsapp) canais += '<span class="badge text-white me-1" style="background:#075E54"><i class="fab fa-whatsapp me-1"></i>WhatsApp</span>';
 
                 let html = `<div class="mb-3"><strong>Nome:</strong> ${data.nome} &nbsp; ${canais}</div>`;
 
