@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../docs/brand/ms-do-brasil-horizontal-escura.svg">
+  <img src="../docs/brand/ms-do-brasil-horizontal-clara.svg" alt="M&S do Brasil" height="44">
+</picture>
+
 # Documentação — Sistema de Gestão de Contratos
 
 Desenvolvido por **Maxwell da Silva Oliveira** (maxwbh@gmail.com) — M&S do Brasil LTDA
@@ -6,11 +11,12 @@ Desenvolvido por **Maxwell da Silva Oliveira** (maxwbh@gmail.com) — M&S do Bra
 
 ## Índice
 
-### Análise de Produto (HUs + Mockups) ⭐ centralizado
+### Análise de Produto (HUs + Mockups) centralizado
 - **[Hub de Análise](analise/README.md)** — Histórias de Usuário, mockups/protótipos e análise de negócio em um só lugar
 - **[Índice Mestre das HUs](analise/historias-usuario/INDICE.md)** — matriz de rastreabilidade, personas e fluxo macro
 
 ### Principal
+- **[Guia de marca](brand/README.md)** — logotipo, cores, tipografia e regras de uso da M&S do Brasil
 - **[README.md](../README.md)** — Visão geral, instalação, funcionalidades
 - **[SISTEMA.md](../SISTEMA.md)** — Documentação técnica do sistema (o que está implementado)
 - **[ROADMAP.md](../ROADMAP.md)** — Pendentes, prioridades e plano de testes (novas implementações)
@@ -31,7 +37,7 @@ Desenvolvido por **Maxwell da Silva Oliveira** (maxwbh@gmail.com) — M&S do Bra
 ### Desenvolvimento
 - **[Setup Local](development/SETUP.md)** — Configuração do ambiente de desenvolvimento
 - **[Dados de Teste](development/TEST_DATA.md)** — Como gerar dados de teste
-- **[Histórias de Usuário](analise/README.md)** — centralizadas em `docs/analise/` ⭐
+- **[Histórias de Usuário](analise/README.md)** — centralizadas em `docs/analise/` 
 - **[Testes](../tests/README.md)** — Estrutura de testes e como executar
 
 ### APIs e Integrações
@@ -68,3 +74,16 @@ Desenvolvido por **Maxwell da Silva Oliveira** (maxwbh@gmail.com) — M&S do Bra
 - **2025-11-26**: Reorganização completa da documentação
 - **2025-11-24**: Correção de erros 500 na geração de boletos
 - **2025-11-23**: Implementação inicial
+
+---
+
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../docs/brand/ms-do-brasil-horizontal-escura.svg">
+  <img src="../docs/brand/ms-do-brasil-horizontal-clara.svg" alt="M&S do Brasil" height="36">
+</picture>
+
+<sub>**M&S do Brasil** · Desenvolvimento de sistemas · [msbrasil.inf.br](https://msbrasil.inf.br)</sub>
+
+</div>

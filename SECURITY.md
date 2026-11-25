@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ms-do-brasil-horizontal-escura.svg">
+  <img src="docs/brand/ms-do-brasil-horizontal-clara.svg" alt="M&S do Brasil" height="44">
+</picture>
+
 # Política de Segurança
 
 ## Como reportar uma vulnerabilidade
@@ -96,3 +101,16 @@ git push --force-with-lease --tags
 Depois de rotacionar **e** remover/purgar, marque o alerta como resolvido no
 GitGuardian. Nunca marque como resolvido apenas removendo o código sem
 rotacionar: a credencial antiga continua válida até ser revogada no provedor.
+
+---
+
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ms-do-brasil-horizontal-escura.svg">
+  <img src="docs/brand/ms-do-brasil-horizontal-clara.svg" alt="M&S do Brasil" height="36">
+</picture>
+
+<sub>**M&S do Brasil** · Desenvolvimento de sistemas · [msbrasil.inf.br](https://msbrasil.inf.br)</sub>
+
+</div>

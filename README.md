@@ -1,56 +1,61 @@
 <div align="center">
 
-# 🏢 Gestão de Contratos
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ms-do-brasil-horizontal-escura.svg">
+  <img src="docs/brand/ms-do-brasil-horizontal-clara.svg" alt="M&S do Brasil" height="64">
+</picture>
 
-**Sistema Django para gestão de contratos de venda de imóveis** — parcelas, reajustes automáticos, cobrança bancária (CNAB + cobrança registrada), notificações multicanal, portal do comprador e relatórios/BI.
+# Gestão de Contratos
+
+**Sistema Django para gestão de contratos de venda de imóveis**: parcelas, reajustes automáticos, cobrança bancária (CNAB e cobrança registrada), notificações multicanal, portal do comprador e relatórios/BI.
 
 [![CI](https://github.com/Maxwbh/Gestao-Contrato/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Maxwbh/Gestao-Contrato/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
-![Django](https://img.shields.io/badge/Django-6.0-092E20?logo=django&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-4169E1?logo=postgresql&logoColor=white)
-![Testes](https://img.shields.io/badge/testes-1842-2ea44f)
-![Versão](https://img.shields.io/badge/vers%C3%A3o-3.2-0058be)
-![Licença](https://img.shields.io/badge/licen%C3%A7a-Proprietary-lightgrey)
+![Python](https://img.shields.io/badge/Python-3.12+-0D1B4B?logo=python&logoColor=white)
+![Django](https://img.shields.io/badge/Django-6.0-0D1B4B?logo=django&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-0D1B4B?logo=postgresql&logoColor=white)
+![Testes](https://img.shields.io/badge/testes-2021-0891B2)
+![Versão](https://img.shields.io/badge/vers%C3%A3o-3.2-1D4ED8)
+![Licença](https://img.shields.io/badge/licen%C3%A7a-Proprietary-5F6C88)
 
-<img src="docs/screenshots/home.png" alt="Gestão de Contratos — plataforma de contratos, cobrança e reajustes" width="88%">
+<img src="docs/screenshots/home.png" alt="Gestão de Contratos: plataforma de contratos, cobrança e reajustes" width="88%">
 
 <br>
 
-**Do contrato à baixa, num só lugar.** &nbsp;•&nbsp; Parcelas e reajustes automáticos &nbsp;•&nbsp; Cobrança registrada Pix / BoletoPix / CNAB &nbsp;•&nbsp; Portal do comprador &nbsp;•&nbsp; BI
+**Do contrato à baixa, num só lugar.** &nbsp;·&nbsp; Parcelas e reajustes automáticos &nbsp;·&nbsp; Cobrança registrada Pix / BoletoPix / CNAB &nbsp;·&nbsp; Portal do comprador &nbsp;·&nbsp; BI
 
 </div>
 
 ---
 
-## 📑 Índice
+## Índice
 
-- [Sobre o Sistema](#-sobre-o-sistema)
-- [Novidades da Versão 3.2](#-novidades-da-versão-32)
-- [Novidades da Versão 3.1](#-novidades-da-versão-31)
-- [Funcionalidades](#-funcionalidades)
-- [Ciclo Mensal de Cobrança](#-ciclo-mensal-de-cobrança)
-- [Tecnologias](#️-tecnologias)
-- [Instalação](#-instalação)
-- [Configuração (.env)](#-configuração-env)
-- [Deploy no Render](#-deploy-no-render)
-- [Estrutura do Projeto](#-estrutura-do-projeto)
-- [Testes](#-testes)
-- [Docker / BRCobrança](#-docker--brcobrança)
-- [Contato](#-contato)
+- [Sobre o Sistema](#sobre-o-sistema)
+- [Novidades da Versão 3.2](#novidades-da-versão-32)
+- [Novidades da Versão 3.1](#novidades-da-versão-31)
+- [Funcionalidades](#funcionalidades)
+- [Ciclo Mensal de Cobrança](#ciclo-mensal-de-cobrança)
+- [Tecnologias](#tecnologias)
+- [Instalação](#instalação)
+- [Configuração (.env)](#configuração-env)
+- [Deploy no Render](#deploy-no-render)
+- [Estrutura do Projeto](#estrutura-do-projeto)
+- [Testes](#testes)
+- [Docker / BRCobrança](#docker--brcobrança)
+- [Contato](#contato)
 
 ---
 
-## 📋 Sobre o Sistema
+## Sobre o Sistema
 
 O **Gestão de Contratos** é uma plataforma **multi-tenant** que cobre todo o ciclo da **venda parcelada de imóveis** — do cadastro do contrato à baixa da cobrança. Foi pensado para **contabilidades** que administram múltiplos loteamentos e imobiliárias, centralizando contratos, parcelas, reajustes, emissão bancária e relacionamento com o comprador em um só lugar.
 
 **Para quem é:** contabilidades, loteadoras e imobiliárias que vendem imóveis em parcelas e precisam controlar reajustes, cobrança registrada (Pix/Boleto/CNAB) e inadimplência com rastreabilidade.
 
 **O que resolve:**
-- 🔁 **Reajuste automático** de parcelas por índices oficiais (IPCA/IGP-M/SELIC), com histórico auditável.
-- 💳 **Cobrança de ponta a ponta** — CNAB (remessa/retorno) e cobrança registrada C6/Sicoob (Pix, BoletoPix, Pix Automático), com **conciliação** automática.
-- 🔔 **Comunicação com o comprador** — notificações por e-mail/SMS/WhatsApp e **portal do comprador** para 2ª via e acompanhamento.
-- 📊 **Visão gerencial** — dashboards, aging de inadimplência e relatórios/BI por contabilidade.
+- **Reajuste automático** de parcelas por índices oficiais (IPCA/IGP-M/SELIC), com histórico auditável.
+- **Cobrança de ponta a ponta** — CNAB (remessa/retorno) e cobrança registrada C6/Sicoob (Pix, BoletoPix, Pix Automático), com **conciliação** automática.
+- **Comunicação com o comprador** — notificações por e-mail/SMS/WhatsApp e **portal do comprador** para 2ª via e acompanhamento.
+- **Visão gerencial** — dashboards, aging de inadimplência e relatórios/BI por contabilidade.
 
 Modelo de hierarquia (isolamento por tenant via `get_imobiliarias_usuario()` — cada usuário só enxerga as imobiliárias a que tem acesso):
 
@@ -64,33 +69,33 @@ Modelo de hierarquia (isolamento por tenant via `get_imobiliarias_usuario()` —
 
 ---
 
-## ✨ Novidades da Versão 3.2
+## Novidades da Versão 3.2
 
 > Cobrança registrada multi-método (épico Boleto-API completo), modernização da plataforma e do pipeline de CI:
 
-- **💠 Cobrança registrada multi-método (BAPI-01..41)** — épico Boleto-API concluído: credenciais bancárias **cifradas** (Fernet) por provedor, onboarding stateless (`bapi_` Bearer), emissão de **Boleto, BoletoPix, Pix avulso (2ª via/quitação), Pix Automático (débito recorrente)** e **carnê registrado** via gateway; máquina de estados da cobrança, webhook HMAC idempotente, polling Sicoob, fila CIP e retentativa de PA agendados no Celery beat.
-- **📊 Painel de Conciliação Boleto-API** — % conciliado, distribuição por status, recebido por origem (Webhook / Polling Sicoob / Conciliação Pix / Baixa manual) e recorrências, com escopo multi-tenant; **conciliação financeira** cruzando os recebíveis do banco (`GET /conciliacao`) com as parcelas liquidadas.
-- **🔐 Fail-closed nos webhooks** — em produção, webhooks de baixa (`EVENT_WEBHOOK_SECRET`, `PIX_WEBHOOK_TOKEN`) e API de BI respondem 503 quando a chave não está configurada; chaves de IA são env-only (fora do banco).
+- **Cobrança registrada multi-método (BAPI-01..41)** — épico Boleto-API concluído: credenciais bancárias **cifradas** (Fernet) por provedor, onboarding stateless (`bapi_` Bearer), emissão de **Boleto, BoletoPix, Pix avulso (2ª via/quitação), Pix Automático (débito recorrente)** e **carnê registrado** via gateway; máquina de estados da cobrança, webhook HMAC idempotente, polling Sicoob, fila CIP e retentativa de PA agendados no Celery beat.
+- **Painel de Conciliação Boleto-API** — % conciliado, distribuição por status, recebido por origem (Webhook / Polling Sicoob / Conciliação Pix / Baixa manual) e recorrências, com escopo multi-tenant; **conciliação financeira** cruzando os recebíveis do banco (`GET /conciliacao`) com as parcelas liquidadas.
+- **Fail-closed nos webhooks** — em produção, webhooks de baixa (`EVENT_WEBHOOK_SECRET`, `PIX_WEBHOOK_TOKEN`) e API de BI respondem 503 quando a chave não está configurada; chaves de IA são env-only (fora do banco).
 - **⬆️ Python 3.12 + Django 6.0** — atualização do runtime (de Python 3.11 / Django 4.2 LTS, em fim de vida) e do driver de banco **psycopg 3** (de psycopg2).
-- **🔒 Dependências de segurança** — gunicorn 23 (corrige request smuggling), Pillow 11, requests 2.34; celery 5.6, redis 8, django-celery-beat 2.9, crispy-forms 2.6, drf-spectacular 0.30, reportlab 5.
-- **⚡ CI por módulo alterado** — o pipeline analisa o diff e roda só os testes dos módulos afetados, em runners paralelos; mudança apenas em documentação/infra não executa testes. PR típico cai de ~5 min para ~30 s–2 min.
-- **🏷️ Versão automática robusta** — o número `MAJOR.MINOR.PATCH` (com commit/data) é gravado em build-time (`.build_info`), garantindo exibição correta em produção mesmo sem `git` no runtime.
+- **Dependências de segurança** — gunicorn 23 (corrige request smuggling), Pillow 11, requests 2.34; celery 5.6, redis 8, django-celery-beat 2.9, crispy-forms 2.6, drf-spectacular 0.30, reportlab 5.
+- **CI por módulo alterado** — o pipeline analisa o diff e roda só os testes dos módulos afetados, em runners paralelos; mudança apenas em documentação/infra não executa testes. PR típico cai de ~5 min para ~30 s–2 min.
+- **Versão automática robusta** — o número `MAJOR.MINOR.PATCH` (com commit/data) é gravado em build-time (`.build_info`), garantindo exibição correta em produção mesmo sem `git` no runtime.
 
 ---
 
-## ✨ Novidades da Versão 3.1
+## Novidades da Versão 3.1
 
 > As grandes atualizações recentes, além da base já consolidada:
 
-- **💳 Cobrança Registrada via Boleto-API** — integração com gateway **C6 Bank / Sicoob** (OAuth + mTLS) para cobrança registrada online, com **conciliação por evento push (webhook)** em vez de CNAB. Feature flag por conta (`ContaBancaria.provider`) mantém o **fluxo CNAB/BRCobrança como padrão seguro**.
-- **🧭 Hub "Cobrança do Mês" (HU-25)** — assistente guiado com stepper clicável: *Gerar Boletos → Gerar Remessa → Receber Retorno*, filtros compartilhados e ação encadeada de 1 clique.
-- **❤️ Conciliação & Saúde da Cobrança (HU-26)** — painel de fechamento com % conciliado (por valor), recebido por origem (CNAB/PIX/OFX/Manual), aging clicável e reinclusão de rejeitados.
-- **📈 Índices econômicos aprimorados** — **número-índice** e **acumulados** visíveis, cálculo exato de variação, backfill de valores imprecisos e importação BCB resiliente a timeout.
-- **🎨 Usabilidade dos fluxos de cobrança** — feedback consistente (toasts), avisos de boletos que conciliam por webhook, navegação encadeada, travas anti duplo-submit e validações client-side.
+- **Cobrança Registrada via Boleto-API** — integração com gateway **C6 Bank / Sicoob** (OAuth + mTLS) para cobrança registrada online, com **conciliação por evento push (webhook)** em vez de CNAB. Feature flag por conta (`ContaBancaria.provider`) mantém o **fluxo CNAB/BRCobrança como padrão seguro**.
+- **Hub "Cobrança do Mês" (HU-25)** — assistente guiado com stepper clicável: *Gerar Boletos → Gerar Remessa → Receber Retorno*, filtros compartilhados e ação encadeada de 1 clique.
+- **Conciliação & Saúde da Cobrança (HU-26)** — painel de fechamento com % conciliado (por valor), recebido por origem (CNAB/PIX/OFX/Manual), aging clicável e reinclusão de rejeitados.
+- **Índices econômicos aprimorados** — **número-índice** e **acumulados** visíveis, cálculo exato de variação, backfill de valores imprecisos e importação BCB resiliente a timeout.
+- **Usabilidade dos fluxos de cobrança** — feedback consistente (toasts), avisos de boletos que conciliam por webhook, navegação encadeada, travas anti duplo-submit e validações client-side.
 
 ---
 
-## 🚀 Funcionalidades
+## Funcionalidades
 
 ### 1. Gestão de Entidades
 - Cadastro de Contabilidades, Imobiliárias/Beneficiários, Imóveis e Compradores (PF/PJ)
@@ -147,7 +152,7 @@ Upload de PDF/imagens → extração estruturada com nível de confiança por ca
 
 ---
 
-## 📸 Telas
+## Telas
 
 | Página de Apresentação | Painel de Conciliação Boleto-API |
 |---|---|
@@ -163,7 +168,7 @@ Upload de PDF/imagens → extração estruturada com nível de confiança por ca
 
 ---
 
-## 🔄 Ciclo Mensal de Cobrança
+## Ciclo Mensal de Cobrança
 
 Três telas dedicadas, orquestradas pelo **Hub "Cobrança do Mês"** (`/financeiro/cobranca/`):
 
@@ -179,7 +184,7 @@ Três telas dedicadas, orquestradas pelo **Hub "Cobrança do Mês"** (`/financei
 
 ---
 
-## 🛠️ Tecnologias
+## Tecnologias
 
 **Backend:** Python 3.12 · Django 6.0 · PostgreSQL 14+ (psycopg 3) · Gunicorn · Celery + Redis (beat)
 **Frontend:** Bootstrap 5 · AG Grid · Font Awesome · PWA (service worker + Web Push)
@@ -191,7 +196,7 @@ Três telas dedicadas, orquestradas pelo **Hub "Cobrança do Mês"** (`/financei
 
 ---
 
-## 📦 Instalação
+## Instalação
 
 ```bash
 # 1. Clone
@@ -226,7 +231,7 @@ docker-compose up -d brcobranca
 
 ---
 
-## 🔧 Configuração (.env)
+## Configuração (.env)
 
 > Referência completa (todas as chaves, camadas e defaults): [docs/deployment/ENV_PARAMETROS.md](docs/deployment/ENV_PARAMETROS.md) · modelo pronto: [`.env.example`](.env.example)
 
@@ -285,7 +290,7 @@ VAPID_CLAIMS_EMAIL=admin@empresa.com
 
 ---
 
-## 🚀 Deploy no Render
+## Deploy no Render
 
 > **Plano Gratuito** — sem Celery. Tarefas agendadas via **cron-job.org** (HTTP POST autenticado).
 >
@@ -310,7 +315,7 @@ Configure cada job como `POST` com header `X-Task-Token: <TASK_TOKEN>` (mesmo va
 
 ---
 
-## 📖 Estrutura do Projeto
+## Estrutura do Projeto
 
 ```
 Gestao-Contrato/
@@ -336,7 +341,7 @@ Gestao-Contrato/
 
 ---
 
-## 🧪 Testes
+## Testes
 
 Suíte **pytest** organizada por tipo (unit / integration / functional):
 
@@ -353,7 +358,7 @@ Cobertura ampla das HUs (cobrança CNAB, épico Boleto-API BAPI-01..41, portal, 
 
 ---
 
-## 🐳 Docker / BRCobrança
+## Docker / BRCobrança
 
 Versões **customizadas** mantidas por Maxwell da Silva Oliveira:
 - **API REST:** https://github.com/Maxwbh/boleto_cnab_api
@@ -371,19 +376,24 @@ python manage.py createsuperuser
 
 ---
 
-## 🤝 Contato
+## Contato
 
-**Maxwell da Silva Oliveira** — M&S do Brasil LTDA
-📧 maxwbh@gmail.com · 🔗 [LinkedIn](https://www.linkedin.com/in/maxwbh/) · 🐙 [GitHub](https://github.com/Maxwbh/) · 🌐 [msbrasil.inf.br](https://msbrasil.inf.br)
+**Maxwell da Silva Oliveira** · M&S do Brasil LTDA<br>
+maxwbh@gmail.com · [LinkedIn](https://www.linkedin.com/in/maxwbh/) · [GitHub](https://github.com/Maxwbh/) · [msbrasil.inf.br](https://msbrasil.inf.br)
 
-**Licença:** Proprietary
+**Licença:** Proprietary · **Marca:** [guia de uso](docs/brand/README.md)
 
 ---
 
 <div align="center">
 
-**Versão 3.2** · 1842 testes · Última atualização: 2026-07-17
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ms-do-brasil-horizontal-escura.svg">
+  <img src="docs/brand/ms-do-brasil-horizontal-clara.svg" alt="M&S do Brasil" height="44">
+</picture>
 
-Cobrança Registrada multi-método C6/Sicoob (épico Boleto-API BAPI-01..41) · Painel de Conciliação · Hub Cobrança do Mês · Índices com número-índice/acumulados
+<sub>**M&S do Brasil** · Desenvolvimento de sistemas · [msbrasil.inf.br](https://msbrasil.inf.br)</sub>
+
+<sub>Versão 3.2 · 2021 testes · Última atualização: 2026-11-25</sub>
 
 </div>
