@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ms-do-brasil-horizontal-escura.svg">
-  <img src="docs/brand/ms-do-brasil-horizontal-clara.svg" alt="M&S do Brasil" height="64">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/svg/ms-assinatura-horizontal-fundo-escuro.svg">
+  <img src="docs/brand/svg/ms-assinatura-horizontal-fundo-claro.svg" alt="M&S do Brasil" height="56">
 </picture>
 
 # Gestão de Contratos
@@ -378,8 +378,8 @@ python manage.py createsuperuser
 
 ## Contato
 
-**Maxwell da Silva Oliveira** · M&S do Brasil LTDA<br>
-maxwbh@gmail.com · [LinkedIn](https://www.linkedin.com/in/maxwbh/) · [GitHub](https://github.com/Maxwbh/) · [msbrasil.inf.br](https://msbrasil.inf.br)
+**M&S do Brasil LTDA** · contato@msbrasil.inf.br · [msbrasil.inf.br](https://msbrasil.inf.br)<br>
+**Maxwell da Silva Oliveira** · maxwbh@gmail.com · [LinkedIn](https://www.linkedin.com/in/maxwbh/) · [GitHub](https://github.com/Maxwbh/)
 
 **Licença:** Proprietary · **Marca:** [guia de uso](docs/brand/README.md)
 
@@ -388,11 +388,11 @@ maxwbh@gmail.com · [LinkedIn](https://www.linkedin.com/in/maxwbh/) · [GitHub](
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ms-do-brasil-horizontal-escura.svg">
-  <img src="docs/brand/ms-do-brasil-horizontal-clara.svg" alt="M&S do Brasil" height="44">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/svg/ms-assinatura-horizontal-fundo-escuro.svg">
+  <img src="docs/brand/svg/ms-assinatura-horizontal-fundo-claro.svg" alt="M&S do Brasil" height="44">
 </picture>
 
-<sub>**M&S do Brasil** · Desenvolvimento de sistemas · [msbrasil.inf.br](https://msbrasil.inf.br)</sub>
+<sub>Um projeto **M&S do Brasil** · [msbrasil.inf.br](https://msbrasil.inf.br) · contato@msbrasil.inf.br</sub>
 
 <sub>Versão 3.2 · 2021 testes · Última atualização: 2026-11-25</sub>
 

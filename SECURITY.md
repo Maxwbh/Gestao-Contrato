@@ -1,13 +1,14 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ms-do-brasil-horizontal-escura.svg">
-  <img src="docs/brand/ms-do-brasil-horizontal-clara.svg" alt="M&S do Brasil" height="44">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/svg/ms-assinatura-horizontal-fundo-escuro.svg">
+  <img src="docs/brand/svg/ms-assinatura-horizontal-fundo-claro.svg" alt="M&S do Brasil" height="44">
 </picture>
 
 # Política de Segurança
 
 ## Como reportar uma vulnerabilidade
 
-Envie um e-mail para **maxwbh@gmail.com** com o assunto `[SECURITY]` descrevendo
+Envie um e-mail para **contato@msbrasil.inf.br**, com cópia para
+**maxwbh@gmail.com**, com o assunto `[SECURITY]` descrevendo
 o problema. Não abra issues públicas para falhas de segurança.
 
 ---
@@ -107,10 +108,10 @@ rotacionar: a credencial antiga continua válida até ser revogada no provedor.
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ms-do-brasil-horizontal-escura.svg">
-  <img src="docs/brand/ms-do-brasil-horizontal-clara.svg" alt="M&S do Brasil" height="36">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/svg/ms-assinatura-horizontal-fundo-escuro.svg">
+  <img src="docs/brand/svg/ms-assinatura-horizontal-fundo-claro.svg" alt="M&S do Brasil" height="36">
 </picture>
 
-<sub>**M&S do Brasil** · Desenvolvimento de sistemas · [msbrasil.inf.br](https://msbrasil.inf.br)</sub>
+<sub>Um projeto **M&S do Brasil** · [msbrasil.inf.br](https://msbrasil.inf.br) · contato@msbrasil.inf.br</sub>
 
 </div>

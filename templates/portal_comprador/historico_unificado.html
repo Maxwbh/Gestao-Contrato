@@ -17,7 +17,7 @@
 
 <!-- Pagamentos -->
 <div class="portal-card">
-    <div class="portal-card-header" style="background:#2e7d32;">
+    <div class="portal-card-header" style="background:#047857;">
         <i class="fas fa-check-circle" style="margin-right:6px;"></i>Pagamentos
         <span style="float:right;background:rgba(255,255,255,.25);border-radius:10px;padding:0 10px;font-size:.8rem;">{{ pagamentos|length }}</span>
     </div>
@@ -31,7 +31,7 @@
             <div class="desc">Parcela {{ p.parcela.numero_parcela }}/{{ p.parcela.contrato.numero_parcelas }} · {{ p.get_forma_pagamento_display|default:p.forma_pagamento }}</div>
             <div class="data">Pago em {{ p.data_pagamento|date:"d/m/Y" }}</div>
         </div>
-        <div class="parcela-valor" style="color:#2e7d32;">
+        <div class="parcela-valor" style="color:#047857;">
             {{ p.valor_pago|moeda }}
         </div>
     </div>

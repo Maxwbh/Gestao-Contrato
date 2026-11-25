@@ -16,18 +16,18 @@
     </div>
     <div class="portal-card-body" style="padding:0;">
         <table style="width:100%;font-size:.85rem;border-collapse:collapse;">
-            <tr style="border-bottom:1px solid #f5f5f5;">
-                <td style="padding:10px 16px;color:#757575;width:40%;">Nome</td>
+            <tr style="border-bottom:1px solid #F4F7FC;">
+                <td style="padding:10px 16px;color:#5F6C88;width:40%;">Nome</td>
                 <td style="padding:10px 16px;font-weight:600;">{{ comprador.nome }}</td>
             </tr>
-            <tr style="border-bottom:1px solid #f5f5f5;">
-                <td style="padding:10px 16px;color:#757575;">CPF / CNPJ</td>
+            <tr style="border-bottom:1px solid #F4F7FC;">
+                <td style="padding:10px 16px;color:#5F6C88;">CPF / CNPJ</td>
                 <td style="padding:10px 16px;">
                     {% if comprador.cpf %}{{ comprador.cpf }}{% elif comprador.cnpj %}{{ comprador.cnpj }}{% else %}—{% endif %}
                 </td>
             </tr>
             <tr>
-                <td style="padding:10px 16px;color:#757575;">Tipo</td>
+                <td style="padding:10px 16px;color:#5F6C88;">Tipo</td>
                 <td style="padding:10px 16px;">{{ comprador.get_tipo_pessoa_display }}</td>
             </tr>
         </table>
@@ -44,10 +44,10 @@
             {% csrf_token %}
             {% for field in form %}
             <div style="margin-bottom:14px;">
-                <label style="display:block;font-size:.78rem;color:#757575;margin-bottom:4px;">{{ field.label }}</label>
+                <label style="display:block;font-size:.78rem;color:#5F6C88;margin-bottom:4px;">{{ field.label }}</label>
                 {{ field }}
                 {% if field.errors %}
-                <div style="color:#f44336;font-size:.75rem;margin-top:3px;">{{ field.errors.as_text }}</div>
+                <div style="color:#B42318;font-size:.75rem;margin-top:3px;">{{ field.errors.as_text }}</div>
                 {% endif %}
             </div>
             {% endfor %}
@@ -86,7 +86,7 @@
 
 <!-- Logout -->
 <a href="{% url 'portal_comprador:logout' %}"
-   style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;background:#fff;color:#f44336;border:1px solid #ffcdd2;border-radius:10px;text-decoration:none;font-weight:600;font-size:.9rem;margin-top:8px;">
+   style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;background:#fff;color:#B42318;border:1px solid #ffcdd2;border-radius:10px;text-decoration:none;font-weight:600;font-size:.9rem;margin-top:8px;">
     <i class="fas fa-sign-out-alt"></i> Sair do Portal
 </a>
 {% endblock %}
@@ -94,9 +94,9 @@
 {% block extra_js %}
 <script>
 document.querySelectorAll('.portal-card form input, .portal-card form textarea, .portal-card form select').forEach(function(el) {
-    el.style.cssText = 'width:100%;padding:10px 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:.875rem;outline:none;box-sizing:border-box;';
+    el.style.cssText = 'width:100%;padding:10px 12px;border:1px solid #DDE5F2;border-radius:8px;font-size:.875rem;outline:none;box-sizing:border-box;';
     el.addEventListener('focus', function() { this.style.borderColor = 'var(--portal-primary)'; });
-    el.addEventListener('blur',  function() { this.style.borderColor = '#e0e0e0'; });
+    el.addEventListener('blur',  function() { this.style.borderColor = '#DDE5F2'; });
 });
 </script>
 {% endblock %}

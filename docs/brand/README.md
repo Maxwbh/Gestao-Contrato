@@ -1,97 +1,85 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="ms-do-brasil-horizontal-escura.svg">
-  <img src="ms-do-brasil-horizontal-clara.svg" alt="M&S do Brasil" height="56">
+  <source media="(prefers-color-scheme: dark)" srcset="svg/ms-assinatura-horizontal-fundo-escuro.svg">
+  <img src="svg/ms-assinatura-horizontal-fundo-claro.svg" alt="M&S do Brasil" height="56">
 </picture>
 
-# Guia de marca — M&S do Brasil
+# Marca M&S do Brasil neste repositório
 
-Resumo operacional do **Estudo de marca v0.4** (novembro de 2026) para uso em
-README, documentação e telas dos repositórios.
+Esta pasta guarda o **kit de marca v0.7** como foi entregue e explica onde ele
+é usado no Gestão de Contratos. Nenhum arquivo do kit é editado aqui.
 
-> **Status:** proposta em validação. O estudo declara que nada é identidade
-> oficial antes da aprovação; emblema, descritor e prova de cor seguem em
-> aberto. Se o desenho mudar, basta trocar os arquivos desta pasta — os
-> documentos apontam para eles.
+> **Situação (do kit):** conceito visual congelado; proposta ainda não
+> homologada. Faltam a busca de anterioridade no INPI e a prova de impressão.
 
-## Arquivos
+## Documentos do kit
 
-| Arquivo | Uso |
-|---------|-----|
-| `ms-do-brasil-horizontal-clara.svg` | Assinatura principal em fundo claro (cabeçalho de README, documentos, propostas) |
-| `ms-do-brasil-horizontal-escura.svg` | Assinatura principal em fundo escuro (marinho ou tema escuro) |
-| `ms-do-brasil-horizontal-uma-cor.svg` | Uma cor (marinho), para impressão ou fundo que não aceita o ciano |
-| `ms-do-brasil-emblema-clara.svg` · `-escura.svg` | Emblema com as iniciais, a partir de 48 px de altura |
-| `ms-do-brasil-icone.svg` | Avatar (GitHub, LinkedIn, WhatsApp) |
+| Arquivo | Conteúdo |
+|---------|----------|
+| [LEIAME.md](LEIAME.md) | Variantes, tamanhos mínimos, área de proteção, fontes |
+| [CHANGELOG.md](CHANGELOG.md) | Histórico de versões da marca |
+| [TERMOS-DE-USO.md](TERMOS-DE-USO.md) | Minuta dos termos de uso (pendente de revisão jurídica) |
+| [manual/](manual/) | Manual de identidade visual em PDF |
+| `svg/` · `favicon/` · `tokens/` · `master/` · `scripts/` | Peças, tokens, geometria mestre e gerador |
 
-Os SVG foram construídos na grade do estudo (80 × 64: losangos de 48 de altura,
-centros a 26, traço de 2,4, vão de 1,5 no cruzamento) e o texto já está
-convertido em curvas — não dependem de fonte instalada.
+A pasta `png/` do kit (3 MB) não foi versionada; os SVG cobrem os usos do
+repositório e os PNG podem ser gerados por `scripts/gerar_kit.py`.
 
-**Ainda não há arquivo** para o ícone reduzido (abaixo de 64 px) nem para o
-favicon de 16 px: o estudo prevê desenho próprio para cada um.
+## Onde a marca entra
 
-### No README (troca automática claro/escuro)
+| Lugar | Peça |
+|-------|------|
+| README, CONTRIBUTING, SECURITY, `docs/README.md` | Assinatura horizontal `fundo-claro` / `fundo-escuro`, com troca automática pelo tema |
+| Barra do sistema, menu lateral, rodapé e login | Símbolo `fundo-escuro` (`static/img/ms-simbolo-claro.svg`), 24 px ou mais |
+| Aba do navegador | `static/img/favicon.svg` e `favicon.ico` |
+| Ícone do portal do comprador (PWA) | `static/img/icon-180.png`, `icon-192.png`, `icon-512.png` |
+| Cores e fontes da interface | `static/css/ms-tokens.css` (cópia de `tokens/tokens.css`) |
+
+Ao atualizar o kit, substitua esta pasta e recopie os arquivos de `static/img/`
+e `static/css/ms-tokens.css`.
+
+### No README
 
 ```html
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ms-do-brasil-horizontal-escura.svg">
-  <img src="docs/brand/ms-do-brasil-horizontal-clara.svg" alt="M&S do Brasil" height="64">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/svg/ms-assinatura-horizontal-fundo-escuro.svg">
+  <img src="docs/brand/svg/ms-assinatura-horizontal-fundo-claro.svg" alt="M&S do Brasil" height="64">
 </picture>
 ```
 
-## Cores
+## Cores na interface
 
-| Nome | HEX | Uso |
-|------|-----|-----|
-| Marinho M&S | `#0D1B4B` | Cor principal: primeiro losango, nome, fundos escuros |
-| Azul M&S | `#1D4ED8` | Ação e destaque: botões, links, títulos de seção |
-| Ciano elo | `#06B6D4` | Segundo losango e `&` **sobre fundo escuro**; nunca em texto sobre branco |
-| Ciano elo claro | `#0891B2` | Segundo losango e `&` **sobre fundo claro**; só em gráficos e texto de 24 px ou mais |
-| Tinta | `#0B1533` | Títulos |
-| Texto | `#35425E` | Corpo |
-| Apoio | `#5F6C88` | Legendas e rótulos |
-| Linha | `#DDE5F2` | Bordas e divisórias |
-| Névoa | `#F4F7FC` | Fundo de cartões |
+| Token | HEX | Uso no sistema |
+|-------|-----|----------------|
+| `--ms-marinho` | `#0D1B4B` | Barra superior, cabeçalho de cartão e de tabela |
+| `--ms-acao` / `--ms-azul` | `#1D4ED8` | Botões, links, foco de campo |
+| `--ms-acao-hover` | `#1E40AF` | Botão sob o cursor |
+| `--ms-ciano` | `#06B6D4` | Destaque sobre fundo escuro |
+| `--ms-ciano-escuro` | `#0891B2` | Gráficos e destaque sobre fundo claro |
+| `--ms-sucesso` | `#047857` | Pago, concluído |
+| `--ms-alerta` | `#B54708` | Pendente, atenção |
+| `--ms-erro` | `#B42318` | Vencido, falha |
+| `--ms-informacao` | `#0369A1` | Avisos informativos |
+| `--ms-tinta` · `--ms-texto` · `--ms-apoio` | `#0B1533` · `#35425E` · `#5F6C88` | Títulos, corpo, legendas |
+| `--ms-linha` · `--ms-nevoa` | `#DDE5F2` · `#F4F7FC` | Bordas, fundo de página |
 
-**Vermelho fica de fora**, inclusive como cor de destaque, para manter distância
-visual da Oracle.
-
-Badges (shields.io) usam o HEX sem `#`: marinho para tecnologia, ciano claro
-para testes, azul para versão, apoio para licença.
+As cores funcionais são da interface e nunca entram no logotipo. Vermelho só
+aparece como erro.
 
 ## Tipografia
 
-| Família | Papel | Substituta |
-|---------|-------|------------|
-| **Lora** (SemiBold; `&` em itálico) | Nome e títulos institucionais | Georgia, Cambria |
-| **Inter** | Títulos de tela e texto | Calibri, Arial |
-| **JetBrains Mono** | Código e rótulos | Consolas |
-
-As três são distribuídas sob a SIL Open Font License.
-
-## Regras de uso
-
-- **Área de proteção:** margem livre de meia altura do losango em volta da
-  assinatura. Nenhum texto, imagem, borda ou outra marca entra nela.
-- **Redução mínima:** horizontal 40 px de altura; emblema 48 px. Abaixo disso,
-  ícone reduzido e, por fim, favicon.
-- **Não fazer:** esticar ou comprimir; trocar o ciano por outra cor; escrever o
-  nome em outra fonte; girar ou inclinar; aplicar a versão clara sobre fundo
-  escuro ou colorido; aplicar sombra, contorno ou degradê; separar os losangos
-  ou desfazer o entrelaçado.
+Inter Display nos títulos, Inter no texto, JetBrains Mono em código. Sem a fonte
+instalada: Arial ou Calibri, e Consolas para código. O nome na assinatura já
+está em curvas.
 
 ## Tom de voz
 
-A marca é **técnica, direta e confiável**.
+Técnico, direto e verificável: diga o que o sistema faz e mostre o comando ou o
+arquivo. Títulos sem emoji; marcas de status em tabela (✅ / ⬜) são dado.
 
-- Fala com precisão e mostra o código, o comando ou o arquivo.
-- Sem adjetivo sobrando nem promessa vaga.
-- Títulos sem emoji; marcas de status em tabela (✅ / ⬜) são dado, não enfeite.
-- "Desenvolvimento de sistemas" é texto de apoio, fora do logotipo. O nome
-  Oracle não entra na assinatura.
+Projetos mantidos pela empresa assinam **"um projeto M&S do Brasil"**; forks de
+terceiros, "com apoio da M&S do Brasil".
 
-## Família de marcas
+## Contatos
 
-M&S do Brasil, Cobrança-API e PyCobrança compartilham o par marinho e ciano e o
-desenho geométrico. A empresa fica com o traço fino e a serifa; os produtos,
-com formas cheias e diretas.
+- **Empresa:** contato@msbrasil.inf.br · [msbrasil.inf.br](https://msbrasil.inf.br)
+- **Maxwell da Silva Oliveira:** maxwbh@gmail.com

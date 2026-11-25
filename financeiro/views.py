@@ -362,7 +362,7 @@ def api_dashboard_dados(request):
     status_parcelas = {
         'labels': ['Pagas', 'Pendentes', 'Vencidas'],
         'data': [p_counts['pagas'], p_counts['pendentes'], p_counts['vencidas']],
-        'colors': ['#28a745', '#ffc107', '#dc3545'],
+        'colors': ['#047857', '#ffc107', '#B42318'],
     }
 
     c_counts = contratos_qs.aggregate(
@@ -374,7 +374,7 @@ def api_dashboard_dados(request):
     status_contratos = {
         'labels': ['Ativos', 'Quitados', 'Cancelados', 'Suspensos'],
         'data': [c_counts['ativos'], c_counts['quitados'], c_counts['cancelados'], c_counts['suspensos']],
-        'colors': ['#007bff', '#28a745', '#dc3545', '#6c757d'],
+        'colors': ['#1D4ED8', '#047857', '#B42318', '#5F6C88'],
     }
 
     # Dados para gráfico de barras - Recebimentos por mês (últimos 12 meses)
@@ -465,7 +465,7 @@ def api_dashboard_dados(request):
     inadimplencia_faixas = {
         'labels': ['1–30 dias', '31–60 dias', '61–90 dias', '90+ dias'],
         'data': [faixas_agg['f30'], faixas_agg['f60'], faixas_agg['f90'], faixas_agg['f90plus']],
-        'colors': ['#ffc107', '#fd7e14', '#dc3545', '#6f1212'],
+        'colors': ['#ffc107', '#fd7e14', '#B42318', '#6f1212'],
     }
 
     # G-03: Fluxo de caixa previsto vs. realizado — 1 query com TruncMonth (12 queries → 1)
@@ -3244,9 +3244,9 @@ def painel_conciliacao_saude(request):
     rejeitados = list(s['_rejeitados_qs'].order_by('-id')[:20])
 
     origem_rows = [
-        ('CNAB (retorno)', s['origem']['CNAB'], '#0058be'),
+        ('CNAB (retorno)', s['origem']['CNAB'], '#1D4ED8'),
         ('PIX (webhook)', s['origem']['PIX'], '#22c55e'),
-        ('Boleto-API (C6/Sicoob)', s['origem']['BOLETO_API'], '#C9A961'),
+        ('Boleto-API (C6/Sicoob)', s['origem']['BOLETO_API'], '#06B6D4'),
         ('OFX (extrato)', s['origem']['OFX'], '#f59e0b'),
         ('Manual', s['origem']['MANUAL'], '#091426'),
     ]
@@ -6067,7 +6067,7 @@ def api_dashboard_contabilidade(request):
         recebimentos_mensais['esperado'].append(float(row.get('esperado') or 0))
 
     # Distribuição por imobiliária — 1 query com GROUP BY
-    cores = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6c757d', '#fd7e14', '#6610f2']
+    cores = ['#1D4ED8', '#047857', '#B42318', '#ffc107', '#0891B2', '#5F6C88', '#fd7e14', '#6610f2']
     imobs_list = list(imobiliarias[:8])
     imob_ids_top8 = [im.id for im in imobs_list]
     dist_por_imob = {
@@ -6097,7 +6097,7 @@ def api_dashboard_contabilidade(request):
             contrato_counts['cancelados'],
             contrato_counts['suspensos'],
         ],
-        'cores': ['#28a745', '#007bff', '#dc3545', '#6c757d']
+        'cores': ['#047857', '#1D4ED8', '#B42318', '#5F6C88']
     }
 
     return JsonResponse({

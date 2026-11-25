@@ -1,0 +1,32 @@
+/* M&S do Brasil — tokens v0.7 (proposta em validação). Gerado por scripts/gerar_kit.py. */
+:root {
+  /* Identidade */
+  --ms-marinho: #0D1B4B;
+  --ms-azul: #1D4ED8;
+  --ms-ciano: #06B6D4;
+  --ms-ciano-escuro: #0891B2;
+
+  /* Neutros */
+  --ms-tinta: #0B1533;
+  --ms-texto: #35425E;
+  --ms-apoio: #5F6C88;
+  --ms-linha: #DDE5F2;
+  --ms-nevoa: #F4F7FC;
+  --ms-branco: #FFFFFF;
+
+  /* Funcionais: interface, nunca no logotipo */
+  --ms-acao: #1D4ED8;
+  --ms-acao-hover: #1E40AF;
+  --ms-acao-pressionado: #1E3A8A;
+  --ms-foco: #1D4ED8;
+  --ms-informacao: #0369A1;
+  --ms-sucesso: #047857;
+  --ms-alerta: #B54708;
+  --ms-erro: #B42318;
+  --ms-desabilitado: #5F6C88;
+
+  /* Tipografia */
+  --ms-font-display: "Inter Display", "Inter", "Arial", sans-serif;
+  --ms-font-texto: "Inter", "Calibri", "Arial", sans-serif;
+  --ms-font-codigo: "JetBrains Mono", "Consolas", monospace;
+}

@@ -15,7 +15,7 @@
     #mapa-imoveis {
         height: 560px;
         border-radius: 8px;
-        border: 1px solid #dee2e6;
+        border: 1px solid #DDE5F2;
         z-index: 1;
     }
     /* Marcadores custom por status */
@@ -25,19 +25,19 @@
         font-size: 10px; font-weight: 700; color: #fff;
         box-shadow: 0 2px 6px rgba(0,0,0,0.35);
     }
-    .lote-disponivel  { background: #28a745; }
-    .lote-vendido     { background: #dc3545; }
+    .lote-disponivel  { background: #047857; }
+    .lote-vendido     { background: #B42318; }
     .lote-reservado   { background: #fd7e14; }
     /* Popup */
     .lote-popup { min-width: 220px; font-size: 0.85rem; }
     .lote-popup .popup-title { font-size: 1rem; font-weight: 700; margin-bottom: 6px; color: #1a1a2e; }
     /* Mapa controls */
-    .mapa-toolbar { background: #fff; border: 1px solid #dee2e6; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; }
+    .mapa-toolbar { background: #fff; border: 1px solid #DDE5F2; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; }
     /* Legenda */
     .mapa-legenda { background: rgba(255,255,255,0.92); border-radius: 6px; padding: 8px 12px; font-size: 0.8rem; box-shadow: 0 1px 5px rgba(0,0,0,0.2); }
     .legenda-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
     /* Tabs */
-    .nav-tabs .nav-link.active { background-color: #0d6efd; color: #fff; border-color: #0d6efd; }
+    .nav-tabs .nav-link.active { background-color: #1D4ED8; color: #fff; border-color: #1D4ED8; }
     .nav-tabs .nav-link { color: #495057; }
 </style>
 {% endblock %}
@@ -373,8 +373,8 @@ let map, clusterGroup, tileAtivo = 'voyager';
 let filtroLot = '', filtroSt = '';
 let poligonosLayer;     // LayerGroup para polígonos de lote
 let editorAtivo = null; // Estado do editor {imovelId, vertices[], tempLayer, tempMarkers[]}
-const COR_DISPONIVEL = '#28a745';
-const COR_VENDIDO    = '#dc3545';
+const COR_DISPONIVEL = '#047857';
+const COR_VENDIDO    = '#B42318';
 const COR_EDICAO     = '#f59e0b';
 
 // Criar ícone customizado DivIcon por status
@@ -596,7 +596,7 @@ document.addEventListener('DOMContentLoaded', function () {
         iconCreateFunction: function(cluster) {
             const n = cluster.getChildCount();
             return L.divIcon({
-                html: `<div style="background:#0d6efd;color:#fff;border-radius:50%;width:36px;height:36px;
+                html: `<div style="background:#1D4ED8;color:#fff;border-radius:50%;width:36px;height:36px;
                               display:flex;align-items:center;justify-content:center;
                               font-weight:700;font-size:13px;border:2px solid #fff;
                               box-shadow:0 2px 6px rgba(0,0,0,0.3);">${n}</div>`,
@@ -616,9 +616,9 @@ document.addEventListener('DOMContentLoaded', function () {
         const d = L.DomUtil.create('div', 'mapa-legenda');
         d.innerHTML = `
             <div class="fw-bold mb-1">Legenda</div>
-            <div><span class="legenda-dot" style="background:#28a745;"></span> Disponível</div>
-            <div><span class="legenda-dot" style="background:#dc3545;"></span> Vendido</div>
-            <div><span class="legenda-dot" style="background:#0d6efd;"></span> Cluster</div>`;
+            <div><span class="legenda-dot" style="background:#047857;"></span> Disponível</div>
+            <div><span class="legenda-dot" style="background:#B42318;"></span> Vendido</div>
+            <div><span class="legenda-dot" style="background:#1D4ED8;"></span> Cluster</div>`;
         return d;
     };
     legenda.addTo(map);
@@ -701,7 +701,7 @@ function mostrarPertoDeMim() {
                 // Marcador do usuário
                 if (markerUsuario) map.removeLayer(markerUsuario);
                 markerUsuario = L.circleMarker([lat, lng], {
-                    radius: 10, color: '#0d6efd', fillColor: '#0d6efd',
+                    radius: 10, color: '#1D4ED8', fillColor: '#1D4ED8',
                     fillOpacity: 0.7, weight: 3
                 }).addTo(map);
                 markerUsuario.bindPopup('<strong><i class="fas fa-user me-1"></i>Você está aqui</strong>').openPopup();

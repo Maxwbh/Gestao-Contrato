@@ -10,13 +10,13 @@
   .kpi-card { border-radius:10px; padding:18px 20px; color:#fff; margin-bottom:16px; }
   .kpi-card .val { font-size:1.8rem; font-weight:700; line-height:1.2; }
   .kpi-card .lbl { font-size:.82rem; opacity:.85; margin-top:4px; }
-  .kpi-blue   { background: linear-gradient(135deg,#1565c0,#1e88e5); }
-  .kpi-green  { background: linear-gradient(135deg,#2e7d32,#43a047); }
+  .kpi-blue   { background: linear-gradient(135deg,#1D4ED8,#1D4ED8); }
+  .kpi-green  { background: linear-gradient(135deg,#047857,#43a047); }
   .kpi-amber  { background: linear-gradient(135deg,#e65100,#fb8c00); }
   .kpi-red    { background: linear-gradient(135deg,#b71c1c,#e53935); }
   .chart-card { background:#fff; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,.1); padding:20px; margin-bottom:20px; }
   .chart-card h6 { font-weight:700; margin-bottom:14px; color:#424242; }
-  .imob-row:hover { background:#f5f5f5; }
+  .imob-row:hover { background:#F4F7FC; }
 </style>
 {% endblock %}
 
@@ -196,24 +196,24 @@
             {
               label: 'Previsto',
               data: data.receita_prevista || [],
-              backgroundColor: 'rgba(33,150,243,.25)',
-              borderColor: '#2196f3',
+              backgroundColor: 'rgba(29, 78, 216,.25)',
+              borderColor: '#1D4ED8',
               borderWidth: 1,
               type: 'bar',
             },
             {
               label: 'Realizado',
               data: data.receita_realizada || [],
-              backgroundColor: 'rgba(76,175,80,.7)',
-              borderColor: '#4caf50',
+              backgroundColor: 'rgba(4, 120, 87,.7)',
+              borderColor: '#047857',
               borderWidth: 1,
               type: 'bar',
             },
             {
               label: 'Inadimplência',
               data: data.inadimplencia || [],
-              backgroundColor: 'rgba(244,67,54,.15)',
-              borderColor: '#f44336',
+              backgroundColor: 'rgba(180, 35, 24,.15)',
+              borderColor: '#B42318',
               borderWidth: 2,
               type: 'line',
               tension: 0.3,

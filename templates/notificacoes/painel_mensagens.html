@@ -6,12 +6,12 @@
 {% block extra_css %}
 <style>
     .ag-theme-material .ag-root-wrapper { border-radius: 0; border: none; }
-    .ag-theme-material .ag-header { background-color: #343a40; }
+    .ag-theme-material .ag-header { background-color: #0D1B4B; }
     .ag-theme-material .ag-header-cell-text { color: #fff; font-weight: 600; }
     .ag-theme-material .ag-header-icon { color: #fff; }
     .ag-theme-material .ag-row-even { background-color: #fff; }
-    .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
-    .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
+    .ag-theme-material .ag-row-odd  { background-color: #F4F7FC; }
+    .ag-theme-material .ag-row:hover { background-color: #E8EEFC !important; }
     .stat-card { transition: transform .15s; }
     .stat-card:hover { transform: translateY(-2px); }
 </style>
@@ -49,7 +49,7 @@
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card stat-card border-0 shadow-sm h-100" style="border-left: 4px solid #28a745 !important;">
+            <div class="card stat-card border-0 shadow-sm h-100" style="border-left: 4px solid #047857 !important;">
                 <div class="card-body text-center py-3">
                     <div class="fs-2 fw-bold text-success">{{ total_entregues }}</div>
                     <div class="text-muted small">Entregues / Lidos</div>
@@ -57,7 +57,7 @@
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card stat-card border-0 shadow-sm h-100" style="border-left: 4px solid #dc3545 !important;">
+            <div class="card stat-card border-0 shadow-sm h-100" style="border-left: 4px solid #B42318 !important;">
                 <div class="card-body text-center py-3">
                     <div class="fs-2 fw-bold text-danger">{{ total_falhos }}</div>
                     <div class="text-muted small">Com falha</div>
@@ -65,7 +65,7 @@
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card stat-card border-0 shadow-sm h-100" style="border-left: 4px solid #6c757d !important;">
+            <div class="card stat-card border-0 shadow-sm h-100" style="border-left: 4px solid #5F6C88 !important;">
                 <div class="card-body text-center py-3">
                     <div class="fs-2 fw-bold text-secondary">{{ total_sem_confirmacao }}</div>
                     <div class="text-muted small">Sem confirmação</div>

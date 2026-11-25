@@ -9,7 +9,7 @@
 <style>
     /* Cards com bom contraste */
     .imobiliaria-form .card {
-        border: 1px solid #dee2e6;
+        border: 1px solid #DDE5F2;
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.06);
         margin-bottom: 1rem;
@@ -18,13 +18,13 @@
         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
     .imobiliaria-form .card-header {
-        background: linear-gradient(135deg, #2c3e50, #34495e);
+        background: linear-gradient(135deg, #0D1B4B, #35425E);
         color: #ffffff;
         font-weight: 600;
         padding: 0.75rem 1rem;
         border-radius: 7px 7px 0 0 !important;
     }
-    .imobiliaria-form .card-header i { color: #9b59b6; }
+    .imobiliaria-form .card-header i { color: #0891B2; }
     .imobiliaria-form .card-header strong { color: #ffffff; }
     .imobiliaria-form .card-header small { color: #bdc3c7; }
     .imobiliaria-form .card-header.bg-light {
@@ -38,18 +38,18 @@
     .imobiliaria-form .form-label {
         font-size: 0.85rem;
         font-weight: 600;
-        color: #2c3e50;
+        color: #0D1B4B;
         margin-bottom: 0.25rem;
     }
     .help-card .card-header {
-        background: linear-gradient(135deg, #17a2b8, #138496) !important;
+        background: linear-gradient(135deg, #0891B2, #0891B2) !important;
     }
-    .is-valid { border-color: #27ae60 !important; }
-    .is-invalid { border-color: #e74c3c !important; }
+    .is-valid { border-color: #047857 !important; }
+    .is-invalid { border-color: #B42318 !important; }
 
     /* Tabela de contas */
     .contas-table { font-size: 0.875rem; }
-    .contas-table th { background: #f8f9fa; font-weight: 600; }
+    .contas-table th { background: #F4F7FC; font-weight: 600; }
 
     /* Grid de métodos de pagamento (checkbox estilizado) */
     .metodos-grid { display: flex; flex-wrap: wrap; gap: 0.6rem; }
@@ -60,12 +60,12 @@
         padding: 0.55rem 0.9rem; cursor: pointer; user-select: none;
         background: #fff; transition: all .15s ease; margin: 0; font-weight: 500;
     }
-    .metodo-chip:hover { border-color: #9b59b6; }
-    .metodo-chip input[type=checkbox] { width: 1.05rem; height: 1.05rem; margin: 0; cursor: pointer; accent-color: #9b59b6; }
-    .metodo-chip.is-checked { border-color: #9b59b6; background: #f6effa; color: #6c3483; }
+    .metodo-chip:hover { border-color: #0891B2; }
+    .metodo-chip input[type=checkbox] { width: 1.05rem; height: 1.05rem; margin: 0; cursor: pointer; accent-color: #0891B2; }
+    .metodo-chip.is-checked { border-color: #0891B2; background: #f6effa; color: #6c3483; }
     .metodo-chip .metodo-chip-lock { display: none; color: #b0b0b0; font-size: .8rem; }
     .metodo-chip.is-disabled {
-        opacity: .5; cursor: not-allowed; background: #f5f5f5; border-style: dashed;
+        opacity: .5; cursor: not-allowed; background: #F4F7FC; border-style: dashed;
     }
     .metodo-chip.is-disabled input { pointer-events: none; }
     .metodo-chip.is-disabled .metodo-chip-lock { display: inline; }
@@ -75,14 +75,14 @@
         display: inline-block; padding: 0.15rem 0.5rem; border-radius: 0.4rem;
         font-size: 0.72rem; font-weight: 600; line-height: 1.4; white-space: nowrap;
     }
-    .badge-boleto { background: #e7f1ff; color: #0d6efd; }
+    .badge-boleto { background: #e7f1ff; color: #1D4ED8; }
     .badge-bolepix, .badge-pix { background: #e6f7f0; color: #1a9e6a; }
     .badge-pix_automatico { background: #fff3e0; color: #e07b00; }
     .badge-checkout, .badge-cartao { background: #f6effa; color: #7d3ac1; }
 
     /* Cards de meios de pagamento (modal da conta) */
     .meio-card { border: 1px solid #e3e7ec; border-radius: 0.6rem; margin-bottom: 0.6rem; overflow: hidden; }
-    .meio-card.is-on { border-color: #9b59b6; box-shadow: 0 0 0 1px #9b59b6 inset; }
+    .meio-card.is-on { border-color: #0891B2; box-shadow: 0 0 0 1px #0891B2 inset; }
     .meio-card.is-locked { opacity: .55; }
     .meio-head { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.85rem; background: #fafbfc; }
     .meio-title { font-weight: 600; }
@@ -95,19 +95,19 @@
     .switch input { opacity: 0; width: 0; height: 0; }
     .switch .slider { position: absolute; cursor: pointer; inset: 0; background: #cfd4da; border-radius: 24px; transition: .2s; }
     .switch .slider:before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
-    .switch input:checked + .slider { background: #9b59b6; }
+    .switch input:checked + .slider { background: #0891B2; }
     .switch input:checked + .slider:before { transform: translateX(18px); }
     .switch input:disabled + .slider { cursor: not-allowed; opacity: .5; }
     /* modelo do boleto */
     .modelo-opts { display: flex; gap: 0.6rem; }
     .modelo-opt { flex: 1; border: 2px solid #dfe3e8; border-radius: 0.5rem; padding: 0.5rem 0.75rem; cursor: pointer; text-align: center; margin: 0; }
-    .modelo-opt input { margin-right: 0.35rem; accent-color: #9b59b6; }
-    .modelo-opt:has(input:checked) { border-color: #9b59b6; background: #f6effa; color: #6c3483; }
-    .badge-principal { background: #27ae60; }
+    .modelo-opt input { margin-right: 0.35rem; accent-color: #0891B2; }
+    .modelo-opt:has(input:checked) { border-color: #0891B2; background: #f6effa; color: #6c3483; }
+    .badge-principal { background: #047857; }
     .btn-add-conta { border-style: dashed; }
 
     /* Modal */
-    .modal-header { background: linear-gradient(135deg, #2c3e50, #34495e); color: white; }
+    .modal-header { background: linear-gradient(135deg, #0D1B4B, #35425E); color: white; }
     .modal-header .btn-close { filter: invert(1); }
 </style>
 {% endblock %}
@@ -120,7 +120,7 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
                     <h4 class="mb-0 text-dark">
-                        <i class="fas fa-building me-2" style="color: #9b59b6;"></i>
+                        <i class="fas fa-building me-2" style="color: #0891B2;"></i>
                         {% if object %}Editar: {{ object.nome }}{% else %}Nova Imobiliária{% endif %}
                     </h4>
                     <small class="text-muted">
@@ -276,9 +276,9 @@
                 </div>
 
                 <!-- Card: Configurações Padrão de Boleto (accordion) -->
-                <div class="card mb-3" style="border-color: #17a2b8;">
+                <div class="card mb-3" style="border-color: #0891B2;">
                     <div class="card-header py-2 d-flex justify-content-between align-items-center"
-                         style="background: linear-gradient(135deg, #17a2b8, #138496); color: white; cursor: pointer;"
+                         style="background: linear-gradient(135deg, #0891B2, #0891B2); color: white; cursor: pointer;"
                          id="acc-boleto-header" onclick="toggleAccordion('acc-boleto')">
                         <span><i class="fas fa-barcode me-2"></i><strong>Configurações Padrão de Boleto</strong></span>
                         <i class="fas fa-chevron-down" id="acc-boleto-icon" style="transition: transform .25s;"></i>
@@ -439,8 +439,8 @@
                 </div>
 
                 <!-- Card: Contas Bancárias (dentro do form) -->
-                <div class="card mb-3" style="border-color: #6c757d;">
-                    <div class="card-header py-2 d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #6c757d, #495057); color: white;">
+                <div class="card mb-3" style="border-color: #5F6C88;">
+                    <div class="card-header py-2 d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #5F6C88, #495057); color: white;">
                         <span>
                             <i class="fas fa-university me-2"></i><strong>Contas Bancárias</strong>
                         </span>

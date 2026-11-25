@@ -6,22 +6,22 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'vendor/flatpickr/css/flatpickr.min.css' %}">
 <style>
-    .badge-pago { background-color: #28a745; }
-    .badge-pendente { background-color: #0d6efd; }
-    .badge-vencida { background-color: #dc3545; }
-    .badge-boleto-gerado { background-color: #0d6efd; }
+    .badge-pago { background-color: #047857; }
+    .badge-pendente { background-color: #1D4ED8; }
+    .badge-vencida { background-color: #B42318; }
+    .badge-boleto-gerado { background-color: #1D4ED8; }
     .btn-filter { margin-right: 5px; margin-bottom: 5px; }
-    .btn-filter.active { box-shadow: 0 0 0 0.2rem rgba(0,123,255,.5); }
-    #revalidar-resultado .invalido { color: #dc3545; }
-    #revalidar-resultado .valido { color: #28a745; }
+    .btn-filter.active { box-shadow: 0 0 0 0.2rem rgba(29, 78, 216,.5); }
+    #revalidar-resultado .invalido { color: #B42318; }
+    #revalidar-resultado .valido { color: #047857; }
     /* AG Grid overrides */
     .ag-theme-material .ag-root-wrapper { border-radius: 0; border: none; }
-    .ag-theme-material .ag-header { background-color: #343a40; }
+    .ag-theme-material .ag-header { background-color: #0D1B4B; }
     .ag-theme-material .ag-header-cell-text { color: #fff; font-weight: 600; }
     .ag-theme-material .ag-header-icon { color: #fff; }
     .ag-theme-material .ag-row-even { background-color: #fff; }
-    .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
-    .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
+    .ag-theme-material .ag-row-odd  { background-color: #F4F7FC; }
+    .ag-theme-material .ag-row:hover { background-color: #E8EEFC !important; }
     .ag-grid-actions .btn { padding: 1px 6px; font-size: 0.75rem; margin: 1px; }
     /* Flatpickr */
     .flatpickr-input[readonly] { background-color: #fff; }
@@ -61,7 +61,7 @@
             <div class="card-body border-bottom py-2 bg-light">
                 <div class="row g-2">
                     <div class="col-md-3"><span class="badge bg-secondary">Não Gerado</span> <small class="text-muted">— Boleto ainda não criado. Selecione e clique em <em>Gerar Boletos</em>.</small></div>
-                    <div class="col-md-3"><span class="badge" style="background:#0d6efd">Gerado</span> <small class="text-muted">— Criado localmente. Inclua em Remessa CNAB para registrar no banco.</small></div>
+                    <div class="col-md-3"><span class="badge" style="background:#1D4ED8">Gerado</span> <small class="text-muted">— Criado localmente. Inclua em Remessa CNAB para registrar no banco.</small></div>
                     <div class="col-md-3"><span class="badge bg-info">Registrado</span> <small class="text-muted">— Banco confirmou via CNAB retorno. Válido para pagamento.</small></div>
                     <div class="col-md-3"><span class="badge bg-success">Pago</span> <small class="text-muted">— Pagamento confirmado (CNAB retorno ou lançamento manual).</small></div>
                     <div class="col-md-3"><span class="badge bg-warning text-dark">Vencido</span> <small class="text-muted">— Boleto vencido sem pagamento.</small></div>

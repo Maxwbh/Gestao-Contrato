@@ -9,11 +9,11 @@
     <style>
       /* ===== Tema "Ocean Depths" para o Swagger UI ===== */
       :root {
-        --api-navy: #0F2A47;
-        --api-navy-2: #163A5F;
-        --api-steel: #3B5A7C;
-        --api-gold: #C9A961;
-        --api-surface: #F4F6F9;
+        --api-navy: #0D1B4B;
+        --api-navy-2: #0D1B4B;
+        --api-steel: #35425E;
+        --api-gold: #06B6D4;
+        --api-surface: #F4F7FC;
       }
       html { box-sizing: border-box; overflow-y: scroll; }
       *, *:after, *:before { box-sizing: inherit; }
@@ -22,22 +22,22 @@
 
       /* Barra de marca própria (substitui o topbar padrão do Swagger) */
       .api-brandbar {
-        background: radial-gradient(900px 300px at 90% -40%, rgba(201,169,97,.20), transparent 60%),
+        background: radial-gradient(900px 300px at 90% -40%, rgba(6, 182, 212,.20), transparent 60%),
                     linear-gradient(135deg, var(--api-navy), var(--api-navy-2));
         color: #fff; padding: 16px 28px; display: flex; align-items: center; gap: 14px;
-        box-shadow: 0 8px 24px -14px rgba(15,42,71,.6);
+        box-shadow: 0 8px 24px -14px rgba(13, 27, 75,.6);
       }
       .api-brandbar .api-logo {
         width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center;
-        background: rgba(201,169,97,.18); border: 1px solid rgba(201,169,97,.4);
+        background: rgba(6, 182, 212,.18); border: 1px solid rgba(6, 182, 212,.4);
         color: var(--api-gold); font-size: 18px; font-weight: 700;
       }
       .api-brandbar h1 { font-size: 1.12rem; font-weight: 700; margin: 0; letter-spacing: -.01em; }
-      .api-brandbar small { color: #C6D2E0; font-size: .82rem; }
+      .api-brandbar small { color: #DDE5F2; font-size: .82rem; }
       .api-brandbar .api-badge {
         margin-left: auto; font-size: .72rem; font-weight: 700; letter-spacing: .08em;
         text-transform: uppercase; color: var(--api-gold);
-        border: 1px solid rgba(201,169,97,.4); border-radius: 999px; padding: 4px 12px;
+        border: 1px solid rgba(6, 182, 212,.4); border-radius: 999px; padding: 4px 12px;
       }
 
       /* Esconde o topbar nativo (barra de URL do explorer) */
@@ -52,18 +52,18 @@
       /* Botão Authorize e botões de ação em dourado/navy */
       .swagger-ui .btn.authorize { color: var(--api-navy); border-color: var(--api-gold); }
       .swagger-ui .btn.authorize svg { fill: var(--api-navy); }
-      .swagger-ui .btn.authorize:hover { background: var(--api-gold); color: #23303f; }
+      .swagger-ui .btn.authorize:hover { background: var(--api-gold); color: #0B1533; }
       .swagger-ui .btn.execute {
         background: var(--api-navy); border-color: var(--api-navy); color: #fff;
       }
       .swagger-ui .btn.execute:hover { background: var(--api-navy-2); }
 
       /* Cabeçalhos de grupo (tags) */
-      .swagger-ui .opblock-tag { color: var(--api-navy); border-bottom: 1px solid #e2e8f0; }
-      .swagger-ui .opblock-tag:hover { background: rgba(15,42,71,.02); }
+      .swagger-ui .opblock-tag { color: var(--api-navy); border-bottom: 1px solid #DDE5F2; }
+      .swagger-ui .opblock-tag:hover { background: rgba(13, 27, 75,.02); }
 
       /* Blocos de operação — realce sutil por método mantendo a paleta */
-      .swagger-ui .opblock.opblock-get { border-color: var(--api-steel); background: rgba(59,90,124,.04); }
+      .swagger-ui .opblock.opblock-get { border-color: var(--api-steel); background: rgba(53, 66, 94,.04); }
       .swagger-ui .opblock.opblock-get .opblock-summary-method { background: var(--api-steel); }
       .swagger-ui .opblock.opblock-post { border-color: #2f8a5b; background: rgba(47,138,91,.05); }
       .swagger-ui .opblock.opblock-post .opblock-summary-method { background: #2f8a5b; }

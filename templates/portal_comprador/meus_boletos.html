@@ -44,12 +44,12 @@
     </a>
     <a href="{% url 'portal_comprador:meus_boletos' %}?status=vencidos"
        style="white-space:nowrap;padding:6px 16px;border-radius:20px;font-size:.8rem;text-decoration:none;
-              {% if status_filtro == 'vencidos' %}background:#f44336;color:#fff;{% else %}background:#fff;color:#f44336;border:1px solid #f44336;{% endif %}">
+              {% if status_filtro == 'vencidos' %}background:#B42318;color:#fff;{% else %}background:#fff;color:#B42318;border:1px solid #B42318;{% endif %}">
         Vencidos
     </a>
     <a href="{% url 'portal_comprador:meus_boletos' %}?status=pagos"
        style="white-space:nowrap;padding:6px 16px;border-radius:20px;font-size:.8rem;text-decoration:none;
-              {% if status_filtro == 'pagos' %}background:#4caf50;color:#fff;{% else %}background:#fff;color:#4caf50;border:1px solid #4caf50;{% endif %}">
+              {% if status_filtro == 'pagos' %}background:#047857;color:#fff;{% else %}background:#fff;color:#047857;border:1px solid #047857;{% endif %}">
         Pagos
     </a>
 </div>
@@ -72,9 +72,9 @@
             <div class="desc">Parcela {{ parcela.numero_parcela }}</div>
             <div class="data">
                 {% if parcela.pago %}
-                <span style="color:#4caf50;">Pago em {{ parcela.data_pagamento|date:"d/m/Y"|default:"—" }}</span>
+                <span style="color:#047857;">Pago em {{ parcela.data_pagamento|date:"d/m/Y"|default:"—" }}</span>
                 {% elif parcela.data_vencimento < hoje %}
-                <span style="color:#f44336;">Venceu {{ parcela.data_vencimento|date:"d/m/Y" }}</span>
+                <span style="color:#B42318;">Venceu {{ parcela.data_vencimento|date:"d/m/Y" }}</span>
                 {% else %}
                 Vence {{ parcela.data_vencimento|date:"d/m/Y" }}
                 {% endif %}
@@ -86,7 +86,7 @@
                 {{ parcela.valor_atual|moeda }}
             </div>
             {% if parcela.pago or parcela.status_boleto == 'PAGO' %}
-            <span style="font-size:.72rem;color:#4caf50;"><i class="fas fa-check"></i> Quitado</span>
+            <span style="font-size:.72rem;color:#047857;"><i class="fas fa-check"></i> Quitado</span>
             {% elif parcela.tem_boleto %}
                 {% if parcela.data_vencimento < hoje %}
                 <button onclick="solicitarSegundaVia({{ parcela.pk }}, this)"
@@ -104,7 +104,7 @@
             {% endif %}
             {% if not parcela.pago %}
             <a href="{% url 'portal_comprador:upload_comprovante' parcela.pk %}"
-               style="font-size:.72rem;background:#198754;color:#fff;padding:3px 10px;border-radius:12px;text-decoration:none;white-space:nowrap;margin-top:4px;display:inline-block;">
+               style="font-size:.72rem;background:#047857;color:#fff;padding:3px 10px;border-radius:12px;text-decoration:none;white-space:nowrap;margin-top:4px;display:inline-block;">
                 <i class="fas fa-receipt" style="font-size:.65rem;"></i> Enviar Comprovante
             </a>
             {% endif %}
@@ -114,7 +114,7 @@
 </div>
 {% else %}
 <div style="text-align:center;padding:48px 16px;color:#9e9e9e;">
-    <span class="material-icons" style="font-size:4rem;color:#e0e0e0;display:block;margin-bottom:12px;">receipt_long</span>
+    <span class="material-icons" style="font-size:4rem;color:#DDE5F2;display:block;margin-bottom:12px;">receipt_long</span>
     <p style="margin:0;">Nenhum boleto encontrado.</p>
 </div>
 {% endif %}
@@ -127,7 +127,7 @@
         <i class="fas fa-chevron-left"></i> Anterior
     </a>
     {% endif %}
-    <span style="font-size:.82rem;color:#757575;">
+    <span style="font-size:.82rem;color:#5F6C88;">
         Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
     </span>
     {% if page_obj.has_next %}

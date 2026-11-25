@@ -12,8 +12,8 @@
        Material 3: cards brancos, borda suave, sombra leve, headers CLAROS
        com título/ícone em navy (o header navy escuro global do app deixava
        títulos ilegíveis, ex.: "Valores"). Paleta do modelo:
-         primary #162839 · secondary #006397 · success #27AE60
-         warning #F39C12 · danger #E74C3C · outline #c4c6cd
+         primary #162839 · secondary #006397 · success #047857
+         warning #F39C12 · danger #B42318 · outline #c4c6cd
          surface #f6fafb · surface-container-high #e5e9ea
        ═══════════════════════════════════════════════════════════════════ */
     .contrato-detail-v2 {
@@ -62,11 +62,11 @@
     .info-card {
         border-left: 4px solid;
     }
-    .info-card.primary { border-left-color: #0d6efd; }
-    .info-card.success { border-left-color: #198754; }
+    .info-card.primary { border-left-color: #1D4ED8; }
+    .info-card.success { border-left-color: #047857; }
     .info-card.warning { border-left-color: #ffc107; }
-    .info-card.danger { border-left-color: #dc3545; }
-    .info-card.info { border-left-color: #0dcaf0; }
+    .info-card.danger { border-left-color: #B42318; }
+    .info-card.info { border-left-color: #06B6D4; }
 
     .info-item {
         padding: 0.5rem 0;
@@ -77,12 +77,12 @@
     }
     .info-label {
         font-weight: 500;
-        color: #6c757d;
+        color: #5F6C88;
         font-size: 0.85rem;
     }
     .info-value {
         font-weight: 600;
-        color: #2c3e50;
+        color: #0D1B4B;
     }
 
     .progress-lg {
@@ -114,7 +114,7 @@
     }
     .stat-label {
         font-size: 0.8rem;
-        color: #6c757d;
+        color: #5F6C88;
     }
 
     /* Toast Notifications */
@@ -135,15 +135,15 @@
         animation: slideIn 0.3s ease-out;
     }
     .toast-notification.success {
-        background: linear-gradient(135deg, #28a745, #20c997);
+        background: linear-gradient(135deg, #047857, #047857);
         color: white;
     }
     .toast-notification.error {
-        background: linear-gradient(135deg, #dc3545, #e74c3c);
+        background: linear-gradient(135deg, #B42318, #B42318);
         color: white;
     }
     .toast-notification.info {
-        background: linear-gradient(135deg, #17a2b8, #0dcaf0);
+        background: linear-gradient(135deg, #0891B2, #06B6D4);
         color: white;
     }
     .toast-notification i {
@@ -547,8 +547,8 @@
         </div>
 
         <!-- Configuração de Boleto -->
-        <div class="card info-card mb-3" style="border-left:4px solid #20c997;">
-            <div class="card-header text-white" style="background-color:#20c997;">
+        <div class="card info-card mb-3" style="border-left:4px solid #047857;">
+            <div class="card-header text-white" style="background-color:#047857;">
                 <i class="fas fa-barcode"></i> Configuração de Boleto
             </div>
             <div class="card-body">
@@ -718,7 +718,7 @@
                                 <td class="text-end font-monospace col-amort d-none" style="font-size:0.8rem;">
                                     {% if parcela.amortizacao %}{{ parcela.amortizacao|moeda }}{% else %}—{% endif %}
                                 </td>
-                                <td class="text-end font-monospace col-amort d-none" style="font-size:0.8rem;color:#6c757d;">
+                                <td class="text-end font-monospace col-amort d-none" style="font-size:0.8rem;color:#5F6C88;">
                                     {% if parcela.juros_embutido %}{{ parcela.juros_embutido|moeda }}{% else %}—{% endif %}
                                 </td>
                                 <td class="text-center">
@@ -987,7 +987,7 @@
             </div>
             <div class="col-lg-5">
                 <!-- Q-04: Tabela de Juros Escalantes -->
-                <div class="card mb-3" style="border-left:4px solid #0dcaf0;">
+                <div class="card mb-3" style="border-left:4px solid #06B6D4;">
                     <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                         <span><i class="fas fa-percentage"></i> Juros Escalantes</span>
                         <button type="button" class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#formAddJuros">
@@ -1233,7 +1233,7 @@
         <!-- 3.18 Aba Relatórios do Contrato -->
         <div class="card mt-4" id="card-relatorios">
             <div class="card-header d-flex justify-content-between align-items-center"
-                 style="background:linear-gradient(135deg,#1565c0,#1976d2);color:#fff;cursor:pointer;"
+                 style="background:linear-gradient(135deg,#1D4ED8,#1D4ED8);color:#fff;cursor:pointer;"
                  data-bs-toggle="collapse" data-bs-target="#relatorios-body" aria-expanded="false">
                 <span><i class="fas fa-chart-bar me-2"></i> Relatórios &amp; Exportações</span>
                 <i class="fas fa-chevron-down" id="relatorios-chevron"
@@ -1253,7 +1253,7 @@
                             </div>
                         </div>
                         <div class="col-6 col-md-3">
-                            <div class="text-center p-3 rounded" style="background:#e3f2fd;">
+                            <div class="text-center p-3 rounded" style="background:#E8EEFC;">
                                 <div class="fs-5 fw-bold text-primary">
                                     {% if valor_pago %}{{ valor_pago|moeda }}{% else %}—{% endif %}
                                 </div>
@@ -1623,8 +1623,8 @@
                     <!-- Resumo de Parcelas -->
                     <div class="row mb-3">
                         <div class="col-md-4">
-                            <div class="text-center p-2 border rounded" style="background: rgba(25,135,84,.12);">
-                                <div class="fs-4 fw-bold" style="color:#198754;" id="totalDisponiveis">-</div>
+                            <div class="text-center p-2 border rounded" style="background: rgba(4, 120, 87,.12);">
+                                <div class="fs-4 fw-bold" style="color:#047857;" id="totalDisponiveis">-</div>
                                 <small class="text-muted">Disponiveis</small>
                             </div>
                         </div>
@@ -1635,7 +1635,7 @@
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="text-center p-2 border rounded" style="background: rgba(13,110,253,.1);">
+                            <div class="text-center p-2 border rounded" style="background: rgba(29, 78, 216,.1);">
                                 <div class="fs-4 fw-bold" style="color:#0a58ca;" id="totalJaGeradas">-</div>
                                 <small class="text-muted">Ja com boleto</small>
                             </div>
@@ -1752,15 +1752,15 @@
                 {
                     label: 'Pago',
                     data: pagas,
-                    backgroundColor: 'rgba(25, 135, 84, 0.75)',
-                    borderColor: '#198754',
+                    backgroundColor: 'rgba(4, 120, 87, 0.75)',
+                    borderColor: '#047857',
                     borderWidth: 1,
                 },
                 {
                     label: 'Pendente',
                     data: pendentes,
-                    backgroundColor: 'rgba(13, 110, 253, 0.45)',
-                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(29, 78, 216, 0.45)',
+                    borderColor: '#1D4ED8',
                     borderWidth: 1,
                 },
             ],
@@ -1841,11 +1841,11 @@
 
         // Colors
         var bg, border, textColor;
-        if (allPagas)        { bg='#e8f5e9'; border='#4caf50'; textColor='#2e7d32'; }
+        if (allPagas)        { bg='#e8f5e9'; border='#047857'; textColor='#047857'; }
         else if (bloqueado)  { bg='#fff3e0'; border='#ff9800'; textColor='#e65100'; }
-        else if (haVencidas) { bg='#ffebee'; border='#f44336'; textColor='#c62828'; }
-        else if (ativo)      { bg='#e3f2fd'; border='#2196f3'; textColor='#1565c0'; }
-        else                 { bg='#f5f5f5'; border='#9e9e9e'; textColor='#616161'; }
+        else if (haVencidas) { bg='#ffebee'; border='#B42318'; textColor='#B42318'; }
+        else if (ativo)      { bg='#E8EEFC'; border='#1D4ED8'; textColor='#1D4ED8'; }
+        else                 { bg='#F4F7FC'; border='#9e9e9e'; textColor='#616161'; }
 
         var icon = allPagas ? '✓' : (bloqueado ? '⚠' : (haVencidas ? '!' : (ativo ? '▶' : '○')));
         var labelCiclo = fixo ? '' : (r ? (r.pct >= 0 ? '+' : '') + r.pct.toFixed(2) + '%' : (ciclo === 1 ? '—' : 'Pendente'));
@@ -1858,7 +1858,7 @@
             '<div style="background:' + bg + ';border:2px solid ' + border + ';border-radius:8px;padding:10px 8px;text-align:center;position:relative;">' +
                 '<div style="font-size:.65rem;color:' + textColor + ';font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Ciclo ' + ciclo + '</div>' +
                 '<div style="font-size:1.3rem;font-weight:700;color:' + textColor + ';margin:2px 0;">' + icon + '</div>' +
-                '<div style="font-size:.7rem;color:#757575;margin-top:2px;">' + c.primeiraNum + '–' + c.ultimaNum + '</div>' +
+                '<div style="font-size:.7rem;color:#5F6C88;margin-top:2px;">' + c.primeiraNum + '–' + c.ultimaNum + '</div>' +
                 (labelCiclo ? '<div style="font-size:.7rem;font-weight:600;color:' + textColor + ';margin-top:3px;">' + labelCiclo + '</div>' : '') +
                 '<div style="font-size:.65rem;color:#9e9e9e;margin-top:2px;">' + c.pagas + '/' + c.total + ' pagas</div>' +
             '</div>' +
@@ -1868,10 +1868,10 @@
     html += '</div>';
 
     // Legend
-    html += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:.72rem;color:#757575;">' +
-        '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#e8f5e9;border:1px solid #4caf50;display:inline-block;"></span>Concluído</span>' +
-        '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#e3f2fd;border:1px solid #2196f3;display:inline-block;"></span>Em andamento</span>' +
-        '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#ffebee;border:1px solid #f44336;display:inline-block;"></span>Com atraso</span>' +
+    html += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:.72rem;color:#5F6C88;">' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#e8f5e9;border:1px solid #047857;display:inline-block;"></span>Concluído</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#E8EEFC;border:1px solid #1D4ED8;display:inline-block;"></span>Em andamento</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#ffebee;border:1px solid #B42318;display:inline-block;"></span>Com atraso</span>' +
         '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#fff3e0;border:1px solid #ff9800;display:inline-block;"></span>Bloqueado (reajuste pendente)</span>' +
     '</div>';
 

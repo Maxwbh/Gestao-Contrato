@@ -1281,8 +1281,8 @@ def portal_manifest(request):
         'scope': '/portal/',
         'display': 'standalone',
         'orientation': 'portrait',
-        'theme_color': '#00897b',
-        'background_color': '#f5f5f5',
+        'theme_color': '#0D1B4B',
+        'background_color': '#F4F7FC',
         'lang': 'pt-BR',
         'icons': [
             {
@@ -1469,7 +1469,7 @@ def portal_timeline(request, contrato_id):
             'titulo': f'Notificação — {n.get_tipo_display() if hasattr(n, "get_tipo_display") else "Aviso"}',
             'detalhe': (n.assunto or '')[:80],
             'icone': 'fas fa-bell',
-            'cor': '#1565c0',
+            'cor': '#1D4ED8',
         })
 
     eventos.sort(key=lambda e: e['data'] or __import__('datetime').date.min)
@@ -1532,10 +1532,10 @@ def portal_timeline_pdf(request, contrato_id):
 
     t = Table(dados, colWidths=[70, 70, 220, 100])
     t.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1565c0')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1D4ED8')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F4F7FC')]),
         ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#cccccc')),
         ('LEFTPADDING', (0, 0), (-1, -1), 6),
         ('RIGHTPADDING', (0, 0), (-1, -1), 6),

@@ -71,10 +71,10 @@ class TestManifestJson:
         data = json.loads(resp.content)
         assert data['start_url'].startswith('/portal/')
 
-    def test_theme_color_teal(self):
+    def test_theme_color_marinho_da_marca(self):
         resp = Client().get(reverse('portal_comprador:manifest'))
         data = json.loads(resp.content)
-        assert '#008' in data['theme_color'].lower() or '00897b' in data['theme_color'].lower()
+        assert data['theme_color'].lower() == '#0d1b4b'
 
     def test_display_standalone(self):
         resp = Client().get(reverse('portal_comprador:manifest'))

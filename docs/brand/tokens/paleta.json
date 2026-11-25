@@ -1,0 +1,97 @@
+{
+  "version": "0.7",
+  "status": "proposta em validação",
+  "identidade": {
+    "marinho": "#0D1B4B",
+    "azul": "#1D4ED8",
+    "ciano": "#06B6D4",
+    "ciano-escuro": "#0891B2"
+  },
+  "cmyk_calculado": {
+    "marinho": [
+      83,
+      64,
+      0,
+      71
+    ],
+    "azul": [
+      87,
+      64,
+      0,
+      15
+    ],
+    "ciano": [
+      97,
+      14,
+      0,
+      17
+    ],
+    "ciano-escuro": [
+      96,
+      19,
+      0,
+      30
+    ]
+  },
+  "cmyk_nota": "Conversão matemática do RGB, sem perfil ICC nem prova gráfica. Validar antes de imprimir.",
+  "neutros": {
+    "tinta": "#0B1533",
+    "texto": "#35425E",
+    "apoio": "#5F6C88",
+    "linha": "#DDE5F2",
+    "nevoa": "#F4F7FC",
+    "branco": "#FFFFFF"
+  },
+  "funcionais": {
+    "acao": "#1D4ED8",
+    "acao-hover": "#1E40AF",
+    "acao-pressionado": "#1E3A8A",
+    "foco": "#1D4ED8",
+    "informacao": "#0369A1",
+    "sucesso": "#047857",
+    "alerta": "#B54708",
+    "erro": "#B42318",
+    "desabilitado": "#5F6C88"
+  },
+  "foco_nota": "Anel de foco: 2 px na cor foco, com 2 px de afastamento.",
+  "tipografia": {
+    "display": {
+      "familia": "Inter Display",
+      "pesos": [
+        600,
+        700,
+        800
+      ],
+      "alternativas": [
+        "Inter",
+        "Arial",
+        "sans-serif"
+      ]
+    },
+    "texto": {
+      "familia": "Inter",
+      "pesos": [
+        400,
+        500,
+        600,
+        700
+      ],
+      "alternativas": [
+        "Calibri",
+        "Arial",
+        "sans-serif"
+      ]
+    },
+    "codigo": {
+      "familia": "JetBrains Mono",
+      "pesos": [
+        400,
+        500
+      ],
+      "alternativas": [
+        "Consolas",
+        "monospace"
+      ]
+    }
+  }
+}

@@ -12,39 +12,39 @@
 /* ── Gauge (half-circle) ─────────────────────────────── */
 .gauge-wrap          { position: relative; height: 100px; }
 .gauge-label         { position: absolute; bottom: 0; width: 100%;
-                       text-align: center; font-size: .78rem; color: #6c757d; }
+                       text-align: center; font-size: .78rem; color: #5F6C88; }
 .gauge-pct           { position: absolute; bottom: 12px; width: 100%;
                        text-align: center; font-size: 1.4rem; font-weight: 700; }
 
 /* ── Slider ──────────────────────────────────────────── */
 .range-wrap          { position: relative; }
-input[type=range]    { width: 100%; accent-color: #0d6efd; cursor: pointer; }
-.range-bubble        { display: inline-block; background: #0d6efd; color:#fff;
+input[type=range]    { width: 100%; accent-color: #1D4ED8; cursor: pointer; }
+.range-bubble        { display: inline-block; background: #1D4ED8; color:#fff;
                        padding: 1px 7px; border-radius: 4px; font-size: .78rem;
                        margin-top: 2px; }
-.range-cost          { font-size: .82rem; color: #28a745; font-weight: 600; }
-.range-cost.over     { color: #dc3545; }
+.range-cost          { font-size: .82rem; color: #047857; font-weight: 600; }
+.range-cost.over     { color: #B42318; }
 
 /* ── Preset buttons ──────────────────────────────────── */
 .preset-btn          { font-size: .82rem; }
 
 /* ── Simulator ───────────────────────────────────────── */
-.sim-input-label     { font-size: .82rem; color:#6c757d; }
+.sim-input-label     { font-size: .82rem; color:#5F6C88; }
 .sim-result-box      { background: #f0fff4; border: 1px solid #b2f5c8;
                        border-radius: .5rem; padding: .75rem 1rem; }
 .sim-result-usd      { font-size: 1.6rem; font-weight: 700; color: #155724; }
-.sim-result-brl      { font-size: 1.1rem; color: #198754; }
+.sim-result-brl      { font-size: 1.1rem; color: #047857; }
 
 /* ── Model color palette ─────────────────────────────── */
 .card-gemini  { border-top: 4px solid #4285f4; }
-.card-haiku   { border-top: 4px solid #28a745; }
+.card-haiku   { border-top: 4px solid #047857; }
 .card-sonnet  { border-top: 4px solid #ffc107; }
-.card-opus    { border-top: 4px solid #dc3545; }
+.card-opus    { border-top: 4px solid #B42318; }
 
 .badge-free   { background: #4285f4; color:#fff; }
-.badge-cheap  { background: #28a745; color:#fff; }
+.badge-cheap  { background: #047857; color:#fff; }
 .badge-mid    { background: #fd7e14; color:#fff; }
-.badge-prem   { background: #dc3545; color:#fff; }
+.badge-prem   { background: #B42318; color:#fff; }
 </style>
 {% endblock %}
 
@@ -357,14 +357,14 @@ input[type=range]    { width: 100%; accent-color: #0d6efd; cursor: pointer; }
     const ctx = document.getElementById('gauge-{{ forloop.counter }}');
     if (!ctx) return;
     const pct = {{ m.pct_tokens|unlocalize }};
-    const colors = ['#0d6efd','#28a745','#ffc107','#dc3545'];
+    const colors = ['#1D4ED8','#047857','#ffc107','#B42318'];
     const color = colors[{{ forloop.counter0 }} % colors.length];
     gauges['gauge-{{ forloop.counter }}'] = new Chart(ctx, {
       type: 'doughnut',
       data: {
         datasets: [{
           data: [pct, 100 - pct],
-          backgroundColor: [color, '#e9ecef'],
+          backgroundColor: [color, '#DDE5F2'],
           borderWidth: 0,
         }]
       },
@@ -450,7 +450,7 @@ input[type=range]    { width: 100%; accent-color: #0d6efd; cursor: pointer; }
   let simChart = null;
   const MODELS = Object.keys(PRECOS);
   const MODEL_LABELS = MODELS.map(m => m.replace('claude-','').replace('-4-5-20251001','').replace('-4-6','').replace('-4-7',''));
-  const COLORS_SIM = ['#4285f4','#28a745','#ffc107','#dc3545'];
+  const COLORS_SIM = ['#4285f4','#047857','#ffc107','#B42318'];
 
   function runSimulator() {
     const contratos = parseFloat(document.getElementById('sl-contratos').value) || 0;

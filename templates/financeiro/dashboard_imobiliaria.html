@@ -9,15 +9,15 @@
 <style>
     .card-stats { border-left: 4px solid; transition: transform 0.2s; }
     .card-stats:hover { transform: translateY(-2px); }
-    .card-stats.primary { border-color: #007bff; }
-    .card-stats.success { border-color: #28a745; }
+    .card-stats.primary { border-color: #1D4ED8; }
+    .card-stats.success { border-color: #047857; }
     .card-stats.warning { border-color: #ffc107; }
-    .card-stats.danger { border-color: #dc3545; }
-    .card-stats.info { border-color: #17a2b8; }
+    .card-stats.danger { border-color: #B42318; }
+    .card-stats.info { border-color: #0891B2; }
     .stat-value { font-size: 1.6rem; font-weight: bold; }
-    .stat-label { color: #6c757d; font-size: 0.85rem; }
-    .section-title { border-bottom: 2px solid #007bff; padding-bottom: 0.5rem; margin-bottom: 1rem; }
-    .parcela-row:hover { background-color: #f8f9fa; }
+    .stat-label { color: #5F6C88; font-size: 0.85rem; }
+    .section-title { border-bottom: 2px solid #1D4ED8; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+    .parcela-row:hover { background-color: #F4F7FC; }
     .badge-atraso { font-size: 0.75rem; }
 </style>
 {% endblock %}
@@ -335,8 +335,8 @@
                         {
                             label: 'Previsto (R$)',
                             data: previsto,
-                            backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                            borderColor: 'rgba(54, 162, 235, 1)',
+                            backgroundColor: 'rgba(29, 78, 216, 0.5)',
+                            borderColor: 'rgba(29, 78, 216, 1)',
                             borderWidth: 1,
                         },
                         {
@@ -373,7 +373,7 @@
                             grid: { display: false },
                             ticks: {
                                 color: function(ctx) {
-                                    return ctx.index === corrente ? '#007bff' : '#666';
+                                    return ctx.index === corrente ? '#1D4ED8' : '#666';
                                 },
                                 font: {
                                     weight: function(ctx) {

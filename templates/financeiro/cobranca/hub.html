@@ -19,14 +19,14 @@
   .step-title { font-weight:700; font-size:.85rem; white-space:nowrap; }
   .step-count { font-size:.78rem; color:#64748b; white-space:nowrap; }
   .step-count-api { font-size:.75rem; color:#a5842e; white-space:nowrap; }
-  .step-line { flex:1 1 auto; min-width:26px; height:3px; background:#e2e8f0;
+  .step-line { flex:1 1 auto; min-width:26px; height:3px; background:#DDE5F2;
                border-radius:2px; margin-top:23px; }
-  .step-line.done { background:#0058be; }
-  .kpi-card { border:1px solid #e2e8f0; border-radius:.5rem; box-shadow:0 4px 12px rgba(30,41,59,.05); }
+  .step-line.done { background:#1D4ED8; }
+  .kpi-card { border:1px solid #DDE5F2; border-radius:.5rem; box-shadow:0 4px 12px rgba(13, 27, 75,.05); }
   .kpi-value { font-size:1.6rem; font-weight:700; line-height:1.1; }
   .kpi-label { font-size:.72rem; letter-spacing:.05em; text-transform:uppercase; color:#64748b; font-weight:600; }
   .kpi-ico { width:34px; height:34px; border-radius:9px; display:grid; place-items:center;
-             background:#f1f5f9; color:#3B5A7C; font-size:.95rem; }
+             background:#f1f5f9; color:#35425E; font-size:.95rem; }
   .badge-estado { font-size:.68rem; font-weight:700; letter-spacing:.03em; white-space:nowrap; }
 </style>
 {% endblock %}
@@ -83,7 +83,7 @@
     <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100 d-flex justify-content-between align-items-start"><div><span class="kpi-label">A Gerar</span><div class="kpi-value">{{ estado.a_gerar }}</div><div class="small text-muted">boletos elegíveis</div></div><span class="kpi-ico"><i class="fas fa-bolt"></i></span></div></div>
     <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100 d-flex justify-content-between align-items-start"><div><span class="kpi-label">A Enviar</span><div class="kpi-value">{{ estado.a_enviar_contas }}</div><div class="small text-muted">contas / arquivos</div></div><span class="kpi-ico"><i class="fas fa-paper-plane"></i></span></div></div>
     <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100 d-flex justify-content-between align-items-start"><div><span class="kpi-label">A Conciliar</span><div class="kpi-value">{{ estado.a_conciliar_boletos }}</div><div class="small text-muted">boletos enviados{% if estado.a_conciliar_api %} <span style="color:#a5842e">· +{{ estado.a_conciliar_api }} via API</span>{% endif %}</div></div><span class="kpi-ico"><i class="fas fa-university"></i></span></div></div>
-    <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100" style="background:rgba(0,88,190,.06);border-color:rgba(0,88,190,.3)"><span class="kpi-label" style="color:#0058be">Ciclo Concluído</span><div class="kpi-value" style="color:#0058be">{{ estado.percentual }}%</div><div class="progress mt-2" style="height:6px"><div class="progress-bar" style="width:{{ estado.percentual }}%"></div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100" style="background:rgba(29, 78, 216,.06);border-color:rgba(29, 78, 216,.3)"><span class="kpi-label" style="color:#1D4ED8">Ciclo Concluído</span><div class="kpi-value" style="color:#1D4ED8">{{ estado.percentual }}%</div><div class="progress mt-2" style="height:6px"><div class="progress-bar" style="width:{{ estado.percentual }}%"></div></div></div></div>
   </div>
 
   {% with q="?imobiliaria="|add:filtro_imobiliaria %}

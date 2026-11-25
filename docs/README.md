@@ -1,11 +1,11 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../docs/brand/ms-do-brasil-horizontal-escura.svg">
-  <img src="../docs/brand/ms-do-brasil-horizontal-clara.svg" alt="M&S do Brasil" height="44">
+  <source media="(prefers-color-scheme: dark)" srcset="../docs/brand/svg/ms-assinatura-horizontal-fundo-escuro.svg">
+  <img src="../docs/brand/svg/ms-assinatura-horizontal-fundo-claro.svg" alt="M&S do Brasil" height="44">
 </picture>
 
 # Documentação — Sistema de Gestão de Contratos
 
-Desenvolvido por **Maxwell da Silva Oliveira** (maxwbh@gmail.com) — M&S do Brasil LTDA
+Desenvolvido por **Maxwell da Silva Oliveira** (maxwbh@gmail.com) — M&S do Brasil LTDA (contato@msbrasil.inf.br)
 
 ---
 
@@ -80,10 +80,10 @@ Desenvolvido por **Maxwell da Silva Oliveira** (maxwbh@gmail.com) — M&S do Bra
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../docs/brand/ms-do-brasil-horizontal-escura.svg">
-  <img src="../docs/brand/ms-do-brasil-horizontal-clara.svg" alt="M&S do Brasil" height="36">
+  <source media="(prefers-color-scheme: dark)" srcset="../docs/brand/svg/ms-assinatura-horizontal-fundo-escuro.svg">
+  <img src="../docs/brand/svg/ms-assinatura-horizontal-fundo-claro.svg" alt="M&S do Brasil" height="36">
 </picture>
 
-<sub>**M&S do Brasil** · Desenvolvimento de sistemas · [msbrasil.inf.br](https://msbrasil.inf.br)</sub>
+<sub>Um projeto **M&S do Brasil** · [msbrasil.inf.br](https://msbrasil.inf.br) · contato@msbrasil.inf.br</sub>
 
 </div>
