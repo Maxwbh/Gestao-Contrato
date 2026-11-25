@@ -4,7 +4,7 @@
 {% block nav_dados %}active{% endblock %}
 
 {% block content %}
-<h6 style="font-weight:700;margin:12px 0 16px;color:#212121;">
+<h6 style="font-weight:700;margin:12px 0 16px;color:#0B1533;">
     <span class="material-icons" style="vertical-align:middle;color:var(--portal-primary);font-size:1.2rem;">person</span>
     Meus Dados
 </h6>
@@ -44,8 +44,14 @@
             {% csrf_token %}
             {% for field in form %}
             <div style="margin-bottom:14px;">
+                {% if field.field.widget.input_type == 'checkbox' %}
+                <label style="display:flex;align-items:center;font-size:.85rem;color:#35425E;cursor:pointer;">
+                    {{ field }}{{ field.label }}
+                </label>
+                {% else %}
                 <label style="display:block;font-size:.78rem;color:#5F6C88;margin-bottom:4px;">{{ field.label }}</label>
                 {{ field }}
+                {% endif %}
                 {% if field.errors %}
                 <div style="color:#B42318;font-size:.75rem;margin-top:3px;">{{ field.errors.as_text }}</div>
                 {% endif %}
@@ -75,7 +81,7 @@
     <div class="portal-card-body" style="display:flex;justify-content:space-between;align-items:center;">
         <div>
             <div style="font-weight:600;font-size:.9rem;">Senha de Acesso</div>
-            <div style="color:#9e9e9e;font-size:.78rem;">Altere sua senha de acesso ao portal</div>
+            <div style="color:#5F6C88;font-size:.78rem;">Altere sua senha de acesso ao portal</div>
         </div>
         <a href="{% url 'portal_comprador:alterar_senha' %}"
            style="color:var(--portal-primary);text-decoration:none;font-size:.85rem;font-weight:600;">
@@ -93,7 +99,7 @@
 
 {% block extra_js %}
 <script>
-document.querySelectorAll('.portal-card form input, .portal-card form textarea, .portal-card form select').forEach(function(el) {
+document.querySelectorAll('.portal-card form input:not([type=checkbox]):not([type=radio]):not([type=hidden]), .portal-card form textarea, .portal-card form select').forEach(function(el) {
     el.style.cssText = 'width:100%;padding:10px 12px;border:1px solid #DDE5F2;border-radius:8px;font-size:.875rem;outline:none;box-sizing:border-box;';
     el.addEventListener('focus', function() { this.style.borderColor = 'var(--portal-primary)'; });
     el.addEventListener('blur',  function() { this.style.borderColor = '#DDE5F2'; });

@@ -1,12 +1,13 @@
 {% extends 'portal_comprador/portal_base.html' %}
+{% load static %}
 {% block title %}Entrar{% endblock %}
 
 {% block content %}
 <div style="max-width:400px;margin:32px auto 0;">
 
     <div style="text-align:center;margin-bottom:28px;">
-        <i class="fas fa-lock" style="font-size:2.5rem;color:var(--portal-primary);"></i>
-        <h5 style="margin:12px 0 4px;font-weight:700;color:#212121;">Portal do Comprador</h5>
+        <img src="{% static 'img/ms-simbolo-fundo-claro.svg' %}" alt="M&S do Brasil" height="44" style="display:block;margin:0 auto 12px;">
+        <h5 style="margin:12px 0 4px;font-weight:700;color:#0B1533;">Portal do Comprador</h5>
         <p style="color:#5F6C88;font-size:.875rem;margin:0;">Entre com seu CPF/CNPJ e senha</p>
     </div>
 
@@ -16,7 +17,7 @@
                 {% csrf_token %}
 
                 <div style="margin-bottom:16px;">
-                    <label style="font-size:.82rem;font-weight:600;color:#424242;display:block;margin-bottom:6px;">
+                    <label style="font-size:.82rem;font-weight:600;color:#35425E;display:block;margin-bottom:6px;">
                         CPF ou CNPJ
                     </label>
                     <input type="text" name="documento"
@@ -30,7 +31,7 @@
                 </div>
 
                 <div style="margin-bottom:20px;">
-                    <label style="font-size:.82rem;font-weight:600;color:#424242;display:block;margin-bottom:6px;">
+                    <label style="font-size:.82rem;font-weight:600;color:#35425E;display:block;margin-bottom:6px;">
                         Senha
                     </label>
                     <input type="password" name="senha"

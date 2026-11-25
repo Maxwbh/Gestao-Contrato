@@ -18,6 +18,7 @@
     <link rel="manifest" href="{% url 'portal_comprador:manifest' %}">
     <!-- Materialize CSS (local) -->
     <link rel="stylesheet" href="{% static 'vendor/materialize/css/materialize.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/ms-tokens.css' %}">
     <!-- Material Icons (fonte vendorizada — sem dependência de CDN) -->
     <link href="{% static 'vendor/material-icons/material-icons.css' %}" rel="stylesheet">
     <!-- Font Awesome (local) -->
@@ -27,10 +28,10 @@
 
     <style>
         :root {
-            --portal-primary: #0D1B4B;   /* teal darken-1 */
-            --portal-accent:  #0891B2;   /* teal lighten-1 */
-            --portal-light:   #F4F7FC;   /* teal lighten-5 */
-            --portal-dark:    #0D1B4B;   /* teal darken-4 */
+            --portal-primary: var(--ms-marinho);    /* paleta M&S do Brasil (kit v0.7) */
+            --portal-accent:  var(--ms-ciano-escuro);
+            --portal-light:   var(--ms-nevoa);
+            --portal-dark:    var(--ms-tinta);
             --bottom-nav-h:   56px;
         }
         /* foco dos campos na paleta da marca (padrão do Materialize é teal) */
@@ -40,6 +41,45 @@
             border-bottom-color: #1D4ED8 !important; box-shadow: 0 1px 0 0 #1D4ED8 !important;
         }
         input:focus:not([readonly]) + label { color: #1D4ED8 !important; }
+
+        /* ── Marca M&S do Brasil no portal ── */
+        body { font-family: var(--ms-font-texto); color: var(--ms-texto); }
+        h1, h2, h3, h4, h5, h6 { color: var(--ms-tinta); }
+        label.form-label, .form-label { color: var(--ms-texto); }  /* "label" do Materialize é #9e9e9e */
+        a { color: var(--ms-azul); }
+        /* "nav i" do Materialize vira ícone de barra (bloco, 56 px) e desalinha o cabeçalho */
+        .portal-navbar i, .portal-bottom-nav i { display: inline-block; float: none; height: auto; line-height: inherit; }
+        /* Botões no padrão do sistema (sem o teal do Materialize) */
+        .btn { background-color: var(--ms-acao); border-radius: 8px; text-transform: none; font-weight: 600; box-shadow: none; }
+        .btn:hover, .btn:focus { background-color: var(--ms-acao-hover); box-shadow: none; }
+        .btn-success { background-color: var(--ms-sucesso); }
+        .btn-success:hover { background-color: #065F46; }
+        .btn-outline-secondary { background: #fff; color: var(--ms-texto); border: 1px solid var(--ms-linha); }
+        .btn-outline-secondary:hover, .btn-outline-secondary:focus { background: var(--ms-nevoa); color: var(--ms-tinta); border-color: var(--ms-apoio); }
+        a:focus-visible, button:focus-visible, .btn:focus-visible { outline: 2px solid var(--ms-foco); outline-offset: 2px; }
+        [type="checkbox"]:checked + span:not(.lever)::before { border-right-color: var(--ms-azul); border-bottom-color: var(--ms-azul); }
+        [type="checkbox"].filled-in:checked + span:not(.lever)::after { border-color: var(--ms-azul); background-color: var(--ms-azul); }
+        .progress { background-color: var(--ms-linha); }
+        /* Campos com classes Bootstrap (widgets do Django): o Materialize esconde
+           <select> e <input type=checkbox> nativos — o comprador não via o campo UF,
+           as preferências de notificação nem as parcelas do simulador */
+        select.form-select, select.form-control {
+            display: block; width: 100%; height: auto; padding: .55rem .75rem;
+            border: 1px solid var(--ms-linha); border-radius: 6px; background-color: #fff;
+            color: var(--ms-tinta); font-size: .9rem;
+        }
+        input[type="checkbox"].form-check-input, input[type="radio"].form-check-input {
+            position: static; opacity: 1; pointer-events: auto; width: 1.15rem; height: 1.15rem;
+            margin: 0 .45rem 0 0; vertical-align: middle; accent-color: var(--ms-azul); cursor: pointer;
+        }
+        input.form-control:not([type="checkbox"]):not([type="radio"]) {
+            box-sizing: border-box; height: auto; padding: .55rem .75rem; margin: 0;
+            border: 1px solid var(--ms-linha); border-radius: 6px; background: #fff; color: var(--ms-tinta);
+        }
+        input.form-control:focus, select.form-select:focus {
+            border-color: var(--ms-azul) !important; box-shadow: 0 0 0 3px rgba(29, 78, 216, .18) !important; outline: none;
+        }
+        .progress .determinate, .progress .indeterminate { background-color: var(--ms-azul); }
 
         body {
             background: #F4F7FC;
@@ -96,7 +136,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            color: #9e9e9e;
+            color: #5F6C88;
             text-decoration: none;
             font-size: .65rem;
             transition: color .15s;
@@ -161,11 +201,11 @@
         .stat-chip .lbl { font-size: .68rem; color: #5F6C88; margin-top: 2px; }
         .stat-chip.green { border-top: 3px solid #047857; }
         .stat-chip.red   { border-top: 3px solid #B42318; }
-        .stat-chip.amber { border-top: 3px solid #ff9800; }
+        .stat-chip.amber { border-top: 3px solid #B54708; }
         .stat-chip.blue  { border-top: 3px solid #1D4ED8; }
         .stat-chip.green .val { color: #047857; }
         .stat-chip.red   .val { color: #B42318; }
-        .stat-chip.amber .val { color: #ef6c00; }
+        .stat-chip.amber .val { color: #B54708; }
         .stat-chip.blue  .val { color: #1D4ED8; }
 
         /* ── Parcela Item ── */
@@ -190,9 +230,9 @@
         }
         .parcela-icon.pago   { background: #e8f5e9; color: #047857; }
         .parcela-icon.vencida { background: #ffebee; color: #B42318; }
-        .parcela-icon.pendente { background: #fff8e1; color: #ff9800; }
+        .parcela-icon.pendente { background: #FEF6EE; color: #B54708; }
         .parcela-info { flex: 1; min-width: 0; }
-        .parcela-info .contrato { font-size: .75rem; color: #9e9e9e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .parcela-info .contrato { font-size: .75rem; color: #5F6C88; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .parcela-info .desc { font-size: .9rem; font-weight: 500; }
         .parcela-info .data { font-size: .75rem; color: #5F6C88; }
         .parcela-valor { font-weight: 700; font-size: .9rem; text-align: right; white-space: nowrap; }
@@ -223,7 +263,7 @@
             gap: 10px;
         }
         .alert-banner.danger  { background: #ffebee; color: #B42318; }
-        .alert-banner.warning { background: #fff8e1; color: #e65100; }
+        .alert-banner.warning { background: #FEF6EE; color: #B54708; }
         .alert-banner.success { background: #e8f5e9; color: #047857; }
         .alert-banner.info    { background: #E8EEFC; color: #1D4ED8; }
 
@@ -283,7 +323,7 @@
         }
         .portal-message.success { background: #e8f5e9; color: #047857; border-left: 3px solid #047857; }
         .portal-message.error   { background: #ffebee; color: #B42318; border-left: 3px solid #B42318; }
-        .portal-message.warning { background: #fff8e1; color: #e65100; border-left: 3px solid #ff9800; }
+        .portal-message.warning { background: #FEF6EE; color: #B54708; border-left: 3px solid #B54708; }
         .portal-message.info    { background: #E8EEFC; color: #1D4ED8; border-left: 3px solid #1D4ED8; }
     </style>
 </head>
@@ -292,8 +332,8 @@
 <!-- Top Navbar -->
 <nav class="portal-navbar">
     <a href="{% url 'portal_comprador:dashboard' %}" class="brand">
-        <i class="fas fa-home" style="font-size:1.2rem;"></i>
-        Portal
+        <img src="{% static 'img/ms-simbolo-claro.svg' %}" alt="M&S do Brasil" height="26">
+        Portal do Comprador
     </a>
     {% if request.user.is_authenticated %}
     <div class="user-chip">
@@ -417,7 +457,7 @@
 </script>
 {% endif %}
 
-<footer style="text-align:center; padding:8px 0; font-size:0.7rem; color:#aaa;">
+<footer style="text-align:center; padding:8px 0; font-size:0.7rem; color:#5F6C88;">
     <span title="Commit: {{ system_version_info.commit }} | Build: {{ system_version_info.date }} | {{ system_version_info.env }}"
           style="cursor:help; border-bottom:1px dotted #ccc;">
         v{{ system_version }}
