@@ -8,12 +8,12 @@
 {% block extra_css %}
 <style>
     .card-stats { border-left: 4px solid; }
-    .card-stats.primary { border-color: #007bff; }
-    .card-stats.success { border-color: #28a745; }
+    .card-stats.primary { border-color: #1D4ED8; }
+    .card-stats.success { border-color: #047857; }
     .card-stats.warning { border-color: #ffc107; }
-    .card-stats.danger { border-color: #dc3545; }
+    .card-stats.danger { border-color: #B42318; }
     .stat-value { font-size: 1.4rem; font-weight: bold; }
-    .stat-label { color: #6c757d; font-size: 0.85rem; }
+    .stat-label { color: #5F6C88; font-size: 0.85rem; }
     .imob-card { transition: transform 0.2s; cursor: pointer; }
     .imob-card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
     .parcela-vencida { background-color: #fff3cd !important; }
@@ -61,9 +61,9 @@
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card card-stats" style="border-color:#0d6efd;">
+            <div class="card card-stats" style="border-color:#1D4ED8;">
                 <div class="card-body text-center">
-                    <div class="stat-value" style="color:#0d6efd;">{{ stats.pendentes|default:0 }}</div>
+                    <div class="stat-value" style="color:#1D4ED8;">{{ stats.pendentes|default:0 }}</div>
                     <div class="stat-label">A Vencer</div>
                     <small class="text-muted">{{ stats.valor_pendente|moeda }}</small>
                 </div>

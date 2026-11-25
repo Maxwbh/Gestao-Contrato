@@ -7,14 +7,14 @@
 <style>
   .kpi-grid { display:flex; flex-wrap:wrap; gap:.75rem; }
   .kpi-grid > .kpi-col { flex:1 1 170px; }
-  .kpi-card { border:1px solid #e2e8f0; border-radius:.5rem; box-shadow:0 4px 12px rgba(30,41,59,.05); }
+  .kpi-card { border:1px solid #DDE5F2; border-radius:.5rem; box-shadow:0 4px 12px rgba(13, 27, 75,.05); }
   .kpi-value { font-size:1.5rem; font-weight:700; line-height:1.1; }
-  .kpi-label { font-size:.7rem; letter-spacing:.05em; text-transform:uppercase; color:#64748b; font-weight:600; }
+  .kpi-label { font-size:.7rem; letter-spacing:.05em; text-transform:uppercase; color:#5F6C88; font-weight:600; }
   .origem-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
-  .aging-cell { border:1px solid #e2e8f0; border-radius:.5rem; padding:.75rem; text-align:center; }
+  .aging-cell { border:1px solid #DDE5F2; border-radius:.5rem; padding:.75rem; text-align:center; }
   .aging-clic { cursor:pointer; transition:box-shadow .15s; }
-  .aging-clic:hover { box-shadow:0 0 0 2px rgba(0,88,190,.25); }
-  .aging-cell.active { box-shadow:0 0 0 2px #0058be; }
+  .aging-clic:hover { box-shadow:0 0 0 2px rgba(29, 78, 216,.25); }
+  .aging-cell.active { box-shadow:0 0 0 2px #1D4ED8; }
   @media print { .no-print { display:none !important; } }
   .mono { font-family:'Courier New', monospace; font-size:.82rem; }
 </style>
@@ -48,12 +48,12 @@
 
   <!-- KPIs de saúde -->
   <div class="kpi-grid mb-4">
-    <div class="kpi-col"><div class="kpi-card p-3 h-100" style="background:rgba(0,88,190,.06);border-color:rgba(0,88,190,.3)">
-      <span class="kpi-label" style="color:#0058be">% Conciliado</span><div class="kpi-value" style="color:#0058be">{{ pct_conciliado }}%</div>
+    <div class="kpi-col"><div class="kpi-card p-3 h-100" style="background:rgba(29, 78, 216,.06);border-color:rgba(29, 78, 216,.3)">
+      <span class="kpi-label" style="color:#1D4ED8">% Conciliado</span><div class="kpi-value" style="color:#1D4ED8">{{ pct_conciliado }}%</div>
       <div class="progress mt-2" style="height:6px"><div class="progress-bar" style="width:{{ pct_conciliado }}%"></div></div></div></div>
     <div class="kpi-col"><div class="kpi-card p-3 h-100"><span class="kpi-label">Recebido</span><div class="kpi-value text-success">R$ {{ recebido_valor|floatformat:2 }}</div><div class="small text-muted">{{ recebido_qtd }} baixas</div></div></div>
     <div class="kpi-col"><div class="kpi-card p-3 h-100"><span class="kpi-label">Pendente</span><div class="kpi-value">R$ {{ pendente_valor|floatformat:2 }}</div><div class="small text-muted">{{ pendente_qtd }} boletos</div></div></div>
-    <div class="kpi-col"><div class="kpi-card p-3 h-100" style="background:rgba(239,68,68,.05);border-color:rgba(239,68,68,.3)"><span class="kpi-label text-danger">Vencido</span><div class="kpi-value text-danger">R$ {{ vencido_valor|floatformat:2 }}</div><div class="small text-muted">{{ vencido_qtd }} parcelas</div></div></div>
+    <div class="kpi-col"><div class="kpi-card p-3 h-100" style="background:rgba(180, 35, 24,.05);border-color:rgba(180, 35, 24,.3)"><span class="kpi-label text-danger">Vencido</span><div class="kpi-value text-danger">R$ {{ vencido_valor|floatformat:2 }}</div><div class="small text-muted">{{ vencido_qtd }} parcelas</div></div></div>
     <div class="kpi-col"><div class="kpi-card p-3 h-100" style="background:rgba(245,158,11,.07);border-color:rgba(245,158,11,.3)"><span class="kpi-label text-warning">Rejeitados</span><div class="kpi-value text-warning">{{ rejeitados_qtd }}</div><div class="small text-muted">itens de remessa</div></div></div>
   </div>
 
@@ -74,8 +74,8 @@
       <div class="row g-2">
         <div class="col-3"><div class="aging-cell aging-clic" data-bucket="a_vencer" role="button"><div class="fw-bold">R$ {{ aging.a_vencer.valor|floatformat:2 }}</div><div class="small text-muted">A vencer ({{ aging.a_vencer.qtd }})</div></div></div>
         <div class="col-3"><div class="aging-cell aging-clic" data-bucket="d1_30" role="button" style="border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.05)"><div class="fw-bold text-warning">R$ {{ aging.d1_30.valor|floatformat:2 }}</div><div class="small text-muted">1–30 ({{ aging.d1_30.qtd }})</div></div></div>
-        <div class="col-3"><div class="aging-cell aging-clic" data-bucket="d31_60" role="button" style="border-color:rgba(234,88,12,.4);background:rgba(234,88,12,.05)"><div class="fw-bold" style="color:#ea580c">R$ {{ aging.d31_60.valor|floatformat:2 }}</div><div class="small text-muted">31–60 ({{ aging.d31_60.qtd }})</div></div></div>
-        <div class="col-3"><div class="aging-cell aging-clic" data-bucket="d60_mais" role="button" style="border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.05)"><div class="fw-bold text-danger">R$ {{ aging.d60_mais.valor|floatformat:2 }}</div><div class="small text-muted">60+ ({{ aging.d60_mais.qtd }})</div></div></div>
+        <div class="col-3"><div class="aging-cell aging-clic" data-bucket="d31_60" role="button" style="border-color:rgba(234,88,12,.4);background:rgba(234,88,12,.05)"><div class="fw-bold" style="color:#B54708">R$ {{ aging.d31_60.valor|floatformat:2 }}</div><div class="small text-muted">31–60 ({{ aging.d31_60.qtd }})</div></div></div>
+        <div class="col-3"><div class="aging-cell aging-clic" data-bucket="d60_mais" role="button" style="border-color:rgba(180, 35, 24,.4);background:rgba(180, 35, 24,.05)"><div class="fw-bold text-danger">R$ {{ aging.d60_mais.valor|floatformat:2 }}</div><div class="small text-muted">60+ ({{ aging.d60_mais.qtd }})</div></div></div>
       </div>
     </div></div></div>
   </div>
@@ -98,7 +98,7 @@
             <td>{{ p.data_vencimento|date:"d/m/Y" }}</td>
             <td class="text-center">{% if p.dias_atraso %}<span class="text-warning fw-bold">{{ p.dias_atraso }} d</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
             <td class="text-end fw-semibold">R$ {{ p.valor_atual|floatformat:2 }}</td>
-            <td><span class="badge bg-secondary">{{ p.get_status_boleto_display }}</span>{% if p.provider == 'c6' or p.provider == 'sicoob' %} <span class="badge" style="background:#C9A961;color:#23303f" title="Cobrança registrada — concilia por webhook, sem arquivo de retorno">{{ p.provider|upper }}</span>{% endif %}</td>
+            <td><span class="badge bg-secondary">{{ p.get_status_boleto_display }}</span>{% if p.provider == 'c6' or p.provider == 'sicoob' %} <span class="badge" style="background:#06B6D4;color:#0B1533" title="Cobrança registrada — concilia por webhook, sem arquivo de retorno">{{ p.provider|upper }}</span>{% endif %}</td>
             <td class="text-end text-nowrap no-print">
               <a href="{% url 'financeiro:registrar_pagamento' hid=p.pk|hashid %}" class="btn btn-sm btn-outline-success" title="Baixa manual"><i class="fas fa-check"></i></a>
               <a href="{% url 'financeiro:segunda_via_boleto' hid=p.pk|hashid %}" class="btn btn-sm btn-outline-secondary" title="2ª via"><i class="fas fa-receipt"></i></a>
@@ -136,8 +136,8 @@
             <td class="text-end fw-semibold">R$ {{ h.valor_pago|floatformat:2 }}</td>
             <td class="text-end" style="width:70px">
               {% if h.origem_pagamento == 'PIX_WEBHOOK' %}<span class="badge bg-success">PIX</span>
-              {% elif h.origem_pagamento == 'CNAB' %}<span class="badge" style="background:#0058be">CNAB</span>
-              {% elif h.origem_pagamento == 'BOLETO_API' %}<span class="badge" style="background:#C9A961;color:#23303f">BOLETO-API</span>
+              {% elif h.origem_pagamento == 'CNAB' %}<span class="badge" style="background:#1D4ED8">CNAB</span>
+              {% elif h.origem_pagamento == 'BOLETO_API' %}<span class="badge" style="background:#06B6D4;color:#0B1533">BOLETO-API</span>
               {% elif h.origem_pagamento == 'OFX' %}<span class="badge bg-warning text-dark">OFX</span>
               {% else %}<span class="badge bg-dark">MANUAL</span>{% endif %}
             </td>

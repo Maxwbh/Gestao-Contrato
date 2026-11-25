@@ -9,14 +9,14 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body { background: #f4f6f9; }
+    body { background: #F4F7FC; }
     .boleto-card { max-width: 680px; margin: 2rem auto; }
     .logo-nome { font-size: 1.1rem; font-weight: 700; color: #1a1a2e; }
-    .valor-destaque { font-size: 2rem; font-weight: 700; color: #0d6efd; }
+    .valor-destaque { font-size: 2rem; font-weight: 700; color: #1D4ED8; }
     .linha-digitavel { font-family: monospace; font-size: 0.95rem; word-break: break-all; }
-    .badge-vencido { background: #dc3545; }
-    .badge-vigente { background: #198754; }
-    .footer-aviso { font-size: 0.78rem; color: #6c757d; }
+    .badge-vencido { background: #B42318; }
+    .badge-vigente { background: #047857; }
+    .footer-aviso { font-size: 0.78rem; color: #5F6C88; }
     @media print {
       .btn, .no-print { display: none !important; }
       body { background: #fff; }
@@ -163,7 +163,7 @@
           {% if parcela.pix_qrcode %}
           <div class="col-auto">
             <img src="data:image/png;base64,{{ parcela.pix_qrcode }}"
-                 alt="QR Code PIX" style="width:90px;height:90px;border:1px solid #dee2e6;border-radius:4px;">
+                 alt="QR Code PIX" style="width:90px;height:90px;border:1px solid #DDE5F2;border-radius:4px;">
           </div>
           {% endif %}
         </div>

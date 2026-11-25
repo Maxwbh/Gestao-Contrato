@@ -7,16 +7,16 @@
 {% block extra_css %}
 <style>
     .ag-theme-material .ag-root-wrapper { border-radius: 0; border: none; }
-    .ag-theme-material .ag-header { background-color: #343a40; }
+    .ag-theme-material .ag-header { background-color: #0D1B4B; }
     .ag-theme-material .ag-header-cell-text { color: #fff; font-weight: 600; }
     .ag-theme-material .ag-header-icon { color: #fff; }
     .ag-theme-material .ag-row-even { background-color: #fff; }
-    .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
-    .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
+    .ag-theme-material .ag-row-odd  { background-color: #F4F7FC; }
+    .ag-theme-material .ag-row:hover { background-color: #E8EEFC !important; }
     .ag-grid-actions .btn { padding: 2px 7px; font-size: 0.75rem; }
     /* Tabela do modal */
     #tblParcelasViz th, #tblParcelasViz td { font-size: 0.82rem; padding: 4px 8px; }
-    .label-detalhe { font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: .04em; }
+    .label-detalhe { font-size: 0.75rem; color: #5F6C88; text-transform: uppercase; letter-spacing: .04em; }
     .valor-detalhe { font-weight: 600; font-size: 0.95rem; }
 </style>
 {% endblock %}
@@ -217,7 +217,7 @@ const reajustesRowData = [
 ];
 
 function indiceBadge(tipo) {
-    const colors = { IPCA: 'bg-primary', IGPM: 'bg-success', INCC: 'bg-info text-dark', IGPDI: 'bg-teal', INPC: 'bg-danger', TR: 'bg-dark', SELIC: 'bg-warning text-dark' };
+    const colors = { IPCA: 'bg-primary', IGPM: 'bg-success', INCC: 'bg-info', IGPDI: 'bg-teal', INPC: 'bg-secondary', TR: 'bg-dark', SELIC: 'bg-warning' };
     return `<span class="badge ${colors[tipo] || 'bg-secondary'}">${tipo}</span>`;
 }
 

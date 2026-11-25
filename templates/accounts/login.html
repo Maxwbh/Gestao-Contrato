@@ -5,13 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Gestão de Contratos</title>
     {% load static %}
+    <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
+    <link rel="alternate icon" href="{% static 'img/favicon.ico' %}" sizes="16x16 32x32 48x48">
+    <link rel="apple-touch-icon" href="{% static 'img/icon-180.png' %}">
     <!-- Materialize CSS (local) -->
     <link rel="stylesheet" href="{% static 'vendor/materialize/css/materialize.min.css' %}">
     <link rel="stylesheet" href="{% static 'vendor/fontawesome/css/all.min.css' %}">
     <link rel="stylesheet" href="{% static 'css/custom.css' %}">
     <style>
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1D4ED8 0%, #0D1B4B 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -28,7 +31,7 @@
             margin: 1rem;
         }
         .login-header {
-            background: #2c3e50;
+            background: #0D1B4B;
             color: white;
             padding: 30px;
             text-align: center;
@@ -37,19 +40,19 @@
         .login-header p  { margin: 8px 0 0; opacity: 0.8; font-size: 0.9rem; }
         .login-body { padding: 30px; }
         .btn-login {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1D4ED8 0%, #0D1B4B 100%);
             border: none;
             padding: 12px;
             font-weight: 600;
         }
-        .btn-login:hover { background: linear-gradient(135deg, #5a6fd6 0%, #6a4190 100%); }
+        .btn-login:hover { background: linear-gradient(135deg, #1D4ED8 0%, #0D1B4B 100%); }
         .register-link { text-align: center; margin-top: 20px; }
     </style>
 </head>
 <body>
     <div class="login-card">
         <div class="login-header">
-            <i class="fas fa-file-contract fa-3x mb-3" style="display:block; margin-bottom:12px;"></i>
+            <img src="{% static 'img/ms-simbolo-claro.svg' %}" alt="M&S do Brasil" height="44" style="display:block;margin:0 auto 12px;">
             <h2>Gestão de Contratos</h2>
             <p>M&S do Brasil LTDA</p>
         </div>

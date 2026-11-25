@@ -211,6 +211,35 @@ class CNABService:
             parcela = Parcela.objects.filter(nosso_numero__endswith=nn_stripped).first()
         return parcela
 
+    @staticmethod
+    def _mensagem_erro_remessa(response, layout) -> str:
+        """
+        Traduz a recusa do motor (4xx) em mensagem acionável: o motivo real vem
+        em `validation_errors` — sem isso a tela só dizia "verifique os logs".
+        """
+        detalhes = []
+        try:
+            corpo = response.json()
+            for item in (corpo.get('validation_errors') or []):
+                if isinstance(item, dict):
+                    for campo, msgs in item.items():
+                        msgs = msgs if isinstance(msgs, (list, tuple)) else [msgs]
+                        detalhes.append(f"{campo}: {'; '.join(str(m) for m in msgs)}")
+                else:
+                    detalhes.append(str(item))
+            if not detalhes and corpo.get('error'):
+                detalhes.append(str(corpo['error']))
+        except Exception:
+            pass
+        if any('Classe de remessa não encontrada' in d for d in detalhes):
+            nome = str(layout).replace('_', ' ')
+            return (f'Este banco não possui layout {nome} no motor de cobrança. '
+                    'Gere a remessa no outro layout (CNAB 240/400).')
+        if detalhes:
+            return 'Remessa recusada pelo motor de cobrança: ' + ' | '.join(detalhes)[:300]
+        return (f'O motor de cobrança retornou HTTP {response.status_code}. '
+                'Verifique os logs do servidor e se a API está operacional.')
+
     def _parsear_numero_dv(self, valor: str) -> tuple:
         """Separa número e dígito verificador. Aceita '1234-5' ou '1234 5' ou '1234'."""
         if not valor:
@@ -251,7 +280,7 @@ class CNABService:
 
         boleto_data = {
             # Identificacao
-            'nosso_numero': str(parcela.nosso_numero or '1'),
+            'nosso_numero': parcela.get_nosso_numero_sequencial(conta_bancaria) or '1',
             'documento_numero': parcela.numero_documento or '',
 
             # Valores e datas
@@ -347,7 +376,7 @@ class CNABService:
         )
 
         return {
-            'nosso_numero': str(parcela.nosso_numero or '1'),
+            'nosso_numero': parcela.get_nosso_numero_sequencial(conta_bancaria) or '1',
             'numero': (parcela.numero_documento or '')[:25],
             'valor': self._formatar_valor(parcela.valor_boleto or parcela.valor_atual),
             'data_vencimento': self._formatar_data(parcela.data_vencimento),
@@ -725,10 +754,7 @@ class CNABService:
                         'Tente novamente em ~1 minuto.'
                     )
                 else:
-                    erro_msg = (
-                        f'BRCobranca retornou HTTP {response.status_code}. '
-                        'Verifique os logs do servidor e se a API está operacional.'
-                    )
+                    erro_msg = self._mensagem_erro_remessa(response, layout)
                 if arquivo_para_atualizar:
                     arquivo_para_atualizar.marcar_erro(erro_msg)
                 return {

@@ -488,6 +488,17 @@ def webhook_evolution(request):
     # W-04: Detectar formato Meta Cloud API nativo
     # (Evolution em modo Cloud API pode encaminhar o payload bruto do Meta)
     if body.get('object') == 'whatsapp_business_account':
+        # HU-19: o formato Meta também exige a apikey da instância — sem isso
+        # qualquer POST anônimo alterava status de entrega e acionava o chatbot.
+        apikey_meta = request.META.get('HTTP_APIKEY', '') or body.get('apikey', '')
+        if not apikey_meta or not ConfiguracaoWhatsApp.objects.filter(
+            provedor='EVOLUTION', api_key=apikey_meta, ativo=True
+        ).exists():
+            logger.warning(
+                '[Webhook Evolution] payload Meta sem apikey válida rejeitado — ip=%s',
+                request.META.get('REMOTE_ADDR')
+            )
+            return HttpResponse('Forbidden', status=403)
         return _webhook_evolution_meta_format(request, body)
 
     event = body.get('event', '')

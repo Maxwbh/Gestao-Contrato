@@ -1,8 +1,14 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/svg/ms-assinatura-horizontal-fundo-escuro.svg">
+  <img src="docs/brand/svg/ms-assinatura-horizontal-fundo-claro.svg" alt="M&S do Brasil" height="44">
+</picture>
+
 # Política de Segurança
 
 ## Como reportar uma vulnerabilidade
 
-Envie um e-mail para **maxwbh@gmail.com** com o assunto `[SECURITY]` descrevendo
+Envie um e-mail para **contato@msbrasil.inf.br**, com cópia para
+**maxwbh@gmail.com**, com o assunto `[SECURITY]` descrevendo
 o problema. Não abra issues públicas para falhas de segurança.
 
 ---
@@ -96,3 +102,16 @@ git push --force-with-lease --tags
 Depois de rotacionar **e** remover/purgar, marque o alerta como resolvido no
 GitGuardian. Nunca marque como resolvido apenas removendo o código sem
 rotacionar: a credencial antiga continua válida até ser revogada no provedor.
+
+---
+
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/svg/ms-assinatura-horizontal-fundo-escuro.svg">
+  <img src="docs/brand/svg/ms-assinatura-horizontal-fundo-claro.svg" alt="M&S do Brasil" height="36">
+</picture>
+
+<sub>Um projeto **M&S do Brasil** · [msbrasil.inf.br](https://msbrasil.inf.br) · contato@msbrasil.inf.br</sub>
+
+</div>

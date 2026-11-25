@@ -74,6 +74,7 @@ def usuario_cli(db, dominio):
         username='rescisao_user',
         password='Rescisao1!',
         email='rescisao@test.com',
+        is_staff=True,  # operador com acesso à imobiliária do teste
     )
     c = Client()
     c.force_login(u)

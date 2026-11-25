@@ -13,7 +13,8 @@ from tests.fixtures.factories import UserFactory, ContratoFactory
 
 @pytest.fixture
 def usuario(db):
-    return UserFactory()
+    # operador com acesso às imobiliárias do teste (isolamento por tenant)
+    return UserFactory(is_staff=True)
 
 
 @pytest.fixture

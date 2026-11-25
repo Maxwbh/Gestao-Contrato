@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/svg/ms-assinatura-horizontal-fundo-escuro.svg">
+  <img src="docs/brand/svg/ms-assinatura-horizontal-fundo-claro.svg" alt="M&S do Brasil" height="44">
+</picture>
+
 # Guia de Contribuição
 
 Projeto proprietário da **M&S do Brasil LTDA** — contribuições por colaboradores
@@ -24,7 +29,7 @@ feature/qualquer-branch ──PR──▶ hml ──PR (squash, 1 commit)──�
 
 ## Setup local
 
-Ver [README → Instalação](README.md#-instalação) e
+Ver [README → Instalação](README.md#instalação) e
 [docs/development/SETUP.md](docs/development/SETUP.md). Resumo:
 
 ```bash
@@ -60,7 +65,38 @@ pytest tests/unit/financeiro      # um módulo específico
 - **Templates Django:** blocos `extra_js` sempre irmãos de `content` (bloco
   aninhado renderiza duas vezes); dados para JS via `|json_script`.
 
+## Documentação e marca
+
+A documentação segue a identidade da **M&S do Brasil**
+([guia de marca](docs/brand/README.md)):
+
+- **Tom:** técnico, direto e verificável. Diga o que o sistema faz e mostre o
+  comando ou o arquivo; sem adjetivo sobrando nem promessa vaga.
+- **Títulos sem emoji.** Marcas de status em tabela (✅ / ⬜) continuam valendo.
+- **Logotipo:** use os arquivos de `docs/brand/svg/` sem redesenhar, esticar,
+  recolorir ou girar. `fundo-claro` em fundo claro, `fundo-escuro` em fundo
+  escuro (no GitHub, o bloco `<picture>` do README troca sozinho). Altura
+  mínima da assinatura horizontal: 28 px.
+- **Cores:** as de `docs/brand/tokens/tokens.css`. Em badges e diagramas:
+  marinho `#0D1B4B`, azul `#1D4ED8`, ciano escuro `#0891B2`, apoio `#5F6C88`.
+  Vermelho só como cor funcional de erro (`#B42318`), nunca como destaque.
+- **Nomes:** "M&S do Brasil" por extenso na primeira menção; produtos são
+  "Gestão de Contratos", "Cobrança-API" e "PyCobrança".
+
 ## Segurança
 
 Vulnerabilidades **não** viram issue pública — siga a
 [Política de Segurança](SECURITY.md).
+
+---
+
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/svg/ms-assinatura-horizontal-fundo-escuro.svg">
+  <img src="docs/brand/svg/ms-assinatura-horizontal-fundo-claro.svg" alt="M&S do Brasil" height="36">
+</picture>
+
+<sub>Um projeto **M&S do Brasil** · [msbrasil.inf.br](https://msbrasil.inf.br) · contato@msbrasil.inf.br</sub>
+
+</div>

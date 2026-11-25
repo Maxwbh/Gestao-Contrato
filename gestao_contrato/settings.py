@@ -79,6 +79,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'core.middleware.TrocaSenhaObrigatoriaMiddleware',  # HU-28: senha inicial → troca no 1º acesso
+    'core.middleware.IsolamentoAcessoMiddleware',  # HU-21/HU-28: portal × operação + tenant
     'core.middleware.AntiEnumeracaoMiddleware',  # D-01: anti-enumeration
 ]
 

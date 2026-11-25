@@ -114,7 +114,14 @@ class AutoCadastroForm(forms.Form):
                 raise ValidationError('Nenhum contrato encontrado para este documento')
 
             # Verificar se o e-mail confere
-            if email and comprador.email and comprador.email.lower() != email.lower():
+            # HU-21 RN-02: sem e-mail no cadastro não há como provar a identidade —
+            # antes a checagem era pulada e bastava saber o CPF para abrir a conta.
+            if not (comprador.email or '').strip():
+                raise ValidationError(
+                    'Seu cadastro não possui e-mail. Procure a imobiliária para '
+                    'atualizar seus dados antes de criar o acesso.'
+                )
+            if not email or comprador.email.strip().lower() != email.strip().lower():
                 raise ValidationError('E-mail não confere com o cadastro')
 
             # Verificar se já tem acesso

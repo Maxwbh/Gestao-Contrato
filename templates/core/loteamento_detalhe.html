@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load l10n %}
 {% load static %}
 {% load hashid_tags %}
 
@@ -9,13 +10,13 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 <style>
-    #mapa-loteamento { height: 420px; border-radius: 8px; border: 1px solid #dee2e6; z-index: 1; }
+    #mapa-loteamento { height: 420px; border-radius: 8px; border: 1px solid #DDE5F2; z-index: 1; }
     .lote-marker { display: flex; align-items: center; justify-content: center;
         border-radius: 50%; border: 2px solid rgba(0,0,0,0.2);
         font-size: 10px; font-weight: 700; color: #fff;
         box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
-    .lote-disponivel { background: #28a745; }
-    .lote-vendido    { background: #dc3545; }
+    .lote-disponivel { background: #047857; }
+    .lote-vendido    { background: #B42318; }
     .lote-popup { min-width: 200px; font-size: 0.84rem; }
     .stat-card { transition: transform .15s; }
     .stat-card:hover { transform: translateY(-2px); }
@@ -52,7 +53,7 @@
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card stat-card text-center shadow-sm border-0 h-100" style="border-left: 4px solid #28a745 !important;">
+            <div class="card stat-card text-center shadow-sm border-0 h-100" style="border-left: 4px solid #047857 !important;">
                 <div class="card-body">
                     <div class="fs-1 fw-bold text-success">{{ disponiveis }}</div>
                     <div class="text-muted small">Disponíveis ({{ pct_disponivel }}%)</div>
@@ -60,7 +61,7 @@
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card stat-card text-center shadow-sm border-0 h-100" style="border-left: 4px solid #dc3545 !important;">
+            <div class="card stat-card text-center shadow-sm border-0 h-100" style="border-left: 4px solid #B42318 !important;">
                 <div class="card-body">
                     <div class="fs-1 fw-bold text-danger">{{ vendidos }}</div>
                     <div class="text-muted small">Vendidos ({{ pct_vendido }}%)</div>
@@ -200,8 +201,8 @@
     var imoveis = [
     {% for im in imoveis_mapa %}
         {
-            lat: {{ im.latitude }},
-            lng: {{ im.longitude }},
+            lat: {{ im.latitude|unlocalize }},
+            lng: {{ im.longitude|unlocalize }},
             id: {{ im.id }},
             label: "{{ im.identificacao|escapejs }}",
             disponivel: {{ im.disponivel|yesno:"true,false" }},
@@ -212,7 +213,7 @@
     ];
 
     imoveis.forEach(function(im) {
-        var cor = im.disponivel ? '#28a745' : '#dc3545';
+        var cor = im.disponivel ? '#047857' : '#B42318';
         var icon = L.divIcon({
             className: '',
             html: '<div class="lote-marker ' + (im.disponivel ? 'lote-disponivel' : 'lote-vendido') +

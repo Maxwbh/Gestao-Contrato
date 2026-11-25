@@ -635,6 +635,11 @@ class Contrato(TimeStampedModel):
             return False
         return not any(not p.pago for p in parcelas)
 
+    @staticmethod
+    def _pct_ou_padrao(valor, padrao):
+        """Percentual configurado; só cai no padrão quando NÃO informado (0% é válido)."""
+        return Decimal(padrao) if valor is None else valor
+
     def sincronizar_quitacao(self, salvar=True) -> bool:
         """
         Promove o contrato a QUITADO quando todas as parcelas estão pagas.
@@ -828,7 +833,7 @@ class Contrato(TimeStampedModel):
         # Método de cobrança deve estar habilitado na imobiliária.
         # Lenient: só valida quando a imobiliária tem métodos definidos.
         if self.imobiliaria_id and self.metodo_cobranca:
-            metodos = getattr(self.imobiliaria, 'metodos_cobranca', None) or []
+            metodos = self.imobiliaria.metodos_oferecidos()
             if metodos and self.metodo_cobranca not in metodos:
                 errors['metodo_cobranca'] = (
                     f'O método de cobrança "{self.get_metodo_cobranca_display()}" '
@@ -1402,11 +1407,11 @@ class Contrato(TimeStampedModel):
         dias_atraso = max(0, (data_ref - data_vencimento).days)
 
         # Taxa diária = taxa mensal / 30 (pro rata die simples, conforme cláusula contratual)
-        taxa_mensal = self.percentual_juros_mora or Decimal('1.0000')
+        taxa_mensal = self._pct_ou_padrao(self.percentual_juros_mora, '1.0000')
         taxa_diaria = taxa_mensal / Decimal('30')
 
         valor_juros = (valor_base * taxa_diaria * dias_atraso / Decimal('100')).quantize(Decimal('0.01'))
-        valor_multa = (valor_base * (self.percentual_multa or Decimal('2.0000')) / Decimal('100')).quantize(Decimal('0.01'))
+        valor_multa = (valor_base * self._pct_ou_padrao(self.percentual_multa, '2.0000') / Decimal('100')).quantize(Decimal('0.01'))
 
         return {
             'dias_atraso': dias_atraso,
@@ -1456,9 +1461,9 @@ class Contrato(TimeStampedModel):
         total_pago = (self.valor_entrada or Decimal('0.00')) + total_pago_parcelas + total_pago_intermediarias
 
         # Encargos de rescisão calculados sobre o saldo atualizado
-        pct_fruicao = (self.percentual_fruicao or Decimal('0.5000')) / Decimal('100')
-        pct_penal = (self.percentual_multa_rescisao_penal or Decimal('10.0000')) / Decimal('100')
-        pct_adm = (self.percentual_multa_rescisao_adm or Decimal('12.0000')) / Decimal('100')
+        pct_fruicao = self._pct_ou_padrao(self.percentual_fruicao, '0.5000') / Decimal('100')
+        pct_penal = self._pct_ou_padrao(self.percentual_multa_rescisao_penal, '10.0000') / Decimal('100')
+        pct_adm = self._pct_ou_padrao(self.percentual_multa_rescisao_adm, '12.0000') / Decimal('100')
 
         fruicao = (saldo * pct_fruicao * meses_ocupados).quantize(Decimal('0.01'))
         multa_penal = (saldo * pct_penal).quantize(Decimal('0.01'))
@@ -1485,11 +1490,11 @@ class Contrato(TimeStampedModel):
             'valor_entrada': self.valor_entrada or Decimal('0.00'),
             'valor_pago_parcelas': total_pago_parcelas,
             'valor_pago_intermediarias': total_pago_intermediarias,
-            'percentual_fruicao': self.percentual_fruicao or Decimal('0.5000'),
+            'percentual_fruicao': self._pct_ou_padrao(self.percentual_fruicao, '0.5000'),
             'fruicao': fruicao,
-            'percentual_multa_penal': self.percentual_multa_rescisao_penal or Decimal('10.0000'),
+            'percentual_multa_penal': self._pct_ou_padrao(self.percentual_multa_rescisao_penal, '10.0000'),
             'multa_penal': multa_penal,
-            'percentual_desp_adm': self.percentual_multa_rescisao_adm or Decimal('12.0000'),
+            'percentual_desp_adm': self._pct_ou_padrao(self.percentual_multa_rescisao_adm, '12.0000'),
             'desp_adm': desp_adm,
             'total_retencoes': total_retencoes,
             'devolucao': devolucao,
@@ -1513,13 +1518,13 @@ class Contrato(TimeStampedModel):
         data_ref = data_cessao or tz.now().date()
         saldo = self.calcular_saldo_devedor()
 
-        pct_cessao = (self.percentual_cessao or Decimal('3.0000')) / Decimal('100')
+        pct_cessao = self._pct_ou_padrao(self.percentual_cessao, '3.0000') / Decimal('100')
         taxa = (saldo * pct_cessao).quantize(Decimal('0.01'))
 
         return {
             'data_cessao': data_ref,
             'saldo_devedor': saldo,
-            'percentual_cessao': self.percentual_cessao or Decimal('3.0000'),
+            'percentual_cessao': self._pct_ou_padrao(self.percentual_cessao, '3.0000'),
             'taxa_cessao': taxa,
             'saldo_apos_cessao': saldo,  # saldo permanece — apenas a taxa muda de titular
         }

@@ -7,16 +7,16 @@
 
 {% block extra_css %}
 <style>
-    .origem-badge-CNAB        { background: #0d6efd; color: #fff; }
-    .origem-badge-OFX         { background: #0dcaf0; color: #000; }
-    .origem-badge-MANUAL      { background: #6c757d; color: #fff; }
-    .origem-badge-ANTECIPACAO { background: #198754; color: #fff; }
+    .origem-badge-CNAB        { background: #1D4ED8; color: #fff; }
+    .origem-badge-OFX         { background: #06B6D4; color: #000; }
+    .origem-badge-MANUAL      { background: #5F6C88; color: #fff; }
+    .origem-badge-ANTECIPACAO { background: #047857; color: #fff; }
     .origem-badge-SISTEMA     { background: #adb5bd; color: #000; }
     .kpi-card { border-left: 4px solid; border-radius: .375rem; }
-    .kpi-card.pendente  { border-left-color: #dc3545; }
-    .kpi-card.cnab      { border-left-color: #0d6efd; }
-    .kpi-card.ofx       { border-left-color: #0dcaf0; }
-    .kpi-card.manual    { border-left-color: #6c757d; }
+    .kpi-card.pendente  { border-left-color: #B42318; }
+    .kpi-card.cnab      { border-left-color: #1D4ED8; }
+    .kpi-card.ofx       { border-left-color: #06B6D4; }
+    .kpi-card.manual    { border-left-color: #5F6C88; }
 </style>
 {% endblock %}
 
@@ -95,7 +95,7 @@
             <div class="card kpi-card ofx h-100">
                 <div class="card-body py-3">
                     <div class="text-muted small mb-1"><i class="fas fa-file-alt me-1"></i>Extrato OFX <span class="badge bg-secondary ms-1">{{ periodo }}d</span></div>
-                    <div class="fs-3 fw-bold" style="color:#0dcaf0;">{{ origem_stats.OFX.total }}</div>
+                    <div class="fs-3 fw-bold" style="color:#06B6D4;">{{ origem_stats.OFX.total }}</div>
                     <div class="text-muted small">{{ origem_stats.OFX.valor|moeda }}</div>
                 </div>
             </div>

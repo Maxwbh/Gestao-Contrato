@@ -503,6 +503,7 @@ class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailVie
 class ContratoDeleteView(LoginRequiredMixin, HashidMixin, TenantMixin, DeleteView):
     """Cancela um contrato (soft delete via status)"""
     model = Contrato
+    template_name = 'core/confirmar_exclusao.html'
     success_url = reverse_lazy('contratos:listar')
 
     def form_valid(self, form):
@@ -730,6 +731,7 @@ class IndiceReajusteUpdateView(LoginRequiredMixin, HashidMixin, UpdateView):
 class IndiceReajusteDeleteView(LoginRequiredMixin, HashidMixin, DeleteView):
     """Exclui um índice de reajuste"""
     model = IndiceReajuste
+    template_name = 'core/confirmar_exclusao.html'
     success_url = reverse_lazy('contratos:indices_listar')
 
     def form_valid(self, form):

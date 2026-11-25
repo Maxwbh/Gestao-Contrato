@@ -5,7 +5,7 @@
 {% block nav_contratos %}active{% endblock %}
 
 {% block content %}
-<h6 style="font-weight:700;margin:12px 0 16px;color:#212121;">
+<h6 style="font-weight:700;margin:12px 0 16px;color:#0B1533;">
     <i class="fas fa-description" style="color:var(--portal-primary);margin-right:6px;"></i>
     Meus Contratos
 </h6>
@@ -22,7 +22,7 @@
 
         <!-- Parcelas pagas / total -->
         {% if contrato.total_parcelas %}
-        <div style="margin-top:6px;font-size:.75rem;color:#757575;">
+        <div style="margin-top:6px;font-size:.75rem;color:#5F6C88;">
             {{ contrato.parcelas_pagas }} de {{ contrato.total_parcelas }} parcela{{ contrato.total_parcelas|pluralize }} paga{{ contrato.total_parcelas|pluralize }}
         </div>
         {% endif %}
@@ -30,7 +30,7 @@
         <!-- Progresso -->
         {% with prog=contrato.calcular_progresso %}
         <div style="margin-top:8px;">
-            <div style="display:flex;justify-content:space-between;font-size:.72rem;color:#757575;margin-bottom:4px;">
+            <div style="display:flex;justify-content:space-between;font-size:.72rem;color:#5F6C88;margin-bottom:4px;">
                 <span>Progresso</span>
                 <span>{{ prog|floatformat:0 }}%</span>
             </div>
@@ -47,9 +47,9 @@
             {% elif contrato.status == 'QUITADO' %}
             <span class="status-badge quitado"><i class="fas fa-check-circle" style="font-size:.7rem;"></i> Quitado</span>
             {% else %}
-            <span class="status-badge" style="background:#f5f5f5;color:#757575;">{{ contrato.get_status_display }}</span>
+            <span class="status-badge" style="background:#F4F7FC;color:#5F6C88;">{{ contrato.get_status_display }}</span>
             {% endif %}
-            <small style="color:#9e9e9e;margin-left:8px;font-size:.72rem;">
+            <small style="color:#5F6C88;margin-left:8px;font-size:.72rem;">
                 {{ contrato.imobiliaria.nome|truncatechars:20 }}
             </small>
         </div>
@@ -62,8 +62,8 @@
 {% endfor %}
 
 {% else %}
-<div style="text-align:center;padding:48px 16px;color:#9e9e9e;">
-    <span class="material-icons" style="font-size:4rem;color:#e0e0e0;display:block;margin-bottom:12px;">description</span>
+<div style="text-align:center;padding:48px 16px;color:#5F6C88;">
+    <span class="material-icons" style="font-size:4rem;color:#DDE5F2;display:block;margin-bottom:12px;">description</span>
     <p style="margin:0;">Nenhum contrato encontrado.</p>
 </div>
 {% endif %}

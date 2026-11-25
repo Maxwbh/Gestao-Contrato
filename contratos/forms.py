@@ -151,7 +151,7 @@ class ContratoForm(forms.ModelForm):
         imob = origem if isinstance(origem, Imobiliaria) else (
             Imobiliaria.objects.filter(pk=origem).first() if origem else None)
 
-        habilitados = list(getattr(imob, 'metodos_cobranca', None) or []) if imob else []
+        habilitados = list(imob.metodos_oferecidos()) if imob else []
         if not habilitados:
             return  # imobiliária indefinida ou sem restrição: mantém tudo
 

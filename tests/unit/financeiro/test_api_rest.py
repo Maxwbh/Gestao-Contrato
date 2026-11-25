@@ -29,7 +29,8 @@ class TestAPIBaseSetup(TestCase):
         cls.user = User.objects.create_user(
             username='testuser',
             password='testpass123',
-            email='test@test.com'
+            email='test@test.com',
+            is_staff=True,  # operador com acesso às imobiliárias do teste
         )
 
         cls.contabilidade = Contabilidade.objects.create(

@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="{% static 'css/custom.css' %}">
     <style>
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1D4ED8 0%, #0D1B4B 100%);
             min-height: 100vh;
             padding: 2rem 0;
         }
@@ -27,15 +27,15 @@
             border-radius: 20px;
             font-weight: bold;
         }
-        .status-ok { background-color: #28a745; color: white; }
-        .status-error { background-color: #dc3545; color: white; }
+        .status-ok { background-color: #047857; color: white; }
+        .status-error { background-color: #B42318; color: white; }
         .btn-setup {
             padding: 1rem 2rem;
             font-size: 1.1rem;
             border-radius: 10px;
             margin: 0.5rem;
         }
-        h1 { color: #667eea; }
+        h1 { color: #1D4ED8; }
 
         /* Barra de Navegação de Passos */
         .steps-nav {
@@ -58,19 +58,19 @@
             color: inherit;
         }
         .step-nav-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.1); color: inherit; text-decoration: none; }
-        .step-nav-btn.done   { background: #e8f5e9; border-color: #28a745; }
+        .step-nav-btn.done   { background: #e8f5e9; border-color: #047857; }
         .step-nav-btn.warn   { background: #fff8e1; border-color: #ffc107; }
-        .step-nav-btn.idle   { background: #f0f4ff; border-color: #667eea; }
+        .step-nav-btn.idle   { background: #f0f4ff; border-color: #1D4ED8; }
         .step-nav-btn .step-num {
             width: 32px; height: 32px;
             border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             font-weight: bold; font-size: 0.95rem; flex-shrink: 0;
         }
-        .step-nav-btn.done .step-num  { background: #28a745; color: #fff; }
+        .step-nav-btn.done .step-num  { background: #047857; color: #fff; }
         .step-nav-btn.warn .step-num  { background: #ffc107; color: #000; }
-        .step-nav-btn.idle .step-num  { background: #667eea; color: #fff; }
-        .step-nav-btn .step-info small { display: block; font-size: 0.75rem; color: #6c757d; line-height: 1.2; }
+        .step-nav-btn.idle .step-num  { background: #1D4ED8; color: #fff; }
+        .step-nav-btn .step-info small { display: block; font-size: 0.75rem; color: #5F6C88; line-height: 1.2; }
 
         /* Progress Modal Styles */
         .progress-modal .modal-content {
@@ -79,7 +79,7 @@
             overflow: hidden;
         }
         .progress-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1D4ED8 0%, #0D1B4B 100%);
             color: white;
             padding: 1.5rem;
         }
@@ -96,14 +96,14 @@
             transition: all 0.3s ease;
         }
         .step-item:last-child { border-bottom: none; }
-        .step-item.pending { color: #6c757d; }
+        .step-item.pending { color: #5F6C88; }
         .step-item.active {
-            background: #f8f9fa;
-            color: #667eea;
+            background: #F4F7FC;
+            color: #1D4ED8;
             font-weight: 600;
         }
-        .step-item.completed { color: #28a745; }
-        .step-item.error { color: #dc3545; }
+        .step-item.completed { color: #047857; }
+        .step-item.error { color: #B42318; }
         .step-icon {
             width: 30px;
             height: 30px;
@@ -114,31 +114,31 @@
             margin-right: 1rem;
             font-size: 0.9rem;
         }
-        .step-item.pending .step-icon { background: #e9ecef; color: #6c757d; }
-        .step-item.active .step-icon { background: #667eea; color: white; }
-        .step-item.completed .step-icon { background: #28a745; color: white; }
-        .step-item.error .step-icon { background: #dc3545; color: white; }
+        .step-item.pending .step-icon { background: #DDE5F2; color: #5F6C88; }
+        .step-item.active .step-icon { background: #1D4ED8; color: white; }
+        .step-item.completed .step-icon { background: #047857; color: white; }
+        .step-item.error .step-icon { background: #B42318; color: white; }
 
         /* Result Cards */
         .result-card {
             text-align: center;
             padding: 1rem;
             border-radius: 10px;
-            background: #f8f9fa;
+            background: #F4F7FC;
             transition: transform 0.2s;
         }
         .result-card:hover { transform: translateY(-3px); }
         .result-card .number {
             font-size: 2rem;
             font-weight: bold;
-            color: #667eea;
+            color: #1D4ED8;
         }
         .result-card .label {
             font-size: 0.85rem;
-            color: #6c757d;
+            color: #5F6C88;
         }
-        .result-card.success { border-left: 4px solid #28a745; }
-        .result-card.info { border-left: 4px solid #17a2b8; }
+        .result-card.success { border-left: 4px solid #047857; }
+        .result-card.info { border-left: 4px solid #0891B2; }
         .result-card.warning { border-left: 4px solid #ffc107; }
 
         /* Pulse Animation */
@@ -279,7 +279,7 @@
                         </a>
 
                         <a class="step-nav-btn {% if total_remessas > 0 and total_retornos > 0 and imobiliarias_com_logo > 0 %}done{% elif total_contratos > 0 %}idle{% else %}idle{% endif %}"
-                           href="#" onclick="scrollToStep('step3Card', '#28a745'); return false;">
+                           href="#" onclick="scrollToStep('step3Card', '#047857'); return false;">
                             <div class="step-num">
                                 {% if total_remessas > 0 and total_retornos > 0 and imobiliarias_com_logo > 0 %}<i class="fas fa-check"></i>{% else %}3{% endif %}
                             </div>
@@ -550,7 +550,7 @@
                             </button>
                         </div>
                         <div class="col-6 col-md-2 text-center mb-3">
-                            <button class="btn btn-success btn-setup w-100" onclick="scrollToStep('step3Card','#28a745')">
+                            <button class="btn btn-success btn-setup w-100" onclick="scrollToStep('step3Card','#047857')">
                                 <i class="fas fa-file-invoice-dollar me-2"></i>Passo 3
                             </button>
                         </div>
@@ -872,7 +872,7 @@
                 resultIcon.className = 'fas fa-check-circle fa-4x text-success mb-3';
                 resultTitle.textContent = 'Passo 1 Concluído!';
                 resultMessage.textContent = `Dados criados em ${formatMs(duration)} — ${totalRecords.toLocaleString('pt-BR')} registros.`;
-                document.getElementById('progressIcon').innerHTML = '<i class="fas fa-check-circle fa-3x mb-3" style="color:#28a745"></i>';
+                document.getElementById('progressIcon').innerHTML = '<i class="fas fa-check-circle fa-3x mb-3" style="color:#047857"></i>';
                 document.getElementById('progressTitle').textContent = 'Passo 1 Concluído!';
                 document.getElementById('progressSubtitle').textContent = `em ${formatMs(duration)}`;
                 document.getElementById('progressTime').textContent = '';
@@ -899,7 +899,7 @@
                 resultIcon.className = 'fas fa-times-circle fa-4x text-danger mb-3';
                 resultTitle.textContent = 'Erro na Geração';
                 resultMessage.textContent = data.message || data.error || 'Ocorreu um erro inesperado.';
-                document.getElementById('progressIcon').innerHTML = '<i class="fas fa-times-circle fa-3x mb-3" style="color:#dc3545"></i>';
+                document.getElementById('progressIcon').innerHTML = '<i class="fas fa-times-circle fa-3x mb-3" style="color:#B42318"></i>';
                 document.getElementById('progressTitle').textContent = 'Erro!';
                 document.getElementById('progressSubtitle').textContent = 'A geração falhou';
                 resultCards.innerHTML = `<div class="col-12"><div class="alert alert-danger small">${data.error||data.message||'Erro desconhecido'}</div></div>`;
@@ -1184,7 +1184,7 @@
             if (!card) return;
             card.classList.remove('d-none');
             card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            const color = glowColor || '#667eea';
+            const color = glowColor || '#1D4ED8';
             card.style.transition = 'box-shadow 0.3s';
             card.style.boxShadow = '0 0 0 3px ' + color;
             setTimeout(() => { card.style.boxShadow = ''; }, 1600);
@@ -1195,7 +1195,7 @@
             const urlParams = new URLSearchParams(window.location.search);
             const passo = urlParams.get('passo');
             if (passo === '2') { setTimeout(() => scrollToStep('step2Card', '#ffc107'), 400); return; }
-            if (passo === '3') { setTimeout(() => scrollToStep('step3Card', '#28a745'), 400); return; }
+            if (passo === '3') { setTimeout(() => scrollToStep('step3Card', '#047857'), 400); return; }
 
             // Sem parâmetro: rola automaticamente para o passo mais relevante
             const totalContratos = {{ total_contratos|default:0 }};
@@ -1209,7 +1209,7 @@
                 setTimeout(() => scrollToStep('step2Card', '#ffc107'), 500);
             } else if (totalContratos > 0 && (totalRemessas === 0 || totalRetornos === 0 || logosCom === 0)) {
                 // Boletos OK mas falta dados avançados → ir para Passo 3
-                setTimeout(() => scrollToStep('step3Card', '#28a745'), 500);
+                setTimeout(() => scrollToStep('step3Card', '#047857'), 500);
             }
             // Se tudo OK, fica no topo (Passo 1)
         });

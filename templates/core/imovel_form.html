@@ -9,7 +9,7 @@
 <style>
     /* Cards com bom contraste */
     .imovel-form .card {
-        border: 1px solid #dee2e6;
+        border: 1px solid #DDE5F2;
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.06);
         margin-bottom: 1rem;
@@ -20,26 +20,26 @@
 
     /* Card headers com bom contraste */
     .imovel-form .card-header {
-        background: linear-gradient(135deg, #2c3e50, #34495e);
+        background: linear-gradient(135deg, #0D1B4B, #35425E);
         color: #ffffff;
         font-weight: 600;
         padding: 0.75rem 1rem;
         border-radius: 7px 7px 0 0 !important;
     }
     .imovel-form .card-header i {
-        color: #27ae60;
+        color: #047857;
     }
     .imovel-form .card-header strong {
         color: #ffffff;
     }
     .imovel-form .card-header small {
-        color: #bdc3c7;
+        color: #DDE5F2;
     }
 
     /* Header claro para secoes secundarias (opcionais) */
     .imovel-form .card-header.bg-light,
     .imovel-form .card.card-opcional .card-header {
-        background: linear-gradient(135deg, #7f8c8d, #95a5a6) !important;
+        background: linear-gradient(135deg, #0B1533, #35425E) !important;
         color: #ffffff !important;
     }
     .imovel-form .card-header.bg-light strong,
@@ -57,7 +57,7 @@
     .imovel-form .form-label {
         font-size: 0.85rem;
         font-weight: 600;
-        color: #2c3e50;
+        color: #0D1B4B;
         margin-bottom: 0.25rem;
     }
 
@@ -65,19 +65,19 @@
     /* Indicador de campo obrigatorio */
     .campo-obrigatorio .form-label::after {
         content: " *";
-        color: #e74c3c;
+        color: #B42318;
         font-weight: bold;
     }
 
     /* Borda dos campos obrigatorios */
     .campo-obrigatorio .form-control,
     .campo-obrigatorio .form-select {
-        border-left: 3px solid #e74c3c;
+        border-left: 3px solid #B42318;
     }
 
     /* Card de campos obrigatorios */
     .card-obrigatorio {
-        border-left: 4px solid #e74c3c !important;
+        border-left: 4px solid #B42318 !important;
     }
     .card-obrigatorio .card-header::after {
         content: " (Obrigatorio)";
@@ -87,7 +87,7 @@
 
     /* Card de campos opcionais */
     .card-opcional {
-        border-left: 4px solid #95a5a6 !important;
+        border-left: 4px solid #5F6C88 !important;
     }
     .card-opcional .card-header::after {
         content: " (Opcional)";
@@ -97,19 +97,19 @@
 
     /* Card de ajuda */
     .help-card .card-header {
-        background: linear-gradient(135deg, #17a2b8, #138496) !important;
+        background: linear-gradient(135deg, #0369A1, #0369A1) !important;
     }
 
     /* Validacao */
-    .is-valid { border-color: #27ae60 !important; }
-    .is-invalid { border-color: #e74c3c !important; }
+    .is-valid { border-color: #047857 !important; }
+    .is-invalid { border-color: #B42318 !important; }
 
     /* Mapa */
     #map {
         width: 100%;
         height: 350px;
         border-radius: 8px;
-        border: 2px solid #27ae60;
+        border: 2px solid #047857;
     }
 
     /* Responsivo */
@@ -120,18 +120,18 @@
 
     /* Legenda de campos */
     .legenda-campos {
-        background: #f8f9fa;
+        background: #F4F7FC;
         border-radius: 6px;
         padding: 0.5rem 1rem;
         margin-bottom: 1rem;
         font-size: 0.85rem;
     }
     .legenda-campos .obrigatorio {
-        color: #e74c3c;
+        color: #B42318;
         font-weight: bold;
     }
     .legenda-campos .opcional {
-        color: #95a5a6;
+        color: #5F6C88;
     }
 </style>
 <!-- Leaflet CSS (alternativa gratuita ao Google Maps) -->

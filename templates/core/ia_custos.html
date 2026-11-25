@@ -10,21 +10,21 @@
         transition: transform 0.2s;
     }
     .card-stats:hover { transform: translateY(-3px); }
-    .card-stats.primary  { border-color: #007bff; }
-    .card-stats.success  { border-color: #28a745; }
+    .card-stats.primary  { border-color: #1D4ED8; }
+    .card-stats.success  { border-color: #047857; }
     .card-stats.warning  { border-color: #ffc107; }
-    .card-stats.info     { border-color: #17a2b8; }
+    .card-stats.info     { border-color: #0891B2; }
 
     .stat-value {
         font-size: 1.8rem;
         font-weight: bold;
     }
-    .stat-label { color: #6c757d; font-size: 0.9rem; }
+    .stat-label { color: #5F6C88; font-size: 0.9rem; }
 
     .chart-container { position: relative; height: 280px; }
 
     .periodo-btn.active {
-        background-color: #007bff !important;
+        background-color: #1D4ED8 !important;
         color: #fff !important;
     }
 
@@ -201,8 +201,8 @@
 <script>
 (function () {
     const CORES = [
-        '#007bff','#28a745','#ffc107','#dc3545','#17a2b8',
-        '#6f42c1','#fd7e14','#20c997','#6c757d','#343a40',
+        '#1D4ED8','#047857','#ffc107','#B42318','#0891B2',
+        '#6f42c1','#fd7e14','#047857','#5F6C88','#0D1B4B',
     ];
 
     // --- dados do servidor ---
@@ -267,8 +267,8 @@
                 datasets: [{
                     label: 'Custo USD',
                     data: dadosTendencia.map(d => d.custo),
-                    borderColor: '#007bff',
-                    backgroundColor: 'rgba(0,123,255,0.08)',
+                    borderColor: '#1D4ED8',
+                    backgroundColor: 'rgba(29, 78, 216,0.08)',
                     fill: true,
                     tension: 0.3,
                     pointRadius: 3,

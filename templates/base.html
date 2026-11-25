@@ -16,7 +16,11 @@
     <link rel="stylesheet" href="{% static 'vendor/ag-grid/css/ag-grid.css' %}">
     <link rel="stylesheet" href="{% static 'vendor/ag-grid/css/ag-theme-material.css' %}">
     <!-- Custom CSS -->
+    <link rel="stylesheet" href="{% static 'css/ms-tokens.css' %}">
     <link rel="stylesheet" href="{% static 'css/custom.css' %}">
+    <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
+    <link rel="alternate icon" href="{% static 'img/favicon.ico' %}" sizes="16x16 32x32 48x48">
+    <link rel="apple-touch-icon" href="{% static 'img/icon-180.png' %}">
 
     {% block extra_css %}{% endblock %}
 </head>
@@ -27,7 +31,7 @@
         <li>
             <div class="user-view" style="background: var(--primary-color); padding: 16px;">
                 <span class="white-text brand-logo-text">
-                    <i class="fas fa-file-contract"></i> Gestão de Contratos
+                    <img src="{% static 'img/ms-simbolo-claro.svg' %}" alt="M&S do Brasil" height="28" style="vertical-align:middle;margin-right:8px;">Gestão de Contratos
                 </span>
             </div>
         </li>
@@ -102,8 +106,8 @@
 
             <!-- Brand -->
             <a class="brand-logo truncate" href="{% url 'core:index' %}" style="position: relative; font-size: 1.3rem;">
-                <i class="fas fa-file-contract"></i>
-                <span class="hide-on-med-and-down"> Gestão de Contratos</span>
+                <img src="{% static 'img/ms-simbolo-claro.svg' %}" alt="M&S do Brasil" height="28" style="vertical-align:middle;margin-right:8px;margin-top:-4px;">
+                <span class="hide-on-med-and-down">Gestão de Contratos</span>
             </a>
 
             <!-- Desktop nav links -->
@@ -320,6 +324,7 @@
             </p>
             <p class="mb-0">
                 Desenvolvido por <strong>Maxwell da Silva Oliveira</strong> |
+                <img src="{% static 'img/ms-simbolo-claro.svg' %}" alt="M&S do Brasil" height="24" style="vertical-align:middle;margin:0 6px;">
                 <a href="https://msbrasil.inf.br" target="_blank" class="white-text">M&S do Brasil LTDA</a>
             </p>
             <p class="mt-2 mb-0">
@@ -349,7 +354,7 @@
         if (!banner) {
             banner = document.createElement('div');
             banner.id = '_jserrorbanner';
-            banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;padding:8px 16px;font-size:13px;font-family:monospace;max-height:120px;overflow:auto;';
+            banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#B42318;color:#fff;padding:8px 16px;font-size:13px;font-family:monospace;max-height:120px;overflow:auto;';
             document.body.appendChild(banner);
         }
         banner.innerHTML += '<div>&#9888; <strong>' + info + '</strong>: ' + msg + '</div>';
@@ -401,12 +406,12 @@
 
     <style>
         :root {
-            --primary-color: #2c3e50;
-            --secondary-color: #3498db;
-            --success-color: #27ae60;
-            --danger-color: #e74c3c;
-            --warning-color: #f39c12;
-            --light-bg: #ecf0f1;
+            --primary-color: #0D1B4B;
+            --secondary-color: #1D4ED8;
+            --success-color: #047857;
+            --danger-color: #B42318;
+            --warning-color: #B54708;
+            --light-bg: #F4F7FC;
         }
 
         .global-toast {
@@ -419,10 +424,10 @@
         }
         @keyframes toastIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes toastOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(120%); opacity: 0; } }
-        .global-toast.success { background: linear-gradient(135deg,#27ae60,#2ecc71); }
-        .global-toast.error   { background: linear-gradient(135deg,#c0392b,#e74c3c); }
-        .global-toast.warning { background: linear-gradient(135deg,#d68910,#f39c12); }
-        .global-toast.info    { background: linear-gradient(135deg,#1a5276,#2980b9); }
+        .global-toast.success { background: linear-gradient(135deg,#047857,#047857); }
+        .global-toast.error   { background: linear-gradient(135deg,#B42318,#B42318); }
+        .global-toast.warning { background: linear-gradient(135deg,#93370D,#B54708); }
+        .global-toast.info    { background: linear-gradient(135deg,#0D1B4B,#1E40AF); }
         .global-toast .toast-icon { font-size: 1.3rem; margin-top: 1px; }
         .global-toast .toast-body { flex: 1; font-size: .92rem; line-height: 1.4; }
         .global-toast .toast-close { opacity: .7; font-size: .85rem; margin-top: 2px; flex-shrink: 0; }
@@ -794,7 +799,7 @@
                 <input id="busca-input" type="text" placeholder="Buscar contrato, comprador, imóvel…"
                        autocomplete="off"
                        style="flex:1;border:none;outline:none;font-size:1rem;color:#212121;">
-                <kbd style="font-size:.72rem;color:#9e9e9e;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:4px;padding:2px 6px;">Esc</kbd>
+                <kbd style="font-size:.72rem;color:#9e9e9e;background:#F4F7FC;border:1px solid #DDE5F2;border-radius:4px;padding:2px 6px;">Esc</kbd>
             </div>
             <!-- Results -->
             <div id="busca-results" style="max-height:400px;overflow-y:auto;">
@@ -804,9 +809,9 @@
                 </div>
             </div>
             <div style="padding:8px 16px;border-top:1px solid #f0f0f0;display:flex;gap:16px;font-size:.72rem;color:#9e9e9e;">
-                <span><kbd style="background:#f5f5f5;border:1px solid #e0e0e0;border-radius:3px;padding:1px 5px;">↑↓</kbd> navegar</span>
-                <span><kbd style="background:#f5f5f5;border:1px solid #e0e0e0;border-radius:3px;padding:1px 5px;">Enter</kbd> abrir</span>
-                <span><kbd style="background:#f5f5f5;border:1px solid #e0e0e0;border-radius:3px;padding:1px 5px;">Esc</kbd> fechar</span>
+                <span><kbd style="background:#F4F7FC;border:1px solid #DDE5F2;border-radius:3px;padding:1px 5px;">↑↓</kbd> navegar</span>
+                <span><kbd style="background:#F4F7FC;border:1px solid #DDE5F2;border-radius:3px;padding:1px 5px;">Enter</kbd> abrir</span>
+                <span><kbd style="background:#F4F7FC;border:1px solid #DDE5F2;border-radius:3px;padding:1px 5px;">Esc</kbd> fechar</span>
             </div>
         </div>
     </div>
@@ -821,7 +826,7 @@
         var activeIdx = -1;
 
         var ICONS = {contrato:'description', comprador:'person', imovel:'home'};
-        var COLORS = {contrato:'#1565c0', comprador:'#2e7d32', imovel:'#6a1b9a'};
+        var COLORS = {contrato:'#1D4ED8', comprador:'#047857', imovel:'#6a1b9a'};
 
         function open() {
             overlay.style.display = 'flex';
@@ -882,7 +887,7 @@
 
         function setActive(items) {
             items.forEach(function(el, i) {
-                el.style.background = i === activeIdx ? '#e3f2fd' : '';
+                el.style.background = i === activeIdx ? '#E8EEFC' : '';
             });
             if (items[activeIdx]) {
                 items[activeIdx].scrollIntoView({block:'nearest'});
@@ -908,7 +913,7 @@
                         renderResults(data.results, q);
                     })
                     .catch(function() {
-                        results.innerHTML = '<div style="padding:20px;text-align:center;color:#f44336;">Erro na busca</div>';
+                        results.innerHTML = '<div style="padding:20px;text-align:center;color:#B42318;">Erro na busca</div>';
                     });
             }, 220);
         });
@@ -928,15 +933,15 @@
                     lastTipo = item.tipo;
                 }
                 var color = COLORS[item.tipo] || '#616161';
-                var statusHtml = item.status ? '<span style="font-size:.68rem;padding:2px 7px;background:#f5f5f5;border-radius:10px;color:#757575;margin-left:6px;">' + escHtml(item.status) + '</span>' : '';
+                var statusHtml = item.status ? '<span style="font-size:.68rem;padding:2px 7px;background:#F4F7FC;border-radius:10px;color:#5F6C88;margin-left:6px;">' + escHtml(item.status) + '</span>' : '';
                 html += '<div class="busca-item" data-url="' + escHtml(item.url) + '" data-idx="' + idx + '"'
                     + ' style="display:flex;align-items:center;padding:10px 16px;cursor:pointer;gap:12px;border-bottom:1px solid #fafafa;"'
                     + ' onclick="window.location.href=\'' + escHtml(item.url) + '\'"'
-                    + ' onmouseenter="this.style.background=\'#e3f2fd\'" onmouseleave="this.style.background=\'\'">'
+                    + ' onmouseenter="this.style.background=\'#E8EEFC\'" onmouseleave="this.style.background=\'\'">'
                     + '<span class="material-icons" style="color:' + color + ';font-size:1.1rem;">' + (ICONS[item.tipo]||'search') + '</span>'
                     + '<div style="flex:1;min-width:0;">'
                     +   '<div style="font-weight:600;font-size:.875rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + highlightQ(item.titulo, q) + statusHtml + '</div>'
-                    +   (item.subtitulo ? '<div style="font-size:.75rem;color:#757575;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(item.subtitulo) + '</div>' : '')
+                    +   (item.subtitulo ? '<div style="font-size:.75rem;color:#5F6C88;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(item.subtitulo) + '</div>' : '')
                     + '</div>'
                     + '</div>';
             });
@@ -961,7 +966,18 @@
         var body = document.body;
         var icon = document.getElementById('dm-icon');
 
+        // Gráficos (Chart.js): eixos, legendas e grade na paleta do tema
+        function temaGraficos(dark) {
+            if (!window.Chart || !Chart.defaults) return;
+            Chart.defaults.color = dark ? '#A9B6D3' : '#5F6C88';
+            Chart.defaults.borderColor = dark ? 'rgba(169, 182, 211, 0.18)' : 'rgba(11, 21, 51, 0.10)';
+            var inst = Chart.instances || {};
+            Object.keys(inst).forEach(function (k) { try { inst[k].update('none'); } catch (e) {} });
+        }
+        window.addEventListener('load', function () { temaGraficos(body.classList.contains('dark-mode')); });
+
         function applyTheme(dark) {
+            temaGraficos(dark);
             if (dark) {
                 body.classList.add('dark-mode');
                 if (icon) { icon.classList.remove('fa-moon'); icon.classList.add('fa-sun'); }
@@ -998,6 +1014,7 @@
                 e.preventDefault();
                 var isDark = body.classList.toggle('dark-mode');
                 localStorage.setItem(STORAGE_KEY, isDark ? '1' : '0');
+                temaGraficos(isDark);
                 if (icon2) {
                     icon2.classList.toggle('fa-moon', !isDark);
                     icon2.classList.toggle('fa-sun',  isDark);
